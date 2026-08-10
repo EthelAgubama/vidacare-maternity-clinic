@@ -416,3 +416,54 @@ module "iam_admin" {
     ] }
   ]
 }
+
+# ---------------------------------------------------
+# Lambda execution role (used by all booking Lambdas)
+# ---------------------------------------------------
+
+resource "aws_iam_role" "lambda_exec" {
+  name = "vidacare-lambda-exec-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action    = "sts:AssumeRole"
+        Effect    = "Allow"
+        Principal = { Service = "lambda.amazonaws.com" }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "lambda_basic_logs" {
+  role       = aws_iam_role.lambda_exec.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy" "lambda_dynamodb" {
+  name = "vidacare-lambda-dynamodb-policy"
+  role = aws_iam_role.lambda_exec.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = local.rw_actions
+        Resource = [
+          aws_dynamodb_table.patient_records.arn,
+          aws_dynamodb_table.visits.arn,
+          aws_dynamodb_table.antenatal_records.arn,
+          "${aws_dynamodb_table.antenatal_records.arn}/index/*",
+          aws_dynamodb_table.postnatal_records.arn,
+          "${aws_dynamodb_table.postnatal_records.arn}/index/*",
+          aws_dynamodb_table.family_planning_records.arn,
+          "${aws_dynamodb_table.family_planning_records.arn}/index/*",
+          aws_dynamodb_table.child_welfare_records.arn,
+          "${aws_dynamodb_table.child_welfare_records.arn}/index/*"
+        ]
+      }
+    ]
+  })
+}
