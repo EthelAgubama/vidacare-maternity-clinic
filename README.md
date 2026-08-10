@@ -1,6 +1,6 @@
 # VidaCare Maternity Clinic
 
-This is a cloud project I built to model how a maternity clinic could run securely on AWS specifically, how different departments in a clinic should only be able to see the patient data relevant to their job, and nothing more.
+This is a cloud project I am building to model how a maternity clinic could run securely on AWS specifically, how different departments in a clinic should only be able to see the patient data relevant to their job, and nothing more.
 
 The idea came out of my time working with a hospital information system called Oasis, where I noticed how access was split across departments like pharmacy, front desk, and finance. I wanted to recreate that same logic using proper cloud infrastructure, so this project became a working example of role-based access control, built entirely with Terraform on AWS.
 
