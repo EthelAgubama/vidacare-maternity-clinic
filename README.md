@@ -1,12 +1,12 @@
 # VidaCare Maternity Clinic
 
-This is a cloud project I built to model how a maternity clinic could run securely on AWS — specifically, how different departments in a clinic should only be able to see the patient data relevant to their job, and nothing more.
+This is a cloud project I am building to model how a maternity clinic could run securely on AWS specifically, how different departments in a clinic should only be able to see the patient data relevant to their job, and nothing more.
 
 The idea came out of my time working with a hospital information system called Oasis, where I noticed how access was split across departments like pharmacy, front desk, and finance. I wanted to recreate that same logic using proper cloud infrastructure, so this project became a working example of role-based access control, built entirely with Terraform on AWS.
 
 ## What it does
 
-VidaCare lets a patient register once, open a visit, and then get booked into whichever clinical services they need during that visit — antenatal care, postnatal care, family planning, child welfare, or labour and delivery. Each of those services lives in its own database table, and each department in the clinic only has the permissions it actually needs to do its job.
+VidaCare lets a patient register once, open a visit, and then get booked into whichever clinical services they need during that visit antenatal care, postnatal care, family planning, child welfare, or labour and delivery. Each of those services lives in its own database table, and each department in the clinic only has the permissions it actually needs to do its job.
 
 For example, a pharmacist can check a patient's antenatal notes to confirm what was prescribed and can bill for the medication dispensed, but has no access to finance records or procurement orders. A cashier can process payments but can't touch the accounting ledger. Front desk can register a patient and see billing status, but can't view clinical notes. This mirrors how access actually worked at Oasis, just rebuilt using AWS IAM instead of application-level permissions.
 
@@ -32,7 +32,7 @@ The five service endpoints are: `/bookings/antenatal`, `/bookings/postnatal`, `/
 
 ## Departments and access
 
-The full access matrix — who can read, who can write, who has no access at all — is written out in [`docs/architecture.md`](docs/architecture.md). The short version: clinicians have broad clinical access, admin can see everything but only in read-only mode for oversight, and everyone else is scoped tightly to their own department's data plus whatever cross-department reads make sense in practice (like pharmacy being able to read antenatal notes, or finance being able to read billing).
+The full access matrix who can read, who can write, who has no access at all  is written out in [`docs/architecture.md`](docs/architecture.md). The short version: clinicians have broad clinical access, admin can see everything but only in read-only mode for oversight, and everyone else is scoped tightly to their own department's data plus whatever cross-department reads make sense in practice (like pharmacy being able to read antenatal notes, or finance being able to read billing).
 
 ## Project layout
 vidacare-maternity-clinic/
@@ -51,7 +51,7 @@ vidacare-maternity-clinic/
 
 ## Where things stand
 
-The core of the system — registration, visits, and all five service bookings — is built, deployed, and tested end to end against live AWS infrastructure. Still to come: appointment notifications, a proper booking interface on the frontend, and monitoring/CI-CD to round it out.
+The core of the system — registration, visits, and all five service bookings  is built, deployed, and tested end to end against live AWS infrastructure. Still to come: appointment notifications, a proper booking interface on the frontend, and monitoring/CI-CD to round it out.
 
 ## About this project
 
