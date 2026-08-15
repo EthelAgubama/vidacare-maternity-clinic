@@ -1,5 +1,5 @@
 # ---------------------------------------------------
-# Package the Lambda source code
+# Package the Lambda source code — patients
 # ---------------------------------------------------
 
 data "archive_file" "patients_zip" {
@@ -77,13 +77,6 @@ resource "aws_lambda_permission" "patients_api_gw" {
 }
 
 # ---------------------------------------------------
-# Output the API base URL
-# ---------------------------------------------------
-
-output "api_base_url" {
-  value = aws_apigatewayv2_stage.default.invoke_url
-}
-# ---------------------------------------------------
 # Package the Lambda source code — visits
 # ---------------------------------------------------
 
@@ -140,6 +133,7 @@ resource "aws_lambda_permission" "visits_api_gw" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.vidacare_api.execution_arn}/*/*"
 }
+
 # ---------------------------------------------------
 # Package the Lambda source code — service bookings
 # ---------------------------------------------------
@@ -165,9 +159,11 @@ resource "aws_lambda_function" "booking_antenatal" {
 
   environment {
     variables = {
-      SERVICE_TABLE_NAME = aws_dynamodb_table.antenatal_records.name
-      VISITS_TABLE        = aws_dynamodb_table.visits.name
-      SERVICE_LABEL        = "antenatal"
+      SERVICE_TABLE_NAME     = aws_dynamodb_table.antenatal_records.name
+      VISITS_TABLE            = aws_dynamodb_table.visits.name
+      SERVICE_LABEL            = "antenatal"
+      PATIENT_RECORDS_TABLE = aws_dynamodb_table.patient_records.name
+      SENDER_EMAIL             = "vidacareclinic@gmail.com"
     }
   }
 
@@ -185,9 +181,11 @@ resource "aws_lambda_function" "booking_postnatal" {
 
   environment {
     variables = {
-      SERVICE_TABLE_NAME = aws_dynamodb_table.postnatal_records.name
-      VISITS_TABLE        = aws_dynamodb_table.visits.name
-      SERVICE_LABEL        = "postnatal"
+      SERVICE_TABLE_NAME     = aws_dynamodb_table.postnatal_records.name
+      VISITS_TABLE            = aws_dynamodb_table.visits.name
+      SERVICE_LABEL            = "postnatal"
+      PATIENT_RECORDS_TABLE = aws_dynamodb_table.patient_records.name
+      SENDER_EMAIL             = "vidacareclinic@gmail.com"
     }
   }
 
@@ -205,9 +203,11 @@ resource "aws_lambda_function" "booking_family_planning" {
 
   environment {
     variables = {
-      SERVICE_TABLE_NAME = aws_dynamodb_table.family_planning_records.name
-      VISITS_TABLE        = aws_dynamodb_table.visits.name
-      SERVICE_LABEL        = "family-planning"
+      SERVICE_TABLE_NAME     = aws_dynamodb_table.family_planning_records.name
+      VISITS_TABLE            = aws_dynamodb_table.visits.name
+      SERVICE_LABEL            = "family-planning"
+      PATIENT_RECORDS_TABLE = aws_dynamodb_table.patient_records.name
+      SENDER_EMAIL             = "vidacareclinic@gmail.com"
     }
   }
 
@@ -225,9 +225,11 @@ resource "aws_lambda_function" "booking_child_welfare" {
 
   environment {
     variables = {
-      SERVICE_TABLE_NAME = aws_dynamodb_table.child_welfare_records.name
-      VISITS_TABLE        = aws_dynamodb_table.visits.name
-      SERVICE_LABEL        = "child-welfare"
+      SERVICE_TABLE_NAME     = aws_dynamodb_table.child_welfare_records.name
+      VISITS_TABLE            = aws_dynamodb_table.visits.name
+      SERVICE_LABEL            = "child-welfare"
+      PATIENT_RECORDS_TABLE = aws_dynamodb_table.patient_records.name
+      SENDER_EMAIL             = "vidacareclinic@gmail.com"
     }
   }
 
@@ -245,9 +247,11 @@ resource "aws_lambda_function" "booking_labour_delivery" {
 
   environment {
     variables = {
-      SERVICE_TABLE_NAME = aws_dynamodb_table.labour_delivery_records.name
-      VISITS_TABLE        = aws_dynamodb_table.visits.name
-      SERVICE_LABEL        = "labour-delivery"
+      SERVICE_TABLE_NAME     = aws_dynamodb_table.labour_delivery_records.name
+      VISITS_TABLE            = aws_dynamodb_table.visits.name
+      SERVICE_LABEL            = "labour-delivery"
+      PATIENT_RECORDS_TABLE = aws_dynamodb_table.patient_records.name
+      SENDER_EMAIL             = "vidacareclinic@gmail.com"
     }
   }
 
@@ -361,4 +365,12 @@ resource "aws_lambda_permission" "booking_labour_delivery_api_gw" {
   function_name = aws_lambda_function.booking_labour_delivery.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.vidacare_api.execution_arn}/*/*"
+}
+
+# ---------------------------------------------------
+# Output the API base URL
+# ---------------------------------------------------
+
+output "api_base_url" {
+  value = aws_apigatewayv2_stage.default.invoke_url
 }
