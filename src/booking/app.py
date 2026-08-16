@@ -52,6 +52,18 @@ def _get_patient(patient_id):
     return items[0] if items else None
 
 
+def _normalize_ghana_phone(phone):
+    phone = phone.strip().replace(" ", "").replace("-", "")
+
+    if phone.startswith("+"):
+        return phone
+    if phone.startswith("233"):
+        return f"+{phone}"
+    if phone.startswith("0"):
+        return f"+233{phone[1:]}"
+    return f"+233{phone}"
+
+
 def _send_confirmation(patient, service_label):
     service_name = service_label.replace("-", " ").title()
     message = (
@@ -78,7 +90,7 @@ def _send_confirmation(patient, service_label):
     if phone:
         try:
             sns.publish(
-                PhoneNumber=phone if phone.startswith("+") else f"+{phone}",
+                PhoneNumber=_normalize_ghana_phone(phone),
                 Message=message,
             )
         except Exception as exc:  # noqa: BLE001
@@ -129,5 +141,5 @@ def handler(event, context):
         "record_id": record_id,
         "visit_id": visit_id,
         "patient_id": patient_id,
-        "message": f"{SERVICE_LABEL.replace('-', ' ').title()} booking created successfully",
+      "message": f"{SERVICE_LABEL.replace('-', ' ').title()} booking created successfully",
     })
