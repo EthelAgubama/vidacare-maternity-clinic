@@ -865,11 +865,11 @@
       const patientPayload = {
         full_name: val('full_name'),
         date_of_birth: val('date_of_birth'),
-        phone_number: val('phone_number'),
+        phone_number: val('phone_number').replace(/[\s-]/g, ''),
         gender: val('sex'),
         address: val('address'),
         emergency_contact_name: val('emergency_contact_name'),
-        emergency_contact_phone: val('emergency_contact_phone'),
+        emergency_contact_phone: val('emergency_contact_phone').replace(/[\s-]/g, ''),
         emergency_contact_relationship: val('emergency_contact_relationship'),
       };
       const nhis = val('nhis_number'); if (nhis) patientPayload.nhis_number = nhis;
@@ -907,7 +907,7 @@
       showStep(5);
 
     } catch (err) {
-      showTopError(err.message || 'Something went wrong. Please try again.');
+      showTopError(err.message && err.message !== 'Failed to fetch' ? err.message : 'Something went wrong. Please check your details and try again.');
       btn.disabled = false;
       btn.textContent = originalText;
     }
