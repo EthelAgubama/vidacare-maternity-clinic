@@ -865,9 +865,9 @@
       if (bad) ok = false;
     });
     const phone = val('phone_number');
-    if (phone && !/^[\d+\s-]{7,17}$/.test(phone)) { setFieldError('phone_number', true); ok = false; }
+    if (phone && !/^[\d+\s-]{7,20}$/.test(phone)) { setFieldError('phone_number', true); ok = false; }
     const ephone = val('emergency_contact_phone');
-    if (ephone && !/^[\d+\s-]{7,17}$/.test(ephone)) { setFieldError('emergency_contact_phone', true); ok = false; }
+    if (ephone && !/^[\d+\s-]{7,20}$/.test(ephone)) { setFieldError('emergency_contact_phone', true); ok = false; }
     return ok;
   }
 
