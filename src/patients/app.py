@@ -1,3 +1,4 @@
+@'
 import json
 import os
 import re
@@ -26,6 +27,12 @@ OPTIONAL_FIELDS = [
     "ghana_card_number",
     "blood_group",
     "allergies",
+    "email_address",
+    "genotype",
+    "previous_pregnancies",
+    "living_children",
+    "chronic_conditions",
+    "current_medications",
 ]
 
 PHONE_PATTERN = re.compile(r"^\+?\d{9,15}$")
@@ -98,3 +105,4 @@ def handler(event, context):
         return _response(500, {"error": "Failed to save patient record", "details": str(exc)})
 
     return _response(201, {"patient_id": patient_id, "message": "Patient registered successfully"})
+'@ | Out-File -FilePath src\patients\app.py -Encoding utf8
