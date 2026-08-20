@@ -1,0 +1,836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VidaCare Maternity Home — Book a visit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --forest: #1B5E20;
+    --mid-green: #2E7D32;
+    --gold: #B8860B;
+    --gold-light: #D9A441;
+    --bg-tint: #E8F5E9;
+    --card-tint: #C8E6C9;
+    --text-dark: #1A1A1A;
+    --text-grey: #555555;
+    --text-light-grey: #777777;
+    --white: #FFFFFF;
+    --error: #B3261E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Source Sans 3', sans-serif;
+    color: var(--text-dark);
+    background: linear-gradient(160deg, #F3FAF3 0%, var(--bg-tint) 45%, #EFF8F0 100%);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .floaters {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .floater {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+    opacity: 0.35;
+    animation: drift 22s ease-in-out infinite;
+  }
+
+  .floater.f1 { width: 220px; height: 220px; background: radial-gradient(circle, var(--card-tint), transparent 70%); top: -60px; left: -60px; animation-duration: 26s; }
+  .floater.f2 { width: 160px; height: 160px; background: radial-gradient(circle, var(--gold-light), transparent 70%); top: 10%; right: -40px; opacity: 0.22; animation-duration: 20s; animation-delay: -4s; }
+  .floater.f3 { width: 280px; height: 280px; background: radial-gradient(circle, var(--card-tint), transparent 70%); bottom: -100px; left: 8%; animation-duration: 30s; animation-delay: -10s; }
+  .floater.f4 { width: 130px; height: 130px; background: radial-gradient(circle, var(--gold-light), transparent 70%); bottom: 20%; right: 6%; opacity: 0.18; animation-duration: 18s; animation-delay: -6s; }
+
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(20px, -30px) scale(1.05); }
+    66% { transform: translate(-15px, 20px) scale(0.97); }
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 620px;
+    margin: 0 auto;
+    padding: 48px 20px 80px;
+  }
+
+  .brand {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    margin-bottom: 32px;
+    opacity: 0;
+    animation: fadeDown 0.7s ease forwards;
+  }
+
+  @keyframes fadeDown {
+    from { opacity: 0; transform: translateY(-14px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .emblem {
+    width: 84px;
+    height: 84px;
+    margin-bottom: 14px;
+  }
+
+  .brand h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    color: var(--forest);
+    font-size: 30px;
+    margin: 0;
+    line-height: 1.15;
+  }
+
+  .brand p {
+    font-size: 14px;
+    color: var(--text-light-grey);
+    margin: 6px 0 0;
+    letter-spacing: 0.03em;
+  }
+
+  .card {
+    background: var(--white);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px -20px rgba(27, 94, 32, 0.25), 0 4px 16px rgba(27, 94, 32, 0.06);
+    padding: 40px 36px 36px;
+    opacity: 0;
+    transform: translateY(24px);
+    animation: cardIn 0.7s 0.15s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  @keyframes cardIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .progress-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 30px;
+  }
+
+  .progress-ring {
+    width: 96px;
+    height: 96px;
+  }
+
+  .progress-ring circle {
+    fill: none;
+    stroke-width: 6;
+    stroke-linecap: round;
+  }
+
+  .ring-track { stroke: #EFEFEF; }
+
+  .ring-fill {
+    stroke: var(--gold);
+    transform: rotate(-90deg);
+    transform-origin: 50% 50%;
+    transition: stroke-dasharray 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+  }
+
+  .ring-label {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 600;
+    fill: var(--forest);
+  }
+
+  .step-title {
+    text-align: center;
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--forest);
+    margin: 0 0 4px;
+  }
+
+  .step-sub {
+    text-align: center;
+    font-size: 14px;
+    color: var(--text-light-grey);
+    margin: 0 0 28px;
+  }
+
+  .step { display: none; }
+  .step.active {
+    display: block;
+    animation: stepIn 0.4s ease forwards;
+  }
+
+  @keyframes stepIn {
+    from { opacity: 0; transform: translateX(12px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .field {
+    margin-bottom: 18px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mid-green);
+    margin-bottom: 6px;
+    letter-spacing: 0.01em;
+  }
+
+  .field .hint {
+    font-weight: 400;
+    color: var(--text-light-grey);
+    font-size: 12px;
+    margin-left: 4px;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1.5px solid #E0E0DA;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    color: var(--text-dark);
+    background: #FAFCF9;
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
+    outline: none;
+    border-color: var(--forest);
+    box-shadow: 0 0 0 3px rgba(27, 94, 32, 0.1);
+  }
+
+  .field .error {
+    display: none;
+    font-size: 12px;
+    color: var(--error);
+    margin-top: 5px;
+  }
+
+  .field.has-error input,
+  .field.has-error select {
+    border-color: var(--error);
+  }
+
+  .field.has-error .error { display: block; }
+
+  .row2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+  }
+
+  .section-label {
+    font-family: 'Playfair Display', serif;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--forest);
+    margin: 24px 0 14px;
+    padding-top: 20px;
+    border-top: 1px solid #EEF3EC;
+  }
+
+  .section-label:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+
+  .services {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .service-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border: 1.5px solid #E0E0DA;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+    background: #FAFCF9;
+  }
+
+  .service-option:hover {
+    transform: translateY(-1px);
+    border-color: var(--mid-green);
+  }
+
+  .service-option.checked {
+    border-color: var(--forest);
+    background: var(--bg-tint);
+  }
+
+  .service-option input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--forest);
+  }
+
+  .service-option .label {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--text-dark);
+  }
+
+  .service-option .desc {
+    font-size: 12px;
+    color: var(--text-light-grey);
+    margin-top: 2px;
+  }
+
+  .actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 30px;
+    gap: 12px;
+  }
+
+  button {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    border: none;
+    border-radius: 10px;
+    padding: 13px 26px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, background 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--forest);
+    color: white;
+    box-shadow: 0 8px 20px -8px rgba(27, 94, 32, 0.5);
+  }
+
+  .btn-primary:hover { background: #164A1A; transform: translateY(-1px); }
+  .btn-primary:active { transform: translateY(0) scale(0.98); }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text-grey);
+    border: 1.5px solid #E0E0DA;
+  }
+
+  .btn-secondary:hover { border-color: var(--text-grey); }
+
+  .btn-full { width: 100%; }
+
+  .spacer-btn { visibility: hidden; }
+
+  .top-error {
+    display: none;
+    background: #FDECEA;
+    color: var(--error);
+    font-size: 13px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 18px;
+  }
+
+  .top-error.show { display: block; }
+
+  .confirm-wrap {
+    text-align: center;
+    padding: 10px 0;
+  }
+
+  .confirm-icon {
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 18px;
+  }
+
+  .confirm-wrap h2 {
+    font-family: 'Playfair Display', serif;
+    color: var(--forest);
+    font-size: 24px;
+    margin: 0 0 8px;
+  }
+
+  .confirm-wrap p.lead {
+    color: var(--text-grey);
+    font-size: 14px;
+    margin: 0 0 26px;
+  }
+
+  .confirm-list {
+    text-align: left;
+    background: var(--bg-tint);
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 24px;
+  }
+
+  .confirm-list .item {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 0;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(27, 94, 32, 0.12);
+  }
+
+  .confirm-list .item:last-child { border-bottom: none; }
+
+  .confirm-list .item .name { font-weight: 600; color: var(--forest); }
+  .confirm-list .item .status { color: var(--mid-green); font-size: 12px; font-weight: 600; }
+
+  .loading-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+    margin: 0 2px;
+    animation: bounce 1s infinite;
+  }
+  .loading-dot:nth-child(2) { animation-delay: 0.15s; }
+  .loading-dot:nth-child(3) { animation-delay: 0.3s; }
+
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+
+  @media (max-width: 480px) {
+    .card { padding: 30px 22px 26px; }
+    .row2 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="floaters">
+  <div class="floater f1"></div>
+  <div class="floater f2"></div>
+  <div class="floater f3"></div>
+  <div class="floater f4"></div>
+</div>
+
+<div class="page">
+
+  <div class="brand">
+    <svg class="emblem" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="100" cy="100" r="88" fill="none" stroke="#B8860B" stroke-width="7" stroke-linecap="round" stroke-dasharray="470 40" transform="rotate(-8 100 100)"/>
+      <path d="M100 46c-16 0-26 16-26 34 0 13 6 24 14 32-16 5-28 19-28 38h80c0-19-12-33-28-38 8-8 14-19 14-32 0-18-10-34-26-34z" fill="#1B5E20"/>
+      <circle cx="120" cy="128" r="17" fill="#1B5E20"/>
+      <path d="M96 116c6 6 10 14 10 22" stroke="white" stroke-width="3" fill="none" stroke-linecap="round"/>
+    </svg>
+    <h1>VidaCare Maternity Home</h1>
+    <p>Book your visit</p>
+  </div>
+
+  <div class="card">
+
+    <div class="progress-wrap">
+      <svg class="progress-ring" viewBox="0 0 96 96">
+        <circle class="ring-track" cx="48" cy="48" r="40"/>
+        <circle class="ring-fill" id="ringFill" cx="48" cy="48" r="40" stroke-dasharray="0 251"/>
+        <text class="ring-label" x="48" y="55" text-anchor="middle" id="ringLabel">1/3</text>
+      </svg>
+    </div>
+
+    <div id="topError" class="top-error"></div>
+
+    <!-- STEP 1: Patient details -->
+    <div class="step active" data-step="1">
+      <p class="step-title">Your details</p>
+      <p class="step-sub">Tell us a little about you</p>
+
+      <div class="section-label">Personal information</div>
+
+      <div class="field" id="f-full_name">
+        <label>Full name</label>
+        <input type="text" id="full_name" placeholder="Ama Serwaa">
+        <div class="error">Enter your full name</div>
+      </div>
+
+      <div class="row2">
+        <div class="field" id="f-date_of_birth">
+          <label>Date of birth</label>
+          <input type="date" id="date_of_birth">
+          <div class="error">Enter your date of birth</div>
+        </div>
+        <div class="field" id="f-gender">
+          <label>Gender</label>
+          <select id="gender">
+            <option value="">Select</option>
+            <option value="female">Female</option>
+            <option value="male">Male</option>
+            <option value="other">Other</option>
+          </select>
+          <div class="error">Select a gender</div>
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field" id="f-phone_number">
+          <label>Phone number <span class="hint">e.g. 0207886610</span></label>
+          <input type="tel" id="phone_number" placeholder="0207886610">
+          <div class="error">Enter a valid phone number</div>
+        </div>
+        <div class="field" id="f-email_address">
+          <label>Email <span class="hint">optional</span></label>
+          <input type="email" id="email_address" placeholder="you@email.com">
+        </div>
+      </div>
+
+      <div class="field" id="f-address">
+        <label>Residential address / community</label>
+        <input type="text" id="address" placeholder="Bongo, Upper East Region">
+        <div class="error">Enter your address</div>
+      </div>
+
+      <div class="section-label">Emergency contact</div>
+
+      <div class="field" id="f-emergency_contact_name">
+        <label>Contact name</label>
+        <input type="text" id="emergency_contact_name" placeholder="Kwame Serwaa">
+        <div class="error">Enter an emergency contact name</div>
+      </div>
+
+      <div class="row2">
+        <div class="field" id="f-emergency_contact_phone">
+          <label>Contact phone</label>
+          <input type="tel" id="emergency_contact_phone" placeholder="0201234567">
+          <div class="error">Enter a valid phone number</div>
+        </div>
+        <div class="field" id="f-emergency_contact_relationship">
+          <label>Relationship</label>
+          <input type="text" id="emergency_contact_relationship" placeholder="Husband">
+          <div class="error">Enter the relationship</div>
+        </div>
+      </div>
+
+      <div class="section-label">Additional information <span class="hint">optional</span></div>
+
+      <div class="row2">
+        <div class="field">
+          <label>NHIS number</label>
+          <input type="text" id="nhis_number">
+        </div>
+        <div class="field">
+          <label>Ghana Card number</label>
+          <input type="text" id="ghana_card_number">
+        </div>
+      </div>
+
+      <div class="row2">
+        <div class="field">
+          <label>Blood group</label>
+          <input type="text" id="blood_group" placeholder="O+">
+        </div>
+        <div class="field">
+          <label>Known allergies</label>
+          <input type="text" id="allergies">
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-secondary spacer-btn">Back</button>
+        <button class="btn-primary" id="toStep2">Continue</button>
+      </div>
+    </div>
+
+    <!-- STEP 2: Visit -->
+    <div class="step" data-step="2">
+      <p class="step-title">Your visit</p>
+      <p class="step-sub">When would you like to come in?</p>
+
+      <div class="field" id="f-visit_date">
+        <label>Visit date</label>
+        <input type="date" id="visit_date">
+        <div class="error">Choose a visit date</div>
+      </div>
+
+      <div class="actions">
+        <button class="btn-secondary" id="backTo1">Back</button>
+        <button class="btn-primary" id="toStep3">Continue</button>
+      </div>
+    </div>
+
+    <!-- STEP 3: Services -->
+    <div class="step" data-step="3">
+      <p class="step-title">Select services</p>
+      <p class="step-sub">Choose everything you need for this visit</p>
+
+      <div class="services" id="serviceList">
+        <label class="service-option" data-service="antenatal">
+          <input type="checkbox" value="antenatal">
+          <div>
+            <div class="label">Antenatal care</div>
+            <div class="desc">Routine pregnancy check-up</div>
+          </div>
+        </label>
+        <label class="service-option" data-service="postnatal">
+          <input type="checkbox" value="postnatal">
+          <div>
+            <div class="label">Postnatal care</div>
+            <div class="desc">Care after delivery</div>
+          </div>
+        </label>
+        <label class="service-option" data-service="family-planning">
+          <input type="checkbox" value="family-planning">
+          <div>
+            <div class="label">Family planning</div>
+            <div class="desc">Counselling and contraceptive care</div>
+          </div>
+        </label>
+        <label class="service-option" data-service="child-welfare">
+          <input type="checkbox" value="child-welfare">
+          <div>
+            <div class="label">Child welfare clinic</div>
+            <div class="desc">Growth checks and immunisation</div>
+          </div>
+        </label>
+        <label class="service-option" data-service="labour-delivery">
+          <input type="checkbox" value="labour-delivery">
+          <div>
+            <div class="label">Labour and delivery</div>
+            <div class="desc">For patients in active labour</div>
+          </div>
+        </label>
+      </div>
+      <div class="field" style="margin-top:6px;" id="f-services">
+        <div class="error">Select at least one service</div>
+      </div>
+
+      <div class="field" style="margin-top:18px;">
+        <label>Notes <span class="hint">optional</span></label>
+        <textarea id="notes" rows="3" placeholder="Anything the clinic should know ahead of your visit"></textarea>
+      </div>
+
+      <div class="actions">
+        <button class="btn-secondary" id="backTo2">Back</button>
+        <button class="btn-primary" id="submitBooking">Book visit</button>
+      </div>
+    </div>
+
+    <!-- STEP 4: Confirmation -->
+    <div class="step" data-step="4">
+      <div class="confirm-wrap" id="confirmWrap">
+        <svg class="confirm-icon" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" r="46" fill="#E8F5E9"/>
+          <path d="M32 52l13 13 24-26" stroke="#1B5E20" stroke-width="6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <h2>Visit booked</h2>
+        <p class="lead">You're all set. A confirmation has been sent where possible.</p>
+        <div class="confirm-list" id="confirmList"></div>
+        <button class="btn-primary btn-full" onclick="window.location.reload()">Book another visit</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  const API_BASE = "https://skquve8knl.execute-api.us-east-1.amazonaws.com";
+
+  const state = { currentStep: 1, patientId: null, visitId: null };
+
+  const ringFill = document.getElementById('ringFill');
+  const ringLabel = document.getElementById('ringLabel');
+  const CIRC = 2 * Math.PI * 40;
+
+  function updateRing(step) {
+    const fraction = Math.min(step, 3) / 3;
+    ringFill.setAttribute('stroke-dasharray', `${CIRC * fraction} ${CIRC}`);
+    ringLabel.textContent = `${Math.min(step,3)}/3`;
+  }
+
+  function showStep(n) {
+    document.querySelectorAll('.step').forEach(s => s.classList.remove('active'));
+    document.querySelector(`.step[data-step="${n}"]`).classList.add('active');
+    state.currentStep = n;
+    if (n <= 3) updateRing(n);
+    hideTopError();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function showTopError(msg) {
+    const el = document.getElementById('topError');
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+  function hideTopError() {
+    document.getElementById('topError').classList.remove('show');
+  }
+
+  function setFieldError(id, show) {
+    const wrap = document.getElementById('f-' + id);
+    if (!wrap) return;
+    wrap.classList.toggle('has-error', show);
+  }
+
+  function val(id) { return document.getElementById(id).value.trim(); }
+
+  document.querySelectorAll('#serviceList input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      cb.closest('.service-option').classList.toggle('checked', cb.checked);
+      document.getElementById('f-services').classList.remove('has-error');
+    });
+  });
+
+  document.querySelectorAll('.field input, .field select').forEach(el => {
+    el.addEventListener('input', () => {
+      const wrap = el.closest('.field');
+      if (wrap) wrap.classList.remove('has-error');
+    });
+  });
+
+  function validateStep1() {
+    const required = ['full_name','date_of_birth','gender','phone_number','address','emergency_contact_name','emergency_contact_phone','emergency_contact_relationship'];
+    let ok = true;
+    required.forEach(id => {
+      const v = val(id);
+      const bad = !v;
+      setFieldError(id, bad);
+      if (bad) ok = false;
+    });
+    const phone = val('phone_number');
+    if (phone && !/^[\d+\s-]{7,15}$/.test(phone)) { setFieldError('phone_number', true); ok = false; }
+    const ephone = val('emergency_contact_phone');
+    if (ephone && !/^[\d+\s-]{7,15}$/.test(ephone)) { setFieldError('emergency_contact_phone', true); ok = false; }
+    return ok;
+  }
+
+  function validateStep2() {
+    const ok = !!val('visit_date');
+    setFieldError('visit_date', !ok);
+    return ok;
+  }
+
+  function getSelectedServices() {
+    return Array.from(document.querySelectorAll('#serviceList input:checked')).map(cb => cb.value);
+  }
+
+  async function apiPost(path, body) {
+    const res = await fetch(API_BASE + path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || 'Something went wrong. Please try again.');
+    }
+    return data;
+  }
+
+  document.getElementById('toStep2').addEventListener('click', () => {
+    if (!validateStep1()) { showTopError('Please fill in all required fields.'); return; }
+    showStep(2);
+  });
+
+  document.getElementById('backTo1').addEventListener('click', () => showStep(1));
+  document.getElementById('backTo2').addEventListener('click', () => showStep(2));
+
+  document.getElementById('toStep3').addEventListener('click', () => {
+    if (!validateStep2()) { showTopError('Please choose a visit date.'); return; }
+    showStep(3);
+  });
+
+  document.getElementById('submitBooking').addEventListener('click', async () => {
+    const services = getSelectedServices();
+    if (services.length === 0) {
+      document.getElementById('f-services').classList.add('has-error');
+      showTopError('Select at least one service to continue.');
+      return;
+    }
+
+    const btn = document.getElementById('submitBooking');
+    const originalText = btn.textContent;
+    btn.disabled = true;
+    btn.innerHTML = 'Booking <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
+
+    try {
+      const patientPayload = {
+        full_name: val('full_name'),
+        date_of_birth: val('date_of_birth'),
+        phone_number: val('phone_number'),
+        gender: val('gender'),
+        address: val('address'),
+        emergency_contact_name: val('emergency_contact_name'),
+        emergency_contact_phone: val('emergency_contact_phone'),
+        emergency_contact_relationship: val('emergency_contact_relationship'),
+      };
+      const nhis = val('nhis_number'); if (nhis) patientPayload.nhis_number = nhis;
+      const ghana = val('ghana_card_number'); if (ghana) patientPayload.ghana_card_number = ghana;
+      const blood = val('blood_group'); if (blood) patientPayload.blood_group = blood;
+      const allergies = val('allergies'); if (allergies) patientPayload.allergies = allergies;
+      const email = val('email_address'); if (email) patientPayload.email_address = email;
+
+      const patientRes = await apiPost('/patients', patientPayload);
+      state.patientId = patientRes.patient_id;
+
+      const visitRes = await apiPost('/visits', {
+        patient_id: state.patientId,
+        visit_date: val('visit_date')
+      });
+      state.visitId = visitRes.visit_id;
+
+      const notes = val('notes');
+      const results = [];
+      for (const service of services) {
+        const bookingPayload = { patient_id: state.patientId, visit_id: state.visitId };
+        if (notes) bookingPayload.notes = notes;
+        const bookingRes = await apiPost(`/bookings/${service}`, bookingPayload);
+        results.push({ service, ok: true, record_id: bookingRes.record_id });
+      }
+
+      renderConfirmation(results);
+      showStep(4);
+
+    } catch (err) {
+      showTopError(err.message || 'Something went wrong. Please try again.');
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  });
+
+  const SERVICE_NAMES = {
+    'antenatal': 'Antenatal care',
+    'postnatal': 'Postnatal care',
+    'family-planning': 'Family planning',
+    'child-welfare': 'Child welfare clinic',
+    'labour-delivery': 'Labour and delivery'
+  };
+
+  function renderConfirmation(results) {
+    const list = document.getElementById('confirmList');
+    list.innerHTML = '';
+    results.forEach(r => {
+      const row = document.createElement('div');
+      row.className = 'item';
+      row.innerHTML = `<span class="name">${SERVICE_NAMES[r.service] || r.service}</span><span class="status">Confirmed</span>`;
+      list.appendChild(row);
+    });
+  }
+
+  updateRing(1);
+</script>
+
+</body>
+</html>
