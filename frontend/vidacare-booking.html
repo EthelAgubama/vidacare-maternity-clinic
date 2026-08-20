@@ -492,8 +492,8 @@
 
       <div class="row2">
         <div class="field" id="f-phone_number">
-          <label>Phone number <span class="hint">international format</span></label>
-          <input type="tel" id="phone_number" placeholder="+233 XX XXX XXXX">
+          <label>Phone number</label>
+          <input type="tel" id="phone_number" value="+233 0" inputmode="numeric">
           <div class="error">Enter a valid phone number</div>
         </div>
         <div class="field" id="f-email_address">
@@ -542,7 +542,7 @@
       <div class="row2">
         <div class="field" id="f-emergency_contact_phone">
           <label>Contact phone</label>
-          <input type="tel" id="emergency_contact_phone" placeholder="+233 XX XXX XXXX">
+          <input type="tel" id="emergency_contact_phone" value="+233 0" inputmode="numeric">
           <div class="error">Enter a valid phone number</div>
         </div>
         <div class="field" id="f-emergency_contact_relationship">
@@ -772,6 +772,70 @@
   }
 
   function val(id) { return document.getElementById(id).value.trim(); }
+
+  const PHONE_PREFIX = '+233 0';
+
+  function formatGhanaPhone(el) {
+    let raw = el.value;
+    if (!raw.startsWith(PHONE_PREFIX)) {
+      const digitsOnly = raw.replace(/[^\d]/g, '');
+      raw = PHONE_PREFIX;
+      el.value = raw;
+    }
+    let rest = raw.slice(PHONE_PREFIX.length).replace(/\D/g, '').slice(0, 9);
+    let grouped = rest.match(/.{1,3}/g)?.join(' ') || '';
+    el.value = PHONE_PREFIX + (grouped ? ' ' + grouped : '');
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+
+  ['phone_number', 'emergency_contact_phone'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => formatGhanaPhone(el));
+    el.addEventListener('focus', () => {
+      if (el.value.length < PHONE_PREFIX.length) el.setSelectionRange(el.value.length, el.value.length);
+    });
+    el.addEventListener('keydown', (e) => {
+      if ((e.key === 'Backspace' || e.key === 'Delete') && el.selectionStart <= PHONE_PREFIX.length && el.selectionEnd <= PHONE_PREFIX.length) {
+        e.preventDefault();
+      }
+    });
+  });
+
+  const idTypeEl = document.getElementById('id_type');
+  const idNumberEl = document.getElementById('id_number');
+
+  function formatGhanaCard(el) {
+    const prefix = 'GHA-';
+    let raw = el.value.toUpperCase();
+    if (!raw.startsWith(prefix)) raw = prefix + raw.replace(/[^0-9]/g, '');
+    let digits = raw.slice(prefix.length).replace(/[^0-9]/g, '').slice(0, 10);
+    let main = digits.slice(0, 9);
+    let check = digits.slice(9, 10);
+    el.value = prefix + main + (check ? '-' + check : '');
+    el.setSelectionRange(el.value.length, el.value.length);
+  }
+
+  idTypeEl.addEventListener('change', () => {
+    if (idTypeEl.value === 'Ghana Card') {
+      idNumberEl.value = 'GHA-';
+      idNumberEl.placeholder = 'GHA-XXXXXXXXX-X';
+      idNumberEl.setSelectionRange(idNumberEl.value.length, idNumberEl.value.length);
+      idNumberEl.focus();
+    } else if (idTypeEl.value === 'Passport') {
+      idNumberEl.value = '';
+      idNumberEl.placeholder = 'Passport number';
+    } else if (idTypeEl.value === "Driver's License") {
+      idNumberEl.value = '';
+      idNumberEl.placeholder = "Driver's license number";
+    } else {
+      idNumberEl.value = '';
+      idNumberEl.placeholder = 'ID number';
+    }
+  });
+
+  idNumberEl.addEventListener('input', () => {
+    if (idTypeEl.value === 'Ghana Card') formatGhanaCard(idNumberEl);
+  });
 
   document.querySelectorAll('#serviceList input[type=checkbox]').forEach(cb => {
     cb.addEventListener('change', () => {
