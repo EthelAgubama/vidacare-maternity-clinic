@@ -1,4 +1,3 @@
-@'
 import json
 import os
 import re
@@ -105,4 +104,3 @@ def handler(event, context):
         return _response(500, {"error": "Failed to save patient record", "details": str(exc)})
 
     return _response(201, {"patient_id": patient_id, "message": "Patient registered successfully"})
-'@ | Out-File -FilePath src\patients\app.py -Encoding utf8
