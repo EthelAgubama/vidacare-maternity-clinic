@@ -3,7 +3,7 @@
 # ---------------------------------------------------
 
 resource "aws_s3_bucket" "frontend" {
-  bucket = "vidacare-frontend-ethel"
+  bucket = "vidacare-frontend-prod"
 
   tags = { Project = "VidaCare" }
 }

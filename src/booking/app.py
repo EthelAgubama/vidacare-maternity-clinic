@@ -22,7 +22,7 @@ patients_table = dynamodb.Table(PATIENT_RECORDS_TABLE)
 
 REQUIRED_FIELDS = ["patient_id", "visit_id"]
 
-LOGO_URL = "https://vidacare-frontend-ethel.s3.amazonaws.com/assets/vidacare-logo.jpg"
+LOGO_URL = "https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg"
 
 
 def _response(status_code, body):

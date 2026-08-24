@@ -2,11 +2,12 @@ terraform {
   required_version = ">= 1.5.0"
 
   backend "s3" {
-    bucket         = "vidacare-terraform-state-ethel"
+    bucket         = "vidacare-terraform-state-prod"
     key            = "vidacare/terraform.tfstate"
     region         = "us-east-1"
-    dynamodb_table = "vidacare-terraform-locks"
+    dynamodb_table = "vidacare-terraform-locks-prod"
     encrypt        = true
+    profile        = "vidacare-prod"
   }
 
   required_providers {
@@ -22,7 +23,8 @@ terraform {
 }
 
 provider "aws" {
-  region = "us-east-1"
+  region  = "us-east-1"
+  profile = "vidacare-prod"
 }
 
 # ---------------------------------------------------
