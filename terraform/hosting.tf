@@ -54,3 +54,10 @@ resource "aws_s3_object" "booking_page" {
 output "frontend_url" {
  value = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
 }
+resource "aws_s3_object" "logo" {
+  bucket       = aws_s3_bucket.frontend.id
+  key          = "assets/vidacare-logo.jpg"
+  source       = "${path.module}/../frontend/assets/vidacare-logo.jpg"
+  content_type = "image/jpeg"
+  etag         = filemd5("${path.module}/../frontend/assets/vidacare-logo.jpg")
+}
