@@ -46,12 +46,30 @@ def _visit_exists(visit_id, patient_id):
     return items[0].get("patient_id") == patient_id
 
 
+def _get_visit(visit_id):
+    result = visits_table.query(
+        KeyConditionExpression=Key("visit_id").eq(visit_id)
+    )
+    items = result.get("Items", [])
+    return items[0] if items else None
+
+
 def _get_patient(patient_id):
     result = patients_table.query(
         KeyConditionExpression=Key("patient_id").eq(patient_id)
     )
     items = result.get("Items", [])
     return items[0] if items else None
+
+
+def _format_date(raw_date):
+    if not raw_date:
+        return "the scheduled date"
+    try:
+        parsed = datetime.fromisoformat(raw_date.replace("Z", "+00:00"))
+        return parsed.strftime("%A, %d %B %Y")
+    except (ValueError, AttributeError):
+        return raw_date
 
 
 def _normalize_ghana_phone(phone):
@@ -66,14 +84,15 @@ def _normalize_ghana_phone(phone):
     return f"+233{phone}"
 
 
-def _send_confirmation(patient, service_label):
+def _send_confirmation(patient, service_label, visit_date):
     service_name = service_label.replace("-", " ").title()
     patient_name = patient.get("full_name", "Patient")
+    display_date = _format_date(visit_date)
 
     sms_message = (
         f"Dear {patient_name}, this is to confirm that your {service_name} "
-        f"appointment at VidaCare Maternity Home has been successfully scheduled. "
-        f"We look forward to welcoming you."
+        f"appointment at VidaCare Maternity Home has been successfully scheduled "
+        f"for {display_date}. We look forward to welcoming you."
     )
 
     html_body = f"""
@@ -94,7 +113,8 @@ def _send_confirmation(patient, service_label):
                   <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">Dear {patient_name},</p>
                   <p style="font-size:15px;line-height:1.6;margin:0 0 16px;">
                     We are pleased to confirm that your appointment for <strong style="color:#1B5E20;">{service_name}</strong>
-                    has been successfully scheduled with VidaCare Maternity Home.
+                    has been successfully scheduled with VidaCare Maternity Home for
+                    <strong style="color:#1B5E20;">{display_date}</strong>.
                   </p>
                   <p style="font-size:15px;line-height:1.6;margin:0 0 24px;">
                     Should you have any questions or need to make changes to this appointment, please do not
@@ -104,6 +124,7 @@ def _send_confirmation(patient, service_label):
                     <tr>
                       <td style="padding:14px 18px;font-size:14px;">
                         <strong style="color:#1B5E20;">Service:</strong> {service_name}<br>
+                        <strong style="color:#1B5E20;">Date:</strong> {display_date}<br>
                         <strong style="color:#1B5E20;">Status:</strong> Confirmed
                       </td>
                     </tr>
@@ -130,7 +151,7 @@ def _send_confirmation(patient, service_label):
     text_body = (
         f"Dear {patient_name},\n\n"
         f"We are pleased to confirm that your appointment for {service_name} has been "
-        f"successfully scheduled with VidaCare Maternity Home.\n\n"
+        f"successfully scheduled with VidaCare Maternity Home for {display_date}.\n\n"
         f"Should you have any questions or need to make changes to this appointment, "
         f"please contact our office in advance of your visit.\n\n"
         f"Yours sincerely,\nVidaCare Maternity Home"
@@ -201,8 +222,11 @@ def handler(event, context):
         return _response(500, {"error": f"Failed to save {SERVICE_LABEL} booking", "details": str(exc)})
 
     patient = _get_patient(patient_id)
+    visit = _get_visit(visit_id)
+    visit_date = visit.get("visit_date") if visit else None
+
     if patient:
-        _send_confirmation(patient, SERVICE_LABEL)
+        _send_confirmation(patient, SERVICE_LABEL, visit_date)
 
     return _response(201, {
         "record_id": record_id,
