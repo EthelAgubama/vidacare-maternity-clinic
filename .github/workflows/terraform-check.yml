@@ -11,6 +11,7 @@ on:
     paths:
       - 'terraform/**'
       - 'src/**'
+  workflow_dispatch:
 
 jobs:
   python-syntax-check:
