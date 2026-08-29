@@ -7,7 +7,6 @@ terraform {
     region         = "us-east-1"
     dynamodb_table = "vidacare-terraform-locks-prod"
     encrypt        = true
-    profile        = "vidacare-prod"
   }
 
   required_providers {
@@ -23,8 +22,7 @@ terraform {
 }
 
 provider "aws" {
-  region  = "us-east-1"
-  profile = "vidacare-prod"
+  region = "us-east-1"
 }
 
 # ---------------------------------------------------
@@ -513,4 +511,3 @@ resource "aws_iam_role_policy" "lambda_dynamodb" {
     ]
   })
 }
-# CI trigger test
