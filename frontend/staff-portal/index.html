@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VidaCare Staff Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600;700&family=Source+Sans+3:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --forest: #1B5E20;
+    --mid-green: #2E7D32;
+    --gold: #B8860B;
+    --gold-light: #D9A441;
+    --bg-tint: #E8F5E9;
+    --card-tint: #C8E6C9;
+    --text-dark: #1A1A1A;
+    --text-grey: #555555;
+    --text-light-grey: #777777;
+    --white: #FFFFFF;
+    --error: #B3261E;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: 'Source Sans 3', sans-serif;
+    color: var(--text-dark);
+    background: linear-gradient(160deg, #F3FAF3 0%, var(--bg-tint) 45%, #EFF8F0 100%);
+    min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  .floaters {
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+  }
+
+  .floater {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+    opacity: 0.3;
+    animation: drift 24s ease-in-out infinite;
+  }
+
+  .floater.f1 { width: 220px; height: 220px; background: radial-gradient(circle, var(--card-tint), transparent 70%); top: -60px; left: -60px; }
+  .floater.f2 { width: 160px; height: 160px; background: radial-gradient(circle, var(--gold-light), transparent 70%); top: 15%; right: -40px; opacity: 0.2; animation-delay: -6s; }
+  .floater.f3 { width: 260px; height: 260px; background: radial-gradient(circle, var(--card-tint), transparent 70%); bottom: -100px; left: 10%; animation-delay: -12s; }
+
+  @keyframes drift {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(18px, -22px) scale(1.04); }
+  }
+
+  /* --- LOGIN VIEW --- */
+  .login-page {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+  }
+
+  .login-card {
+    width: 100%;
+    max-width: 400px;
+    background: var(--white);
+    border-radius: 20px;
+    box-shadow: 0 20px 60px -20px rgba(27, 94, 32, 0.25), 0 4px 16px rgba(27, 94, 32, 0.06);
+    padding: 40px 36px;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: cardIn 0.6s 0.1s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  }
+
+  @keyframes cardIn {
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .login-card img.emblem {
+    width: 68px;
+    height: 68px;
+    border-radius: 50%;
+    display: block;
+    margin: 0 auto 12px;
+    box-shadow: 0 6px 18px -6px rgba(27, 94, 32, 0.35);
+  }
+
+  .login-card h1 {
+    font-family: 'Playfair Display', serif;
+    font-weight: 700;
+    color: var(--forest);
+    font-size: 22px;
+    text-align: center;
+    margin: 0 0 2px;
+  }
+
+  .login-card p.sub {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-light-grey);
+    margin: 0 0 26px;
+  }
+
+  .field { margin-bottom: 16px; }
+  .field label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--mid-green);
+    margin-bottom: 6px;
+  }
+  .field input {
+    width: 100%;
+    padding: 11px 13px;
+    border: 1.5px solid #E0E0DA;
+    border-radius: 10px;
+    font-family: inherit;
+    font-size: 14px;
+    background: #FAFCF9;
+  }
+  .field input:focus {
+    outline: none;
+    border-color: var(--forest);
+    box-shadow: 0 0 0 3px rgba(27, 94, 32, 0.1);
+  }
+
+  .btn-primary {
+    width: 100%;
+    background: var(--forest);
+    color: white;
+    border: none;
+    border-radius: 10px;
+    padding: 13px;
+    font-weight: 600;
+    font-size: 14px;
+    font-family: inherit;
+    cursor: pointer;
+    box-shadow: 0 8px 20px -8px rgba(27, 94, 32, 0.5);
+    transition: background 0.2s, transform 0.15s;
+  }
+  .btn-primary:hover { background: #164A1A; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.6; cursor: default; transform: none; }
+
+  .login-error {
+    display: none;
+    background: #FDECEA;
+    color: var(--error);
+    font-size: 13px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    margin-bottom: 16px;
+  }
+  .login-error.show { display: block; }
+
+  .hint {
+    font-size: 12px;
+    color: var(--text-light-grey);
+    text-align: center;
+    margin-top: 16px;
+  }
+
+  /* --- DASHBOARD SHELL --- */
+  .shell { display: none; }
+  .shell.active {
+    display: block;
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+  }
+
+  .topbar {
+    background: var(--forest);
+    color: white;
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .topbar .brand { display: flex; align-items: center; gap: 10px; }
+  .topbar .brand img { width: 34px; height: 34px; border-radius: 50%; }
+  .topbar .brand span { font-family: 'Playfair Display', serif; font-weight: 700; font-size: 17px; }
+  .topbar .user-info { display: flex; align-items: center; gap: 14px; font-size: 13px; }
+  .topbar .user-info .dept-badge {
+    background: var(--gold);
+    color: white;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: capitalize;
+  }
+  .logout-btn {
+    background: rgba(255,255,255,0.15);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+  }
+  .logout-btn:hover { background: rgba(255,255,255,0.25); }
+
+  .dash-body {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 40px 24px;
+  }
+
+  .welcome-card {
+    background: white;
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: 0 10px 30px -12px rgba(27, 94, 32, 0.15);
+    margin-bottom: 24px;
+  }
+  .welcome-card h2 {
+    font-family: 'Playfair Display', serif;
+    color: var(--forest);
+    margin: 0 0 6px;
+    font-size: 22px;
+  }
+  .welcome-card p { color: var(--text-grey); margin: 0 0 18px; font-size: 14px; }
+
+  .session-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+  }
+  .session-item {
+    background: var(--bg-tint);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .session-item .label { font-size: 11px; color: var(--mid-green); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+  .session-item .value { font-size: 14px; color: var(--text-dark); font-weight: 600; margin-top: 2px; }
+
+  .placeholder-card {
+    background: white;
+    border-radius: 16px;
+    padding: 28px;
+    box-shadow: 0 10px 30px -12px rgba(27, 94, 32, 0.15);
+    text-align: center;
+  }
+  .placeholder-card .icon { font-size: 32px; margin-bottom: 10px; }
+  .placeholder-card h3 {
+    font-family: 'Playfair Display', serif;
+    color: var(--forest);
+    margin: 0 0 8px;
+    font-size: 18px;
+    text-transform: capitalize;
+  }
+  .placeholder-card p {
+    color: var(--text-grey);
+    font-size: 13px;
+    line-height: 1.6;
+    max-width: 480px;
+    margin: 0 auto;
+  }
+
+  .accountability-note {
+    margin-top: 20px;
+    background: #FFF8E1;
+    border: 1px solid #F0DFA0;
+    border-radius: 10px;
+    padding: 14px 16px;
+    font-size: 12.5px;
+    color: #6B5A1E;
+    line-height: 1.6;
+  }
+  .accountability-note strong { color: #8A6D00; }
+
+  .loading-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--gold);
+    margin: 0 2px;
+    animation: bounce 1s infinite;
+  }
+  .loading-dot:nth-child(2) { animation-delay: 0.15s; }
+  .loading-dot:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+    30% { transform: translateY(-4px); opacity: 1; }
+  }
+</style>
+</head>
+<body>
+
+<div class="floaters">
+  <div class="floater f1"></div>
+  <div class="floater f2"></div>
+  <div class="floater f3"></div>
+</div>
+
+<!-- LOGIN VIEW -->
+<div class="login-page" id="loginPage">
+  <div class="login-card">
+    <img class="emblem" src="https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg" alt="VidaCare">
+    <h1>VidaCare Staff Portal</h1>
+    <p class="sub">Sign in with your individual staff account</p>
+
+    <div class="login-error" id="loginError"></div>
+
+    <div class="field">
+      <label>Username</label>
+      <input type="text" id="username" autocomplete="username" placeholder="firstname.lastname">
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input type="password" id="password" autocomplete="current-password">
+    </div>
+
+    <button class="btn-primary" id="loginBtn">Sign in</button>
+    <p class="hint">Staff accounts are created by your administrator.</p>
+  </div>
+</div>
+
+<!-- NEW PASSWORD VIEW -->
+<div class="login-page" id="newPasswordPage" style="display:none;">
+  <div class="login-card">
+    <img class="emblem" src="https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg" alt="VidaCare">
+    <h1>Set a new password</h1>
+    <p class="sub">This is your first sign-in — please choose a permanent password</p>
+
+    <div class="login-error" id="newPasswordError"></div>
+
+    <div class="field">
+      <label>New password</label>
+      <input type="password" id="newPassword" autocomplete="new-password">
+    </div>
+
+    <button class="btn-primary" id="setPasswordBtn">Set password &amp; sign in</button>
+  </div>
+</div>
+
+<!-- DASHBOARD SHELL -->
+<div class="shell" id="dashboardShell">
+  <div class="topbar">
+    <div class="brand">
+      <img src="https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg" alt="VidaCare">
+      <span>VidaCare Staff Portal</span>
+    </div>
+    <div class="user-info">
+      <span id="topbarName"></span>
+      <span class="dept-badge" id="topbarDept"></span>
+      <button class="logout-btn" id="logoutBtn">Sign out</button>
+    </div>
+  </div>
+
+  <div class="dash-body">
+    <div class="welcome-card">
+      <h2 id="welcomeName">Welcome</h2>
+      <p>You're signed in to the VidaCare staff system. Every action you take here is recorded under your name.</p>
+
+      <div class="session-grid">
+        <div class="session-item">
+          <div class="label">Signed in as</div>
+          <div class="value" id="sessionUsername">—</div>
+        </div>
+        <div class="session-item">
+          <div class="label">Department</div>
+          <div class="value" id="sessionDept">—</div>
+        </div>
+        <div class="session-item">
+          <div class="label">Session started</div>
+          <div class="value" id="sessionTime">—</div>
+        </div>
+        <div class="session-item">
+          <div class="label">Access level</div>
+          <div class="value" id="sessionAccess">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="placeholder-card">
+      <div class="icon">🏥</div>
+      <h3 id="deptPlaceholderTitle">Your department dashboard</h3>
+      <p>This is where your department's tools will appear — built next. Everything you enter here will be
+      automatically tagged with your name and the exact time, visible right on each record, so it's always
+      clear who did what.</p>
+    </div>
+
+    <div class="accountability-note">
+      <strong>How this works:</strong> your access is scoped to exactly what your department needs — nothing more.
+      Any record you create or update will show <em>"Entered by [your name] at [time]"</em> directly on the record itself.
+    </div>
+  </div>
+</div>
+
+<script>
+  const CLIENT_ID = "5usb6pdhbmd3bl9t24dmtrutgc";
+  const USER_POOL_ID = "us-east-1_jesPtVohe";
+  const REGION = "us-east-1";
+  const COGNITO_ENDPOINT = `https://cognito-idp.${REGION}.amazonaws.com/`;
+
+  let pendingSession = null;
+  let pendingUsername = null;
+
+  function showError(elId, msg) {
+    const el = document.getElementById(elId);
+    el.textContent = msg;
+    el.classList.add('show');
+  }
+  function hideError(elId) {
+    document.getElementById(elId).classList.remove('show');
+  }
+
+  function decodeJwt(token) {
+    try {
+      const payload = token.split('.')[1];
+      const decoded = atob(payload.replace(/-/g, '+').replace(/_/g, '/'));
+      return JSON.parse(decodeURIComponent(escape(decoded)));
+    } catch (e) {
+      return {};
+    }
+  }
+
+  async function cognitoRequest(target, body) {
+    const res = await fetch(COGNITO_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-amz-json-1.1',
+        'X-Amz-Target': `AWSCognitoIdentityProviderService.${target}`
+      },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.message || data.__type || 'Sign-in failed');
+    }
+    return data;
+  }
+
+  function friendlyDept(deptSlug) {
+    if (!deptSlug) return 'Unassigned';
+    return deptSlug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function enterDashboard(idToken) {
+    const claims = decodeJwt(idToken);
+    const groups = claims['cognito:groups'] || [];
+    const department = groups[0] || null;
+    const name = claims['name'] || claims['cognito:username'] || 'Staff member';
+    const username = claims['cognito:username'] || 'unknown';
+
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('newPasswordPage').style.display = 'none';
+    document.getElementById('dashboardShell').classList.add('active');
+
+    document.getElementById('topbarName').textContent = name;
+    document.getElementById('topbarDept').textContent = friendlyDept(department);
+    document.getElementById('welcomeName').textContent = `Welcome, ${name}`;
+    document.getElementById('sessionUsername').textContent = username;
+    document.getElementById('sessionDept').textContent = friendlyDept(department);
+    document.getElementById('sessionTime').textContent = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    document.getElementById('sessionAccess').textContent = department === 'admin' ? 'Read-only, all departments' : `${friendlyDept(department)} only`;
+    document.getElementById('deptPlaceholderTitle').textContent = `${friendlyDept(department)} dashboard`;
+
+    sessionStorage.setItem('vidacare_id_token', idToken);
+    sessionStorage.setItem('vidacare_department', department || '');
+    sessionStorage.setItem('vidacare_name', name);
+  }
+
+  document.getElementById('loginBtn').addEventListener('click', async () => {
+    hideError('loginError');
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+
+    if (!username || !password) {
+      showError('loginError', 'Enter your username and password.');
+      return;
+    }
+
+    const btn = document.getElementById('loginBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'Signing in <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
+
+    try {
+      const result = await cognitoRequest('InitiateAuth', {
+        AuthFlow: 'USER_PASSWORD_AUTH',
+        ClientId: CLIENT_ID,
+        AuthParameters: { USERNAME: username, PASSWORD: password }
+      });
+
+      if (result.ChallengeName === 'NEW_PASSWORD_REQUIRED') {
+        pendingSession = result.Session;
+        pendingUsername = username;
+        document.getElementById('loginPage').style.display = 'none';
+        document.getElementById('newPasswordPage').style.display = 'flex';
+      } else if (result.AuthenticationResult) {
+        enterDashboard(result.AuthenticationResult.IdToken);
+      } else {
+        showError('loginError', 'Unexpected sign-in response. Please contact your administrator.');
+      }
+    } catch (err) {
+      showError('loginError', err.message.includes('Incorrect') ? 'Incorrect username or password.' : err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  });
+
+  document.getElementById('setPasswordBtn').addEventListener('click', async () => {
+    hideError('newPasswordError');
+    const newPassword = document.getElementById('newPassword').value;
+
+    if (!newPassword || newPassword.length < 10) {
+      showError('newPasswordError', 'Password must be at least 10 characters.');
+      return;
+    }
+
+    const btn = document.getElementById('setPasswordBtn');
+    btn.disabled = true;
+    btn.innerHTML = 'Setting password <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
+
+    try {
+      const result = await cognitoRequest('RespondToAuthChallenge', {
+        ClientId: CLIENT_ID,
+        ChallengeName: 'NEW_PASSWORD_REQUIRED',
+        Session: pendingSession,
+        ChallengeResponses: {
+          USERNAME: pendingUsername,
+          NEW_PASSWORD: newPassword
+        }
+      });
+
+      if (result.AuthenticationResult) {
+        enterDashboard(result.AuthenticationResult.IdToken);
+      } else {
+        showError('newPasswordError', 'Could not complete sign-in. Please try again.');
+      }
+    } catch (err) {
+      showError('newPasswordError', err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Set password & sign in';
+    }
+  });
+
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    sessionStorage.clear();
+    window.location.reload();
+  });
+
+  // Allow Enter key to submit login
+  document.getElementById('password').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('loginBtn').click();
+  });
+  document.getElementById('newPassword').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('setPasswordBtn').click();
+  });
+</script>
+
+</body>
+</html>

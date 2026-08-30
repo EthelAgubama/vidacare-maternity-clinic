@@ -61,3 +61,14 @@ resource "aws_s3_object" "logo" {
   content_type = "image/jpeg"
   etag         = filemd5("${path.module}/../frontend/assets/vidacare-logo.jpg")
 }
+resource "aws_s3_object" "staff_portal" {
+  bucket       = aws_s3_bucket.frontend.id
+  key          = "staff-portal/index.html"
+  source       = "${path.module}/../frontend/staff-portal/index.html"
+  content_type = "text/html"
+  etag         = filemd5("${path.module}/../frontend/staff-portal/index.html")
+}
+
+output "staff_portal_url" {
+  value = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}/staff-portal/index.html"
+}
