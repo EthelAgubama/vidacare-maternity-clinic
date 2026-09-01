@@ -21,19 +21,12 @@
     --white: #FFFFFF;
     --error: #B3261E;
   }
-
   * { box-sizing: border-box; }
-
   body {
-    margin: 0;
-    font-family: 'Source Sans 3', sans-serif;
-    color: var(--text-dark);
+    margin: 0; font-family: 'Source Sans 3', sans-serif; color: var(--text-dark);
     background: linear-gradient(160deg, #F3FAF3 0%, var(--bg-tint) 45%, #EFF8F0 100%);
-    min-height: 100vh;
-    position: relative;
-    overflow-x: hidden;
+    min-height: 100vh; position: relative; overflow-x: hidden;
   }
-
   .floaters { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
   .floater { position: absolute; border-radius: 50%; filter: blur(2px); opacity: 0.3; animation: drift 24s ease-in-out infinite; }
   .floater.f1 { width: 220px; height: 220px; background: radial-gradient(circle, var(--card-tint), transparent 70%); top: -60px; left: -60px; }
@@ -41,7 +34,6 @@
   .floater.f3 { width: 260px; height: 260px; background: radial-gradient(circle, var(--card-tint), transparent 70%); bottom: -100px; left: 10%; animation-delay: -12s; }
   @keyframes drift { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(18px, -22px) scale(1.04); } }
 
-  /* --- LOGIN VIEW --- */
   .login-page { position: relative; z-index: 1; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
   .login-card {
     width: 100%; max-width: 400px; background: var(--white); border-radius: 20px;
@@ -68,10 +60,8 @@
   .login-error.show { display: block; }
   .hint { font-size: 12px; color: var(--text-light-grey); text-align: center; margin-top: 16px; }
 
-  /* --- DASHBOARD SHELL --- */
   .shell { display: none; }
   .shell.active { display: block; position: relative; z-index: 1; min-height: 100vh; }
-
   .topbar { background: var(--forest); color: white; padding: 14px 28px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
   .topbar .brand { display: flex; align-items: center; gap: 10px; }
   .topbar .brand img { width: 34px; height: 34px; border-radius: 50%; }
@@ -81,12 +71,10 @@
   .logout-btn { background: rgba(255,255,255,0.15); color: white; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-family: inherit; cursor: pointer; }
   .logout-btn:hover { background: rgba(255,255,255,0.25); }
 
-  .dash-body { max-width: 920px; margin: 0 auto; padding: 40px 24px; }
-
+  .dash-body { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
   .welcome-card { background: white; border-radius: 16px; padding: 28px 32px; box-shadow: 0 10px 30px -12px rgba(27, 94, 32, 0.15); margin-bottom: 24px; }
   .welcome-card h2 { font-family: 'Playfair Display', serif; color: var(--forest); margin: 0 0 6px; font-size: 22px; }
   .welcome-card p { color: var(--text-grey); margin: 0; font-size: 14px; }
-
   .section-label { font-family: 'Playfair Display', serif; color: var(--forest); font-size: 16px; margin: 0 0 14px; }
 
   .dept-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
@@ -109,9 +97,22 @@
 
   .placeholder-card { background: white; border-radius: 16px; padding: 40px 28px; box-shadow: 0 10px 30px -12px rgba(27, 94, 32, 0.15); text-align: center; }
   .placeholder-card .icon { font-size: 40px; margin-bottom: 12px; }
-  .placeholder-card h3 { font-family: 'Playfair Display', serif; color: var(--forest); margin: 0 0 8px; font-size: 20px; text-transform: capitalize; }
-  .placeholder-card .access-note { display: inline-block; margin-bottom: 14px; }
   .placeholder-card p { color: var(--text-grey); font-size: 13.5px; line-height: 1.7; max-width: 460px; margin: 0 auto; }
+
+  .dept-panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; flex-wrap: wrap; gap: 10px; }
+  .dept-panel-header h3 { font-family: 'Playfair Display', serif; color: var(--forest); font-size: 20px; margin: 0; text-transform: capitalize; }
+
+  .data-card { background: white; border-radius: 16px; padding: 24px; box-shadow: 0 10px 30px -12px rgba(27, 94, 32, 0.15); margin-bottom: 20px; }
+  .data-card h4 { font-family: 'Playfair Display', serif; color: var(--forest); font-size: 15px; margin: 0 0 14px; }
+  table.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.data-table th { text-align: left; padding: 8px 10px; background: var(--bg-tint); color: var(--forest); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.02em; }
+  table.data-table th:first-child { border-radius: 8px 0 0 8px; }
+  table.data-table th:last-child { border-radius: 0 8px 8px 0; }
+  table.data-table td { padding: 10px; border-bottom: 1px solid #EFF3EC; color: var(--text-dark); }
+  table.data-table tr:last-child td { border-bottom: none; }
+  .empty-row td { text-align: center; color: var(--text-light-grey); font-style: italic; padding: 18px; }
+  .loading-inline { text-align: center; padding: 24px; color: var(--text-light-grey); font-size: 13px; }
+  .error-inline { background: #FDECEA; color: var(--error); font-size: 13px; padding: 12px 16px; border-radius: 8px; margin-bottom: 16px; }
 
   .loading-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--gold); margin: 0 2px; animation: bounce 1s infinite; }
   .loading-dot:nth-child(2) { animation-delay: 0.15s; }
@@ -120,6 +121,7 @@
 
   @media (max-width: 480px) {
     .topbar { flex-direction: column; align-items: flex-start; }
+    table.data-table { font-size: 12px; }
   }
 </style>
 </head>
@@ -131,7 +133,6 @@
   <div class="floater f3"></div>
 </div>
 
-<!-- LOGIN VIEW -->
 <div class="login-page" id="loginPage">
   <div class="login-card">
     <img class="emblem" src="https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg" alt="VidaCare">
@@ -151,7 +152,6 @@
   </div>
 </div>
 
-<!-- NEW PASSWORD VIEW -->
 <div class="login-page" id="newPasswordPage" style="display:none;">
   <div class="login-card">
     <img class="emblem" src="https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg" alt="VidaCare">
@@ -166,7 +166,6 @@
   </div>
 </div>
 
-<!-- DASHBOARD SHELL -->
 <div class="shell" id="dashboardShell">
   <div class="topbar">
     <div class="brand">
@@ -186,21 +185,20 @@
       <p>Signed in as <strong id="sessionUsername">—</strong> · Session started <span id="sessionTime">—</span></p>
     </div>
 
-    <!-- Department grid -->
     <div id="gridView">
       <p class="section-label">Your departments</p>
       <div class="dept-grid" id="deptGrid"></div>
     </div>
 
-    <!-- Department detail (placeholder for Phase 11+) -->
     <div class="detail-view" id="detailView">
       <button class="back-link" id="backToGrid">&larr; Back to departments</button>
-      <div class="placeholder-card">
-        <div class="icon" id="detailIcon">🏥</div>
+      <div class="dept-panel-header">
         <h3 id="detailTitle">Department dashboard</h3>
-        <div class="access-note">
-          <span class="badge" id="detailBadge"></span>
-        </div>
+        <span class="badge" id="detailBadge"></span>
+      </div>
+      <div id="liveContent" style="display:none;"></div>
+      <div class="placeholder-card" id="placeholderContent">
+        <div class="icon" id="detailIcon">🏥</div>
         <p>This department's tools are being built next. Everything you enter here will be automatically
         tagged with your name and the exact time, shown directly on each record — so it's always clear who did what.</p>
       </div>
@@ -208,30 +206,37 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+  import { DynamoDBClient, ScanCommand } from "https://cdn.jsdelivr.net/npm/@aws-sdk/client-dynamodb@3/+esm";
+
   const CLIENT_ID = "5usb6pdhbmd3bl9t24dmtrutgc";
   const USER_POOL_ID = "us-east-1_jesPtVohe";
+  const IDENTITY_POOL_ID = "us-east-1:7010b0f4-fae2-400b-a4c6-f073567320d3";
   const REGION = "us-east-1";
-  const COGNITO_ENDPOINT = `https://cognito-idp.${REGION}.amazonaws.com/`;
+  const COGNITO_IDP_ENDPOINT = `https://cognito-idp.${REGION}.amazonaws.com/`;
+  const COGNITO_IDENTITY_ENDPOINT = `https://cognito-identity.${REGION}.amazonaws.com/`;
+  const USER_POOL_PROVIDER = `cognito-idp.${REGION}.amazonaws.com/${USER_POOL_ID}`;
 
   const DEPARTMENTS = [
-    { slug: "front-desk",       name: "Front Desk",       icon: "🛎️" },
-    { slug: "antenatal",        name: "Antenatal",        icon: "🤰" },
-    { slug: "postnatal",        name: "Postnatal",        icon: "👶" },
-    { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧" },
-    { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒" },
-    { slug: "labour-delivery",  name: "Labour & Delivery",icon: "🚨" },
-    { slug: "lab",              name: "Lab",               icon: "🔬" },
-    { slug: "pharmacy",         name: "Pharmacy",          icon: "💊" },
-    { slug: "billing",          name: "Billing",           icon: "💳" },
-    { slug: "finance",          name: "Finance",           icon: "💰" },
-    { slug: "procurement",      name: "Procurement",       icon: "📦" },
-    { slug: "clinicians",       name: "Clinicians",        icon: "🩺" },
-    { slug: "admin",            name: "Admin",             icon: "🛡️" },
+    { slug: "front-desk",       name: "Front Desk",       icon: "🛎️", live: true },
+    { slug: "antenatal",        name: "Antenatal",        icon: "🤰", live: false },
+    { slug: "postnatal",        name: "Postnatal",        icon: "👶", live: false },
+    { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧", live: false },
+    { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒", live: false },
+    { slug: "labour-delivery",  name: "Labour & Delivery",icon: "🚨", live: false },
+    { slug: "lab",              name: "Lab",               icon: "🔬", live: false },
+    { slug: "pharmacy",         name: "Pharmacy",          icon: "💊", live: false },
+    { slug: "billing",          name: "Billing",           icon: "💳", live: false },
+    { slug: "finance",          name: "Finance",           icon: "💰", live: false },
+    { slug: "procurement",      name: "Procurement",       icon: "📦", live: false },
+    { slug: "clinicians",       name: "Clinicians",        icon: "🩺", live: false },
+    { slug: "admin",            name: "Admin",             icon: "🛡️", live: false },
   ];
 
   let pendingSession = null;
   let pendingUsername = null;
+  let currentIdToken = null;
+  let currentCredentials = null;
 
   function showError(elId, msg) {
     const el = document.getElementById(elId);
@@ -252,8 +257,8 @@
     }
   }
 
-  async function cognitoRequest(target, body) {
-    const res = await fetch(COGNITO_ENDPOINT, {
+  async function cognitoIdpRequest(target, body) {
+    const res = await fetch(COGNITO_IDP_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-amz-json-1.1', 'X-Amz-Target': `AWSCognitoIdentityProviderService.${target}` },
       body: JSON.stringify(body)
@@ -261,6 +266,37 @@
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || data.__type || 'Sign-in failed');
     return data;
+  }
+
+  async function cognitoIdentityRequest(target, body) {
+    const res = await fetch(COGNITO_IDENTITY_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-amz-json-1.1', 'X-Amz-Target': `AWSCognitoIdentityService.${target}` },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || data.__type || 'Could not obtain credentials');
+    return data;
+  }
+
+  async function getAwsCredentials(idToken) {
+    const logins = { [USER_POOL_PROVIDER]: idToken };
+
+    const idResult = await cognitoIdentityRequest('GetId', {
+      IdentityPoolId: IDENTITY_POOL_ID,
+      Logins: logins
+    });
+
+    const credsResult = await cognitoIdentityRequest('GetCredentialsForIdentity', {
+      IdentityId: idResult.IdentityId,
+      Logins: logins
+    });
+
+    return {
+      accessKeyId: credsResult.Credentials.AccessKeyId,
+      secretAccessKey: credsResult.Credentials.SecretKey,
+      sessionToken: credsResult.Credentials.SessionToken
+    };
   }
 
   function renderDeptGrid(groups) {
@@ -288,6 +324,78 @@
     });
   }
 
+  function fmtDate(iso) {
+    if (!iso) return '—';
+    try {
+      return new Date(iso).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
+    } catch (e) { return iso; }
+  }
+
+  async function loadFrontDeskData() {
+    const liveEl = document.getElementById('liveContent');
+    liveEl.style.display = 'block';
+    liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
+
+    try {
+      if (!currentCredentials) {
+        currentCredentials = await getAwsCredentials(currentIdToken);
+      }
+
+      const client = new DynamoDBClient({ region: REGION, credentials: currentCredentials });
+
+      const [patientsResp, visitsResp] = await Promise.all([
+        client.send(new ScanCommand({ TableName: 'vidacare-patient-records', Limit: 25 })),
+        client.send(new ScanCommand({ TableName: 'vidacare-visits', Limit: 25 }))
+      ]);
+
+      const patients = patientsResp.Items || [];
+      const visits = visitsResp.Items || [];
+
+      const patientNameById = {};
+      patients.forEach(p => {
+        patientNameById[p.patient_id?.S] = p.full_name?.S || 'Unknown';
+      });
+
+      let patientRows = patients.map(p => `
+        <tr>
+          <td>${p.full_name?.S || '—'}</td>
+          <td>${p.phone_number?.S || '—'}</td>
+          <td>${p.date_of_birth?.S || '—'}</td>
+          <td>${fmtDate(p.created_at?.S)}</td>
+        </tr>
+      `).join('');
+      if (!patientRows) patientRows = `<tr class="empty-row"><td colspan="4">No patients registered yet.</td></tr>`;
+
+      let visitRows = visits.map(v => `
+        <tr>
+          <td>${patientNameById[v.patient_id?.S] || v.patient_id?.S || '—'}</td>
+          <td>${v.visit_date?.S ? fmtDate(v.visit_date.S) : '—'}</td>
+          <td>${v.status?.S || 'open'}</td>
+        </tr>
+      `).join('');
+      if (!visitRows) visitRows = `<tr class="empty-row"><td colspan="3">No visits recorded yet.</td></tr>`;
+
+      liveEl.innerHTML = `
+        <div class="data-card">
+          <h4>Registered patients (${patients.length})</h4>
+          <table class="data-table">
+            <thead><tr><th>Name</th><th>Phone</th><th>Date of birth</th><th>Registered</th></tr></thead>
+            <tbody>${patientRows}</tbody>
+          </table>
+        </div>
+        <div class="data-card">
+          <h4>Recent visits (${visits.length})</h4>
+          <table class="data-table">
+            <thead><tr><th>Patient</th><th>Visit date</th><th>Status</th></tr></thead>
+            <tbody>${visitRows}</tbody>
+          </table>
+        </div>
+      `;
+    } catch (err) {
+      liveEl.innerHTML = `<div class="error-inline">Could not load data: ${err.message}</div>`;
+    }
+  }
+
   function openDeptDetail(dept, badgeClass, badgeText) {
     document.getElementById('gridView').style.display = 'none';
     document.getElementById('detailView').classList.add('active');
@@ -296,6 +404,18 @@
     const badge = document.getElementById('detailBadge');
     badge.className = `badge ${badgeClass}`;
     badge.textContent = badgeText;
+
+    const liveEl = document.getElementById('liveContent');
+    const placeholderEl = document.getElementById('placeholderContent');
+
+    if (dept.live) {
+      placeholderEl.style.display = 'none';
+      liveEl.style.display = 'block';
+      if (dept.slug === 'front-desk') loadFrontDeskData();
+    } else {
+      liveEl.style.display = 'none';
+      placeholderEl.style.display = 'block';
+    }
   }
 
   document.getElementById('backToGrid').addEventListener('click', () => {
@@ -304,6 +424,7 @@
   });
 
   function enterDashboard(idToken) {
+    currentIdToken = idToken;
     const claims = decodeJwt(idToken);
     const groups = claims['cognito:groups'] || [];
     const name = claims['name'] || claims['cognito:username'] || 'Staff member';
@@ -319,10 +440,6 @@
     document.getElementById('sessionTime').textContent = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 
     renderDeptGrid(groups);
-
-    sessionStorage.setItem('vidacare_id_token', idToken);
-    sessionStorage.setItem('vidacare_groups', JSON.stringify(groups));
-    sessionStorage.setItem('vidacare_name', name);
   }
 
   document.getElementById('loginBtn').addEventListener('click', async () => {
@@ -336,7 +453,7 @@
     btn.innerHTML = 'Signing in <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
 
     try {
-      const result = await cognitoRequest('InitiateAuth', {
+      const result = await cognitoIdpRequest('InitiateAuth', {
         AuthFlow: 'USER_PASSWORD_AUTH',
         ClientId: CLIENT_ID,
         AuthParameters: { USERNAME: username, PASSWORD: password }
@@ -370,7 +487,7 @@
     btn.innerHTML = 'Setting password <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>';
 
     try {
-      const result = await cognitoRequest('RespondToAuthChallenge', {
+      const result = await cognitoIdpRequest('RespondToAuthChallenge', {
         ClientId: CLIENT_ID,
         ChallengeName: 'NEW_PASSWORD_REQUIRED',
         Session: pendingSession,
