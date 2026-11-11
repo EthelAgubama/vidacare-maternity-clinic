@@ -21,7 +21,7 @@ resource "aws_s3_bucket_public_access_block" "frontend" {
 
   block_public_acls       = false
   block_public_policy     = false
-  ignore_public_acls       = false
+  ignore_public_acls      = false
   restrict_public_buckets = false
 }
 
@@ -44,16 +44,14 @@ resource "aws_s3_bucket_policy" "frontend_public_read" {
 }
 
 resource "aws_s3_object" "booking_page" {
-  bucket       = aws_s3_bucket.frontend.id
-  key          = "vidacare-booking.html"
-  source       = "${path.module}/../frontend/vidacare-booking.html"
-  content_type = "text/html"
-  etag         = filemd5("${path.module}/../frontend/vidacare-booking.html")
+  bucket        = aws_s3_bucket.frontend.id
+  key           = "vidacare-booking.html"
+  source        = "${path.module}/../frontend/vidacare-booking.html"
+  content_type  = "text/html"
+  cache_control = "no-cache"
+  etag          = filemd5("${path.module}/../frontend/vidacare-booking.html")
 }
 
-output "frontend_url" {
- value = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
-}
 resource "aws_s3_object" "logo" {
   bucket       = aws_s3_bucket.frontend.id
   key          = "assets/vidacare-logo.jpg"
@@ -61,12 +59,18 @@ resource "aws_s3_object" "logo" {
   content_type = "image/jpeg"
   etag         = filemd5("${path.module}/../frontend/assets/vidacare-logo.jpg")
 }
+
 resource "aws_s3_object" "staff_portal" {
-  bucket       = aws_s3_bucket.frontend.id
-  key          = "staff-portal/index.html"
-  source       = "${path.module}/../frontend/staff-portal/index.html"
-  content_type = "text/html"
-  etag         = filemd5("${path.module}/../frontend/staff-portal/index.html")
+  bucket        = aws_s3_bucket.frontend.id
+  key           = "staff-portal/index.html"
+  source        = "${path.module}/../frontend/staff-portal/index.html"
+  content_type  = "text/html"
+  cache_control = "no-cache"
+  etag          = filemd5("${path.module}/../frontend/staff-portal/index.html")
+}
+
+output "frontend_url" {
+  value = "http://${aws_s3_bucket_website_configuration.frontend.website_endpoint}"
 }
 
 output "staff_portal_url" {

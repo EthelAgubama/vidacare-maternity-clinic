@@ -402,6 +402,7 @@
   let canWrite = false;
   let fdSelected = null;    // existing client being seen, or null when registering new
 
+  const uuid = () => { const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; const h = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`; };
   const canonPhone = p => { const d = String(p || '').replace(/\D/g, ''); return (d.startsWith('2330') && d.length === 13) ? '233' + d.slice(4) : d; };
   const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const S = v => (v === undefined || v === null || v === '') ? undefined : { S: String(v) };
@@ -624,7 +625,7 @@
         }
         const clientId = await nextClientId();
         patient = g({
-          patient_id: S(crypto.randomUUID()), record_type: S('profile'), client_id: S(clientId),
+          patient_id: S(uuid()), record_type: S('profile'), client_id: S(clientId),
           full_name: S(val('r_full_name')), date_of_birth: S(val('r_date_of_birth')), sex: S(val('r_sex')),
           phone_number: S(phone), email_address: S(val('r_email_address')), address: S(val('r_address')),
           id_type: S(val('r_id_type')), id_number: S(val('r_id_number')), nhis_number: S(val('r_nhis_number')),
@@ -647,7 +648,7 @@
       }
 
       const num = id => { const v = val(id); return v === '' ? undefined : { N: String(Number(v)) }; };
-      const visitId = crypto.randomUUID();
+      const visitId = uuid();
       const visit = g({
         patient_id: S(patient.patient_id), record_type: S(`visit#${now}#${visitId.slice(0, 8)}`),
         visit_id: S(visitId), client_id: S(patient.client_id), patient_name: S(patient.full_name),
