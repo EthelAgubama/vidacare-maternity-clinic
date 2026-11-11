@@ -71,7 +71,7 @@
   .logout-btn { background: rgba(255,255,255,0.15); color: white; border: none; border-radius: 8px; padding: 7px 14px; font-size: 12px; font-family: inherit; cursor: pointer; }
   .logout-btn:hover { background: rgba(255,255,255,0.25); }
 
-  .dash-body { max-width: 1000px; margin: 0 auto; padding: 40px 24px; }
+  .dash-body { max-width: 1180px; margin: 0 auto; padding: 40px 24px; }
   .welcome-card { background: white; border-radius: 16px; padding: 28px 32px; box-shadow: 0 10px 30px -12px rgba(27, 94, 32, 0.15); margin-bottom: 24px; }
   .welcome-card h2 { font-family: 'Playfair Display', serif; color: var(--forest); margin: 0 0 6px; font-size: 22px; }
   .welcome-card p { color: var(--text-grey); margin: 0; font-size: 14px; }
@@ -119,6 +119,44 @@
   .loading-dot:nth-child(3) { animation-delay: 0.3s; }
   @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
 
+
+  .fd-wrap { display:flex; flex-direction:column; gap:20px; }
+  .fd-search { display:flex; gap:10px; flex-wrap:wrap; }
+  .fd-search input { flex:1; min-width:220px; padding:12px 14px; border:1.5px solid #E0E0DA; border-radius:10px; font:inherit; font-size:14px; background:#FAFCF9; }
+  .fd-search input:focus, .fd-form input:focus, .fd-form select:focus, .fd-form textarea:focus { outline:none; border-color:var(--forest); box-shadow:0 0 0 3px rgba(27,94,32,.1); }
+  .btn-sm { background:var(--forest); color:#fff; border:none; border-radius:10px; padding:11px 18px; font:inherit; font-weight:600; font-size:13.5px; cursor:pointer; }
+  .btn-sm:hover { background:#164A1A; }
+  .btn-sm.ghost { background:var(--bg-tint); color:var(--forest); }
+  .btn-sm.ghost:hover { background:var(--card-tint); }
+  .btn-sm:disabled { opacity:.6; cursor:default; }
+  .results { margin-top:14px; }
+  .result-row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:11px 12px; border-radius:10px; border:1px solid #EFF3EC; margin-bottom:8px; flex-wrap:wrap; }
+  .result-row .who { font-weight:600; }
+  .result-row .meta { font-size:12.5px; color:var(--text-grey); }
+  .cid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size:12px; background:var(--bg-tint); color:var(--forest); padding:2px 8px; border-radius:6px; font-weight:600; }
+  .cid.none { background:#FFF3CD; color:#8A6D00; }
+  .client-banner { display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; background:var(--bg-tint); border-radius:12px; padding:14px 18px; margin-bottom:18px; }
+  .fd-form h5 { font-family:'Playfair Display',serif; color:var(--forest); font-size:15px; margin:22px 0 12px; padding-top:14px; border-top:1px solid #EFF3EC; }
+  .fd-form h5:first-of-type { border-top:none; padding-top:0; margin-top:4px; }
+  .grid2 { display:grid; grid-template-columns:repeat(2,1fr); gap:14px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  .grid4 { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
+  .fd-form .f { margin-bottom:2px; }
+  .fd-form label { display:block; font-size:12.5px; font-weight:600; color:var(--mid-green); margin-bottom:5px; }
+  .fd-form label .req { color:var(--error); }
+  .fd-form input, .fd-form select, .fd-form textarea { width:100%; padding:10px 12px; border:1.5px solid #E0E0DA; border-radius:10px; font:inherit; font-size:14px; background:#FAFCF9; }
+  .fd-form .bad { border-color:var(--error) !important; }
+  .fd-form .unit { font-weight:400; color:var(--text-light-grey); }
+  .stamp { font-size:12px; color:var(--text-grey); margin-top:14px; }
+  .notice { background:#FFF3CD; color:#6B5300; font-size:13px; padding:12px 16px; border-radius:10px; margin:14px 0; }
+  .notice button { margin-left:8px; }
+  .success { background:var(--bg-tint); color:var(--forest); font-size:13.5px; padding:12px 16px; border-radius:10px; margin-bottom:16px; font-weight:600; }
+  .recent-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .recent-scroll { max-height:26vh; overflow:auto; }
+  .recent-scroll table th { position:sticky; top:0; }
+  @media (max-width:760px){ .grid2,.grid3,.grid4,.recent-grid{ grid-template-columns:1fr 1fr; } .recent-grid{grid-template-columns:1fr;} }
+  @media (max-width:480px){ .grid2,.grid3,.grid4{ grid-template-columns:1fr; } }
+
   @media (max-width: 480px) {
     .topbar { flex-direction: column; align-items: flex-start; }
     table.data-table { font-size: 12px; }
@@ -148,7 +186,24 @@
       <input type="password" id="password" autocomplete="current-password">
     </div>
     <button class="btn-primary" id="loginBtn">Sign in</button>
-    <p class="hint">Staff accounts are created by your administrator.</p>
+    <p class="hint"><a href="#" id="forgotLink" style="color:var(--forest);font-weight:600">Forgot password?</a></p>
+    <p class="hint" style="margin-top:6px">Staff accounts are created by your administrator.</p>
+  </div>
+</div>
+
+<div class="login-page" id="forgotPage" style="display:none;">
+  <div class="login-card">
+    <img class="emblem" src="https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg" alt="VidaCare">
+    <h1>Reset your password</h1>
+    <p class="sub" id="forgotSub">Enter your username and we'll email you a code</p>
+    <div class="login-error" id="forgotError"></div>
+    <div class="field"><label>Username</label><input type="text" id="forgotUsername" autocomplete="username" placeholder="firstname.lastname"></div>
+    <div id="forgotStep2" style="display:none;">
+      <div class="field"><label>Code from your email</label><input type="text" id="forgotCode" inputmode="numeric" autocomplete="one-time-code"></div>
+      <div class="field"><label>New password</label><input type="password" id="forgotNewPassword" autocomplete="new-password"></div>
+    </div>
+    <button class="btn-primary" id="forgotBtn">Send code</button>
+    <p class="hint"><a href="#" id="forgotBack" style="color:var(--forest);font-weight:600">Back to sign in</a></p>
   </div>
 </div>
 
@@ -207,7 +262,7 @@
 </div>
 
 <script type="module">
-  import { DynamoDBClient, ScanCommand } from "https://cdn.jsdelivr.net/npm/@aws-sdk/client-dynamodb@3/+esm";
+  import { DynamoDBClient, ScanCommand, PutItemCommand, UpdateItemCommand } from "https://cdn.jsdelivr.net/npm/@aws-sdk/client-dynamodb@3/+esm";
 
   const CLIENT_ID = "5usb6pdhbmd3bl9t24dmtrutgc";
   const USER_POOL_ID = "us-east-1_jesPtVohe";
@@ -331,68 +386,305 @@
     } catch (e) { return iso; }
   }
 
+  // ================= FRONT DESK =================
+  const TABLE = 'vidacare-patient-records';
+  const SERVICES = [
+    ['antenatal', 'Antenatal care'], ['postnatal', 'Postnatal care'], ['family-planning', 'Family planning'],
+    ['child-welfare', 'Child welfare clinic'], ['labour-delivery', 'Labour & delivery'], ['opd', 'General OPD / consultation']
+  ];
+  const SERVICE_LABEL = Object.fromEntries(SERVICES);
+  const REL = ['Spouse', 'Parent', 'Sibling', 'Child', 'Guardian', 'Friend', 'Other'];
+  const ID_TYPES = ['Ghana Card', 'Passport', "Driver's License"];
+
+  let fdClient = null;
+  let fdPatients = [];      // profile items (plain objects)
+  let fdVisits = [];        // visit items (plain objects)
+  let canWrite = false;
+  let fdSelected = null;    // existing client being seen, or null when registering new
+
+  const canonPhone = p => { const d = String(p || '').replace(/\D/g, ''); return (d.startsWith('2330') && d.length === 13) ? '233' + d.slice(4) : d; };
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const S = v => (v === undefined || v === null || v === '') ? undefined : { S: String(v) };
+  const g = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
+  const val = id => (document.getElementById(id)?.value || '').trim();
+  const staffName = () => document.getElementById('topbarName').textContent || 'Staff';
+  const staffUser = () => document.getElementById('sessionUsername').textContent || 'unknown';
+
+  function unmarshal(item) {
+    const o = {};
+    for (const [k, v] of Object.entries(item)) o[k] = v.S ?? v.N ?? (v.M ? unmarshal(v.M) : undefined);
+    return o;
+  }
+
+  async function getClient() {
+    if (!currentCredentials) currentCredentials = await getAwsCredentials(currentIdToken);
+    if (!fdClient) fdClient = new DynamoDBClient({ region: REGION, credentials: currentCredentials });
+    return fdClient;
+  }
+
+  async function scanAll() {
+    const client = await getClient();
+    let items = [], key;
+    do {
+      const r = await client.send(new ScanCommand({ TableName: TABLE, ExclusiveStartKey: key, ConsistentRead: true }));
+      items = items.concat(r.Items || []);
+      key = r.LastEvaluatedKey;
+    } while (key);
+    return items.map(unmarshal);
+  }
+
+  async function refreshData() {
+    const all = await scanAll();
+    fdPatients = all.filter(i => i.patient_id !== 'COUNTER' && !String(i.record_type || '').startsWith('visit#') && i.full_name);
+    fdVisits = all.filter(i => String(i.record_type || '').startsWith('visit#'));
+    fdPatients.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    fdVisits.sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
+  }
+
+  async function nextClientId() {
+    const client = await getClient();
+    const r = await client.send(new UpdateItemCommand({
+      TableName: TABLE,
+      Key: { patient_id: { S: 'COUNTER' }, record_type: { S: 'client_id_seq' } },
+      UpdateExpression: 'ADD seq :one',
+      ExpressionAttributeValues: { ':one': { N: '1' } },
+      ReturnValues: 'UPDATED_NEW'
+    }));
+    return 'VMH-' + String(parseInt(r.Attributes.seq.N, 10)).padStart(5, '0');
+  }
+
+  const opt = (arr, ph) => `<option value="">${ph}</option>` + arr.map(a => Array.isArray(a) ? `<option value="${a[0]}">${a[1]}</option>` : `<option value="${a}">${a}</option>`).join('');
+
+  function shellHtml() {
+    return `
+    <div class="fd-wrap">
+      <div class="data-card">
+        <h4>Find a client</h4>
+        <div class="fd-search">
+          <input id="fdSearch" type="search" placeholder="Search by name, phone, client ID (VMH-00001) or ID number" autocomplete="off">
+          ${canWrite ? '<button class="btn-sm ghost" id="fdNew">+ Register new client</button>' : ''}
+        </div>
+        <div class="results" id="fdResults"></div>
+      </div>
+      <div id="fdMsg"></div>
+      <div class="data-card" id="fdFormCard" style="display:none;"></div>
+      <div class="recent-grid">
+        <div class="data-card"><h4>Recently registered</h4><div class="recent-scroll" id="fdRecentPatients"></div></div>
+        <div class="data-card"><h4>Recent visits</h4><div class="recent-scroll" id="fdRecentVisits"></div></div>
+      </div>
+    </div>`;
+  }
+
+  function renderRecent() {
+    const pr = fdPatients.slice(0, 25).map(p => `<tr>
+      <td><span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID')}</span></td>
+      <td>${esc(p.full_name)}</td><td>${esc(p.phone_number || '—')}</td>
+      <td>${esc(p.entered_by || 'Online booking')}<br><span style="color:#777;font-size:11.5px">${fmtDate(p.entered_at || p.created_at)}</span></td></tr>`).join('');
+    document.getElementById('fdRecentPatients').innerHTML = `<table class="data-table"><thead><tr><th>Client ID</th><th>Name</th><th>Phone</th><th>Entered by</th></tr></thead><tbody>${pr || '<tr class="empty-row"><td colspan="4">No clients yet.</td></tr>'}</tbody></table>`;
+
+    const byId = Object.fromEntries(fdPatients.map(p => [p.patient_id, p]));
+    const vr = fdVisits.slice(0, 25).map(v => {
+      const p = byId[v.patient_id] || {};
+      return `<tr><td>${esc(p.full_name || v.patient_name || '—')}<br><span class="cid">${esc(p.client_id || v.client_id || '—')}</span></td>
+      <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td>
+      <td>${esc(v.entered_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(v.entered_at)}</span></td></tr>`;
+    }).join('');
+    document.getElementById('fdRecentVisits').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Service</th><th>Entered by</th></tr></thead><tbody>${vr || '<tr class="empty-row"><td colspan="3">No visits yet.</td></tr>'}</tbody></table>`;
+  }
+
+  function renderResults(q) {
+    const el = document.getElementById('fdResults');
+    q = q.trim().toLowerCase();
+    if (!q) { el.innerHTML = ''; return; }
+    const digits = q.replace(/\D/g, '');
+    const hits = fdPatients.filter(p =>
+      (p.full_name || '').toLowerCase().includes(q) ||
+      (p.client_id || '').toLowerCase().includes(q) ||
+      (p.id_number || '').toLowerCase().includes(q) ||
+      (digits.length >= 4 && canonPhone(p.phone_number).includes(canonPhone(digits)))
+    ).slice(0, 8);
+    if (!hits.length) {
+      el.innerHTML = `<div class="loading-inline">No client found for "${esc(q)}". Check the spelling, or <a href="#" id="fdRegisterFromSearch" style="color:var(--forest);font-weight:600">register as a new client</a>.</div>`;
+      document.getElementById('fdRegisterFromSearch').onclick = e => { e.preventDefault(); openForm(null, document.getElementById('fdSearch').value); };
+      return;
+    }
+    el.innerHTML = hits.map(p => `<div class="result-row">
+      <div><div class="who">${esc(p.full_name)} <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div>
+      <div class="meta">${esc(p.phone_number || '—')} · DOB ${esc(p.date_of_birth || '—')} · ${esc(p.sex || '')}</div></div>
+      ${canWrite ? `<button class="btn-sm" data-pid="${esc(p.patient_id)}">Start new visit</button>` : ''}</div>`).join('');
+    el.querySelectorAll('button[data-pid]').forEach(b => b.onclick = () => openForm(fdPatients.find(p => p.patient_id === b.dataset.pid)));
+  }
+
+  function vitalsHtml() {
+    return `
+      <h5>Service today</h5>
+      <div class="grid2"><div class="f"><label>Service <span class="req">*</span></label><select id="v_service">${opt(SERVICES, 'Select service')}</select></div>
+      <div class="f"><label>Reason / notes</label><input id="v_notes" placeholder="Optional"></div></div>
+      <h5>Vitals</h5>
+      <div class="grid4">
+        <div class="f"><label>Weight <span class="unit">kg</span></label><input id="v_weight" type="number" step="0.1" min="0"></div>
+        <div class="f"><label>Height / length <span class="unit">cm</span></label><input id="v_height" type="number" step="0.1" min="0"></div>
+        <div class="f"><label>BP systolic <span class="unit">mmHg</span></label><input id="v_sys" type="number" min="0"></div>
+        <div class="f"><label>BP diastolic <span class="unit">mmHg</span></label><input id="v_dia" type="number" min="0"></div>
+        <div class="f"><label>Temperature <span class="unit">°C</span></label><input id="v_temp" type="number" step="0.1" min="0"></div>
+        <div class="f"><label>Pulse <span class="unit">bpm</span></label><input id="v_pulse" type="number" min="0"></div>
+        <div class="f"><label>Respiratory rate <span class="unit">/min</span></label><input id="v_resp" type="number" min="0"></div>
+        <div class="f"><label>SpO₂ <span class="unit">%</span></label><input id="v_spo2" type="number" min="0" max="100"></div>
+        <div class="f"><label>MUAC <span class="unit">cm (children)</span></label><input id="v_muac" type="number" step="0.1" min="0"></div>
+        <div class="f"><label>Head circumference <span class="unit">cm (infants)</span></label><input id="v_head" type="number" step="0.1" min="0"></div>
+        <div class="f"><label>Fundal height <span class="unit">cm (antenatal)</span></label><input id="v_fundal" type="number" step="0.1" min="0"></div>
+      </div>`;
+  }
+
+  function demographicsHtml(prefill) {
+    return `
+      <h5>Client details</h5>
+      <div class="grid2">
+        <div class="f"><label>Full name <span class="req">*</span></label><input id="r_full_name" value="${esc(prefill)}"></div>
+        <div class="f"><label>Date of birth <span class="req">*</span></label><input id="r_date_of_birth" type="date" max="${new Date().toISOString().slice(0, 10)}"></div>
+        <div class="f"><label>Sex <span class="req">*</span></label><select id="r_sex">${opt([['female', 'Female'], ['male', 'Male']], 'Select')}</select></div>
+        <div class="f"><label>Phone number <span class="req">*</span></label><input id="r_phone_number" type="tel" value="+233 " inputmode="numeric"></div>
+        <div class="f"><label>Email <span class="unit">(optional)</span></label><input id="r_email_address" type="email"></div>
+        <div class="f"><label>Address <span class="req">*</span></label><input id="r_address" placeholder="Community, town, region"></div>
+        <div class="f"><label>ID type</label><select id="r_id_type">${opt(ID_TYPES, 'None')}</select></div>
+        <div class="f"><label>ID number</label><input id="r_id_number"></div>
+        <div class="f"><label>NHIS number</label><input id="r_nhis_number"></div>
+      </div>
+      <h5>Emergency contact</h5>
+      <div class="grid3">
+        <div class="f"><label>Name <span class="req">*</span></label><input id="r_emergency_contact_name"></div>
+        <div class="f"><label>Phone <span class="req">*</span></label><input id="r_emergency_contact_phone" type="tel" value="+233 " inputmode="numeric"></div>
+        <div class="f"><label>Relationship <span class="req">*</span></label><select id="r_emergency_contact_relationship">${opt(REL, 'Select')}</select></div>
+      </div>`;
+  }
+
+  function openForm(patient, prefillName) {
+    if (!canWrite) { document.getElementById('fdMsg').innerHTML = '<div class="notice">You have read-only access here, so you can view records but not register clients or save visits.</div>'; return; }
+    fdSelected = patient || null;
+    document.getElementById('fdMsg').innerHTML = '';
+    const card = document.getElementById('fdFormCard');
+    card.style.display = 'block';
+    const banner = patient
+      ? `<div class="client-banner"><div><strong>${esc(patient.full_name)}</strong> <span class="cid ${patient.client_id ? '' : 'none'}">${esc(patient.client_id || 'ID will be assigned')}</span>
+         <div class="meta" style="font-size:12.5px;color:#555">${esc(patient.phone_number || '')} · DOB ${esc(patient.date_of_birth || '—')}</div></div>
+         <button class="btn-sm ghost" id="fdCancel">Cancel</button></div>`
+      : `<div class="client-banner"><div><strong>New client registration</strong><div style="font-size:12.5px;color:#555">A client ID is generated when you save.</div></div><button class="btn-sm ghost" id="fdCancel">Cancel</button></div>`;
+    card.innerHTML = `<h4>${patient ? 'New visit' : 'Register client &amp; start visit'}</h4>${banner}
+      <div class="fd-form">${patient ? '' : demographicsHtml(prefillName || '')}${vitalsHtml()}
+      <div id="fdDup"></div>
+      <div class="stamp">Will be recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}).</div>
+      <div style="margin-top:16px"><button class="btn-sm" id="fdSave">${patient ? 'Save visit' : 'Register &amp; save visit'}</button></div></div>`;
+    document.getElementById('fdCancel').onclick = () => { card.style.display = 'none'; fdSelected = null; };
+    document.getElementById('fdSave').onclick = () => saveForm(false);
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function mark(id, bad) { document.getElementById(id)?.classList.toggle('bad', bad); }
+
+  function validate() {
+    let ok = true;
+    const need = ['v_service'];
+    if (!fdSelected) need.push('r_full_name', 'r_date_of_birth', 'r_sex', 'r_address', 'r_emergency_contact_name', 'r_emergency_contact_relationship');
+    need.forEach(id => { const bad = !val(id); mark(id, bad); if (bad) ok = false; });
+    if (!fdSelected) {
+      ['r_phone_number', 'r_emergency_contact_phone'].forEach(id => {
+        const n = normPhone(val(id)); const bad = !/^\+\d{9,15}$/.test(n) || (n.startsWith('+233') && n.length !== 13); mark(id, bad); if (bad) ok = false;
+      });
+      const em = val('r_email_address'); const badE = em && !/^\S+@\S+\.\S+$/.test(em); mark('r_email_address', !!badE); if (badE) ok = false;
+    }
+    return ok;
+  }
+
+  const normPhone = p => { p = p.replace(/[\s-]/g, ''); if (p.startsWith('+2330')) return '+233' + p.slice(5); if (p.startsWith('+')) return p; if (p.startsWith('233')) return '+' + p; if (p.startsWith('0')) return '+233' + p.slice(1); return '+233' + p; };
+
+  async function saveForm(confirmedNew) {
+    const msg = document.getElementById('fdMsg');
+    msg.innerHTML = '';
+    if (!validate()) { msg.innerHTML = '<div class="error-inline">Please complete the highlighted fields.</div>'; return; }
+
+    const btn = document.getElementById('fdSave');
+    btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const client = await getClient();
+      const now = new Date().toISOString();
+      let patient = fdSelected;
+
+      if (!patient) {
+        const phone = normPhone(val('r_phone_number'));
+        const idn = val('r_id_number').toLowerCase();
+        const dups = fdPatients.filter(p => canonPhone(p.phone_number) === canonPhone(phone) || (idn && (p.id_number || '').toLowerCase() === idn));
+        if (dups.length && !confirmedNew) {
+          document.getElementById('fdDup').innerHTML = `<div class="notice"><strong>Possible existing client:</strong> ${dups.slice(0, 3).map(d => `${esc(d.full_name)} (${esc(d.client_id || 'no ID')}, ${esc(d.phone_number)})`).join('; ')}.
+            <button class="btn-sm ghost" id="fdUseExisting">Use existing client</button>
+            <button class="btn-sm ghost" id="fdConfirmNew">This is a different person</button></div>`;
+          document.getElementById('fdUseExisting').onclick = () => openForm(dups[0]);
+          document.getElementById('fdConfirmNew').onclick = () => saveForm(true);
+          btn.disabled = false; btn.textContent = 'Register & save visit';
+          return;
+        }
+        const clientId = await nextClientId();
+        patient = g({
+          patient_id: S(crypto.randomUUID()), record_type: S('profile'), client_id: S(clientId),
+          full_name: S(val('r_full_name')), date_of_birth: S(val('r_date_of_birth')), sex: S(val('r_sex')),
+          phone_number: S(phone), email_address: S(val('r_email_address')), address: S(val('r_address')),
+          id_type: S(val('r_id_type')), id_number: S(val('r_id_number')), nhis_number: S(val('r_nhis_number')),
+          emergency_contact_name: S(val('r_emergency_contact_name')),
+          emergency_contact_phone: S(normPhone(val('r_emergency_contact_phone'))),
+          emergency_contact_relationship: S(val('r_emergency_contact_relationship')),
+          created_at: S(now), entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser()),
+          duplicate_override: confirmedNew ? { BOOL: true } : undefined
+        });
+        await client.send(new PutItemCommand({ TableName: TABLE, Item: patient, ConditionExpression: 'attribute_not_exists(patient_id)' }));
+        patient = unmarshal(patient);
+      } else if (!patient.client_id) {
+        // online-booked client without an ID yet: assign one now
+        const clientId = await nextClientId();
+        await client.send(new UpdateItemCommand({
+          TableName: TABLE, Key: { patient_id: { S: patient.patient_id }, record_type: { S: patient.record_type } },
+          UpdateExpression: 'SET client_id = :c', ExpressionAttributeValues: { ':c': { S: clientId } }
+        }));
+        patient.client_id = clientId;
+      }
+
+      const num = id => { const v = val(id); return v === '' ? undefined : { N: String(Number(v)) }; };
+      const visitId = crypto.randomUUID();
+      const visit = g({
+        patient_id: S(patient.patient_id), record_type: S(`visit#${now}#${visitId.slice(0, 8)}`),
+        visit_id: S(visitId), client_id: S(patient.client_id), patient_name: S(patient.full_name),
+        service: S(val('v_service')), notes: S(val('v_notes')),
+        weight_kg: num('v_weight'), height_cm: num('v_height'), bp_systolic: num('v_sys'), bp_diastolic: num('v_dia'),
+        temperature_c: num('v_temp'), pulse_bpm: num('v_pulse'), resp_rate: num('v_resp'), spo2_pct: num('v_spo2'),
+        muac_cm: num('v_muac'), head_circumference_cm: num('v_head'), fundal_height_cm: num('v_fundal'),
+        status: S('checked-in'), entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser())
+      });
+      await client.send(new PutItemCommand({ TableName: TABLE, Item: visit }));
+
+      document.getElementById('fdFormCard').style.display = 'none';
+      document.getElementById('fdSearch').value = ''; document.getElementById('fdResults').innerHTML = '';
+      msg.innerHTML = `<div class="success">Saved: ${esc(patient.full_name)} (${esc(patient.client_id)}) checked in for ${esc(SERVICE_LABEL[val('v_service')] || '')} — entered by ${esc(staffName())} at ${fmtDate(now)}.</div>`;
+      fdSelected = null;
+      if (!fdPatients.some(x => x.patient_id === patient.patient_id)) fdPatients.unshift(patient);
+      fdVisits.unshift(unmarshal(visit));
+      renderRecent();
+      refreshData().then(renderRecent).catch(() => {});
+    } catch (err) {
+      msg.innerHTML = `<div class="error-inline">Could not save: ${esc(err.message)}</div>`;
+      btn.disabled = false; btn.textContent = 'Save';
+    }
+  }
+
   async function loadFrontDeskData() {
     const liveEl = document.getElementById('liveContent');
     liveEl.style.display = 'block';
     liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
-
     try {
-      if (!currentCredentials) {
-        currentCredentials = await getAwsCredentials(currentIdToken);
-      }
-
-      const client = new DynamoDBClient({ region: REGION, credentials: currentCredentials });
-
-      const [patientsResp, visitsResp] = await Promise.all([
-        client.send(new ScanCommand({ TableName: 'vidacare-patient-records', Limit: 25 })),
-        client.send(new ScanCommand({ TableName: 'vidacare-visits', Limit: 25 }))
-      ]);
-
-      const patients = patientsResp.Items || [];
-      const visits = visitsResp.Items || [];
-
-      const patientNameById = {};
-      patients.forEach(p => {
-        patientNameById[p.patient_id?.S] = p.full_name?.S || 'Unknown';
-      });
-
-      let patientRows = patients.map(p => `
-        <tr>
-          <td>${p.full_name?.S || '—'}</td>
-          <td>${p.phone_number?.S || '—'}</td>
-          <td>${p.date_of_birth?.S || '—'}</td>
-          <td>${fmtDate(p.created_at?.S)}</td>
-        </tr>
-      `).join('');
-      if (!patientRows) patientRows = `<tr class="empty-row"><td colspan="4">No patients registered yet.</td></tr>`;
-
-      let visitRows = visits.map(v => `
-        <tr>
-          <td>${patientNameById[v.patient_id?.S] || v.patient_id?.S || '—'}</td>
-          <td>${v.visit_date?.S ? fmtDate(v.visit_date.S) : '—'}</td>
-          <td>${v.status?.S || 'open'}</td>
-        </tr>
-      `).join('');
-      if (!visitRows) visitRows = `<tr class="empty-row"><td colspan="3">No visits recorded yet.</td></tr>`;
-
-      liveEl.innerHTML = `
-        <div class="data-card">
-          <h4>Registered patients (${patients.length})</h4>
-          <table class="data-table">
-            <thead><tr><th>Name</th><th>Phone</th><th>Date of birth</th><th>Registered</th></tr></thead>
-            <tbody>${patientRows}</tbody>
-          </table>
-        </div>
-        <div class="data-card">
-          <h4>Recent visits (${visits.length})</h4>
-          <table class="data-table">
-            <thead><tr><th>Patient</th><th>Visit date</th><th>Status</th></tr></thead>
-            <tbody>${visitRows}</tbody>
-          </table>
-        </div>
-      `;
+      await refreshData();
+      liveEl.innerHTML = shellHtml();
+      document.getElementById('fdSearch').addEventListener('input', e => renderResults(e.target.value));
+      document.getElementById('fdNew')?.addEventListener('click', () => openForm(null, document.getElementById('fdSearch').value));
+      renderRecent();
     } catch (err) {
-      liveEl.innerHTML = `<div class="error-inline">Could not load data: ${err.message}</div>`;
+      liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
     }
   }
 
@@ -439,6 +731,7 @@
     document.getElementById('sessionUsername').textContent = username;
     document.getElementById('sessionTime').textContent = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 
+    canWrite = groups.includes('front-desk') && !groups.includes('admin');
     renderDeptGrid(groups);
   }
 
@@ -509,6 +802,49 @@
   document.getElementById('logoutBtn').addEventListener('click', () => {
     sessionStorage.clear();
     window.location.reload();
+  });
+
+
+  // ---- Forgot password ----
+  let forgotStage = 1;
+  document.getElementById('forgotLink').addEventListener('click', e => {
+    e.preventDefault();
+    document.getElementById('loginPage').style.display = 'none';
+    document.getElementById('forgotPage').style.display = 'flex';
+  });
+  document.getElementById('forgotBack').addEventListener('click', e => {
+    e.preventDefault();
+    window.location.reload();
+  });
+  document.getElementById('forgotBtn').addEventListener('click', async () => {
+    hideError('forgotError');
+    const username = document.getElementById('forgotUsername').value.trim();
+    if (!username) { showError('forgotError', 'Enter your username.'); return; }
+    const btn = document.getElementById('forgotBtn');
+    btn.disabled = true;
+    try {
+      if (forgotStage === 1) {
+        const r = await cognitoIdpRequest('ForgotPassword', { ClientId: CLIENT_ID, Username: username });
+        const dest = r.CodeDeliveryDetails?.Destination || 'your email';
+        document.getElementById('forgotSub').textContent = `We sent a code to ${dest}. Enter it with your new password.`;
+        document.getElementById('forgotStep2').style.display = 'block';
+        document.getElementById('forgotUsername').readOnly = true;
+        btn.textContent = 'Set new password';
+        forgotStage = 2;
+      } else {
+        const code = document.getElementById('forgotCode').value.trim();
+        const pw = document.getElementById('forgotNewPassword').value;
+        if (!code || pw.length < 10) { showError('forgotError', 'Enter the code and a new password of at least 10 characters.'); return; }
+        await cognitoIdpRequest('ConfirmForgotPassword', { ClientId: CLIENT_ID, Username: username, ConfirmationCode: code, Password: pw });
+        const r = await cognitoIdpRequest('InitiateAuth', { AuthFlow: 'USER_PASSWORD_AUTH', ClientId: CLIENT_ID, AuthParameters: { USERNAME: username, PASSWORD: pw } });
+        document.getElementById('forgotPage').style.display = 'none';
+        enterDashboard(r.AuthenticationResult.IdToken);
+      }
+    } catch (err) {
+      showError('forgotError', err.message);
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   document.getElementById('password').addEventListener('keydown', (e) => { if (e.key === 'Enter') document.getElementById('loginBtn').click(); });

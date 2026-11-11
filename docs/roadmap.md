@@ -23,3 +23,11 @@ Test IAM user per department, confirming access boundaries hold across the entir
 
 ## Phase 16: Monitoring, CI/CD, and documentation
 CloudWatch, GitHub Actions, Hava.io architecture diagram, final write-up.
+## Phase 17+ (future, post-launch): Clinical data model upgrade
+Ideas from a hospital-system reference design, worth adopting once VidaCare has real patient volume:
+- Coverage (NHIS/insurance/cash) as its own entity with effective dates, separate from the patient record
+- Episodes (pregnancy, CWC enrolment, FP enrolment) with `next_due_date`, powering a defaulter/missed-visit worklist
+- Configurable service pathways (queue steps per department) instead of hardcoded flow
+- Full field-level audit trail on every edit (who, when, old value, new value)
+- Ghana Data Protection Act (Act 843) compliance review: field-level encryption for identifiers, access logging, record-level privacy for sensitive services (e.g. family planning)
+Not adopted: relational DB migration, wristband/ZPL printing, NHIS claims integration, till reconciliation — out of scope for current architecture and clinic size.
