@@ -493,7 +493,7 @@
       <div class="row2">
         <div class="field" id="f-phone_number">
           <label>Phone number</label>
-          <input type="tel" id="phone_number" value="+233 0" inputmode="numeric">
+          <input type="tel" id="phone_number" value="+233 " inputmode="numeric">
           <div class="error">Enter a valid phone number</div>
         </div>
         <div class="field" id="f-email_address">
@@ -542,7 +542,7 @@
       <div class="row2">
         <div class="field" id="f-emergency_contact_phone">
           <label>Contact phone</label>
-          <input type="tel" id="emergency_contact_phone" value="+233 0" inputmode="numeric">
+          <input type="tel" id="emergency_contact_phone" value="+233 " inputmode="numeric">
           <div class="error">Enter a valid phone number</div>
         </div>
         <div class="field" id="f-emergency_contact_relationship">
@@ -732,7 +732,7 @@
 </div>
 
 <script>
-  const API_BASE = "https://rqo2higcdd.execute-api.us-east-1.amazonaws.com";
+  const API_BASE = "https://skquve8knl.execute-api.us-east-1.amazonaws.com";
   const TOTAL_STEPS = 4;
 
   const state = { currentStep: 1, patientId: null, visitId: null };
@@ -773,7 +773,7 @@
 
   function val(id) { return document.getElementById(id).value.trim(); }
 
-  const PHONE_PREFIX = '+233 0';
+  const PHONE_PREFIX = '+233 ';
 
   function formatGhanaPhone(el) {
     let raw = el.value;
@@ -782,9 +782,9 @@
       raw = PHONE_PREFIX;
       el.value = raw;
     }
-    let rest = raw.slice(PHONE_PREFIX.length).replace(/\D/g, '').slice(0, 9);
+    let rest = raw.slice(PHONE_PREFIX.length).replace(/\D/g, '').replace(/^0+/, '').slice(0, 9);
     let grouped = rest.match(/.{1,3}/g)?.join(' ') || '';
-    el.value = PHONE_PREFIX + (grouped ? ' ' + grouped : '');
+    el.value = PHONE_PREFIX + grouped;
     el.setSelectionRange(el.value.length, el.value.length);
   }
 
@@ -865,9 +865,9 @@
       if (bad) ok = false;
     });
     const phone = val('phone_number');
-    if (phone && !/^[\d+\s-]{7,20}$/.test(phone)) { setFieldError('phone_number', true); ok = false; }
+    if (phone && phone.replace(/\D/g, '').length !== 12) { setFieldError('phone_number', true); ok = false; }
     const ephone = val('emergency_contact_phone');
-    if (ephone && !/^[\d+\s-]{7,20}$/.test(ephone)) { setFieldError('emergency_contact_phone', true); ok = false; }
+    if (ephone && ephone.replace(/\D/g, '').length !== 12) { setFieldError('emergency_contact_phone', true); ok = false; }
     return ok;
   }
 
