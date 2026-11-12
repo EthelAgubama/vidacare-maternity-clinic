@@ -160,6 +160,9 @@
   .vit b { color:var(--text-dark); font-weight:600; }
   @media (max-width:760px){ .kv{ grid-template-columns:1fr 1fr; } }
 
+  .svc-line { margin-top:8px; font-size:13px; color:var(--text-grey); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .svc { display:inline-block; font-weight:700; font-size:13px; padding:3px 12px; border-radius:20px; background:var(--card-tint); color:var(--forest); }
+  .svc.now { background:var(--forest); color:#fff; }
   .chk-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px 16px; }
   .fd-form label.chk { display:flex; align-items:center; gap:8px; font-weight:400; color:var(--text-dark); margin:0; font-size:13.5px; }
   .fd-form .chk input { width:auto; padding:0; margin:0; }
@@ -896,6 +899,15 @@
     const card = document.getElementById('clWork');
     if (!p) { card.style.display = 'none'; return; }
     const lastVit = fdVisits.find(v => v.patient_id === clSel && vitalsSummary(v).includes('<b>'));
+    const todayStr = new Date().toDateString();
+    const curVisit = fdVisits.find(v => v.patient_id === clSel && v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === todayStr)
+      || fdVisits.find(v => v.patient_id === clSel);
+    const curIsToday = curVisit && curVisit.entered_at && new Date(curVisit.entered_at).toDateString() === todayStr;
+    const waiting = curVisit && curVisit.status === 'checked-in';
+    const when = curVisit ? (curIsToday ? new Date(curVisit.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : fmtDate(curVisit.entered_at)) : '';
+    const serviceLine = curVisit
+      ? `<div class="svc-line"><span class="svc ${waiting ? 'now' : ''}">${esc(SERVICE_LABEL[curVisit.service] || curVisit.service)}</span><span>${waiting ? 'Waiting since' : (curIsToday ? 'Seen today, arrived' : 'Last visit')} ${when}</span>${curVisit.notes ? `<span>· Reason: <b>${esc(curVisit.notes)}</b></span>` : ''}</div>`
+      : '<div class="svc-line"><span>No front desk visit recorded yet</span></div>';
     const events = [];
     fdVisits.filter(v => v.patient_id === clSel).forEach(v => events.push({ t: v.entered_at, type: 'Front desk visit', body: `${esc(SERVICE_LABEL[v.service] || v.service)}<div class="vit">${vitalsSummary(v)}</div>${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}`, by: v.entered_by }));
     fdConsults.filter(c => c.patient_id === clSel).forEach(c => events.push({ t: c.entered_at, type: 'Consultation', body:
@@ -941,7 +953,8 @@
     card.innerHTML = `
       <div class="client-banner">
         <div><strong style="font-size:17px">${esc(p.full_name)}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span>
-          <div style="font-size:12.5px;color:#555">${esc(p.sex || '')}${p.date_of_birth ? ' · ' + esc(ageOf(p.date_of_birth)) : ''} · ${esc(p.phone_number || '')}${p.allergies ? ' · <b>Allergies:</b> ' + esc(p.allergies) : ''}</div></div>
+          <div style="font-size:12.5px;color:#555">${esc(p.sex || '')}${p.date_of_birth ? ' · ' + esc(ageOf(p.date_of_birth)) : ''} · ${esc(p.phone_number || '')}${p.allergies ? ' · <b>Allergies:</b> ' + esc(p.allergies) : ''}</div>
+          ${serviceLine}</div>
         <button class="btn-sm ghost" id="clClose">Close</button>
       </div>
       <div class="vit" style="margin-bottom:6px"><b>Latest vitals</b> ${lastVit ? `(${fmtDate(lastVit.entered_at)}): ${vitalsSummary(lastVit)}` : '— none recorded yet'}</div>
