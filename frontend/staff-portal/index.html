@@ -304,7 +304,7 @@
     { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧", live: false },
     { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒", live: false },
     { slug: "labour-delivery",  name: "Labour & Delivery",icon: "🚨", live: false },
-    { slug: "lab",              name: "Lab",               icon: "🔬", live: false },
+    { slug: "lab",              name: "Lab",               icon: "🔬", live: true },
     { slug: "pharmacy",         name: "Pharmacy",          icon: "💊", live: false },
     { slug: "billing",          name: "Billing",           icon: "💳", live: false },
     { slug: "finance",          name: "Finance",           icon: "💰", live: false },
@@ -1107,6 +1107,187 @@
     }
   }
 
+  // ================= LAB =================
+  let canLab = false;
+  let labSel = null;
+  const POS_NEG = ['Negative', 'Positive', 'Invalid'];
+  const REACT = ['Non-reactive', 'Reactive', 'Invalid'];
+  const LAB_PRESETS = {
+    'Malaria parasite (RDT / film)': { kind: 'qual', options: POS_NEG },
+    'Sickling test': { kind: 'qual', options: ['Negative', 'Positive'] },
+    'Urine pregnancy test': { kind: 'qual', options: POS_NEG },
+    'HIV screening': { kind: 'qual', options: REACT },
+    'Hepatitis B (HBsAg)': { kind: 'qual', options: REACT },
+    'VDRL / syphilis': { kind: 'qual', options: REACT },
+    'Blood group & Rh': { kind: 'qual', options: ['A Positive', 'A Negative', 'B Positive', 'B Negative', 'AB Positive', 'AB Negative', 'O Positive', 'O Negative'] },
+    'Genotype': { kind: 'qual', options: ['AA', 'AS', 'SS', 'AC', 'SC', 'CC'] },
+    'Haemoglobin': { kind: 'num', unit: 'g/dL', ref: '11.0 - 16.0' },
+    'Blood glucose (random)': { kind: 'num', unit: 'mmol/L', ref: '3.9 - 7.8' },
+    'Fasting blood glucose': { kind: 'num', unit: 'mmol/L', ref: '3.9 - 5.6' }
+  };
+  const presetFor = t => LAB_PRESETS[t] || { kind: 'text' };
+  const FLAGS = [['normal', 'Normal'], ['low', 'Low'], ['high', 'High'], ['abnormal', 'Abnormal'], ['critical', 'Critical']];
+
+  function labShellHtml() {
+    return `
+    <div class="fd-wrap">
+      <div id="lbMsg"></div>
+      <div class="data-card" id="lbForm" style="display:none;"></div>
+      <div class="data-card"><h4>Waiting for results</h4><div class="recent-scroll" id="lbQueue" style="max-height:48vh"></div></div>
+      <div class="data-card"><h4>Released to clinicians</h4><div class="recent-scroll" id="lbDone"></div></div>
+    </div>`;
+  }
+
+  const pending = () => clLab.filter(r => r.status !== 'released')
+    .sort((a, b) => (a.urgency === 'urgent' ? 0 : 1) - (b.urgency === 'urgent' ? 0 : 1) || (a.requested_at || '').localeCompare(b.requested_at || ''));
+
+  function renderLabQueue() {
+    const rows = pending().map(r => `<tr>
+      <td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '—')}</span>
+        <span style="color:#777;font-size:12px"> ${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''}</span></td>
+      <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}</td>
+      <td>${r.status === 'in-progress' ? '<span class="st wait">Draft saved</span>' : '<span class="st wait">Requested</span>'}</td>
+      <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td>
+      <td>${canLab ? `<button class="btn-sm" data-lb="${esc(r.request_id)}">Enter result</button>` : ''}</td></tr>`).join('');
+    document.getElementById('lbQueue').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Status</th><th>Requested by</th><th></th></tr></thead>
+      <tbody>${rows || '<tr class="empty-row"><td colspan="5">No tests are waiting. New requests from clinicians appear here.</td></tr>'}</tbody></table>`;
+    const done = clLab.filter(r => r.status === 'released').sort((a, b) => (b.released_at || '').localeCompare(a.released_at || '')).slice(0, 30)
+      .map(r => `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
+        <td>${esc(r.test)}</td><td>${esc(r.released_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.released_at)}</span></td>
+        <td><a class="lnk" data-lbview="${esc(r.request_id)}">View</a></td></tr>`).join('');
+    document.getElementById('lbDone').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Released by</th><th></th></tr></thead>
+      <tbody>${done || '<tr class="empty-row"><td colspan="4">Nothing released yet.</td></tr>'}</tbody></table>`;
+  }
+
+  async function fetchResult(r) {
+    const client = await getClient();
+    const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
+    return res.Item ? unmarshal(res.Item) : null;
+  }
+
+  async function openLabForm(requestId) {
+    const r = clLab.find(x => x.request_id === requestId);
+    if (!r || !canLab) return;
+    labSel = requestId;
+    document.getElementById('lbMsg').innerHTML = '';
+    const pre = presetFor(r.test);
+    let x = null;
+    if (r.status === 'in-progress') { try { x = await fetchResult(r); } catch (e) { x = null; } }
+    x = x || {};
+    const card = document.getElementById('lbForm');
+    let fields = '';
+    if (pre.kind === 'qual') {
+      fields = `<div class="grid2"><div class="f"><label>Result <span class="req">*</span></label><select id="lb_value">${opt(pre.options, 'Select result')}</select></div>
+        <div class="f"><label>Flag</label><select id="lb_flag">${opt(FLAGS, 'Select')}</select></div></div>`;
+    } else if (pre.kind === 'num') {
+      fields = `<div class="grid4"><div class="f"><label>Result <span class="req">*</span></label><input id="lb_value" type="number" step="any"></div>
+        <div class="f"><label>Unit</label><input id="lb_unit" value="${esc(pre.unit)}"></div>
+        <div class="f"><label>Reference range</label><input id="lb_ref" value="${esc(pre.ref)}"></div>
+        <div class="f"><label>Flag</label><select id="lb_flag">${opt(FLAGS, 'Select')}</select></div></div>`;
+    } else {
+      fields = `<div class="f"><label>Result <span class="req">*</span> <span class="unit">type each finding on its own line</span></label><textarea id="lb_text" rows="6"></textarea></div>
+        <div class="grid2" style="margin-top:12px"><div class="f"><label>Reference range</label><input id="lb_ref"></div>
+        <div class="f"><label>Flag</label><select id="lb_flag">${opt(FLAGS, 'Select')}</select></div></div>`;
+    }
+    card.innerHTML = `
+      <div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span>
+        <div style="font-size:12.5px;color:#555">${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''} · requested by ${esc(r.requested_by || '—')} at ${fmtDate(r.requested_at)}${r.urgency === 'urgent' ? ' · <b>URGENT</b>' : ''}${r.clinical_notes ? ' · Notes: ' + esc(r.clinical_notes) : ''}</div></div>
+        <button class="btn-sm ghost" id="lbCancel">Close</button></div>
+      <div class="fd-form">${fields}
+        <div class="f" style="margin-top:12px"><label>Comment for the clinician</label><input id="lb_comment" placeholder="Optional"></div>
+        <div class="stamp">Recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}). The clinician sees this result only after you release it.</div>
+        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          <button class="btn-sm ghost" id="lbDraft">Save draft</button>
+          <button class="btn-sm" id="lbRelease">Release to clinician</button></div>
+      </div>`;
+    card.style.display = 'block';
+    const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
+    set('lb_value', x.result_value); set('lb_unit', x.unit || pre.unit); set('lb_ref', x.reference_range || pre.ref);
+    set('lb_text', x.result_text); set('lb_flag', x.flag); set('lb_comment', x.comment);
+    if (pre.kind === 'qual') document.getElementById('lb_value').addEventListener('change', e => {
+      const v = e.target.value; document.getElementById('lb_flag').value = !v ? '' : (/^(positive|reactive)$/i.test(v) || v === 'Invalid') ? 'abnormal' : 'normal';
+    });
+    document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; labSel = null; };
+    document.getElementById('lbDraft').onclick = () => saveLabResult(false);
+    document.getElementById('lbRelease').onclick = () => saveLabResult(true);
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  async function saveLabResult(release) {
+    const r = clLab.find(x => x.request_id === labSel);
+    if (!r) return;
+    const pre = presetFor(r.test);
+    const main = pre.kind === 'text' ? val('lb_text') : val('lb_value');
+    const mainId = pre.kind === 'text' ? 'lb_text' : 'lb_value';
+    mark(mainId, !main);
+    if (!main) { document.getElementById('lbMsg').innerHTML = '<div class="error-inline">Please enter the result.</div>'; return; }
+    const bR = document.getElementById('lbRelease'), bD = document.getElementById('lbDraft');
+    bR.disabled = bD.disabled = true; (release ? bR : bD).textContent = release ? 'Releasing…' : 'Saving…';
+    try {
+      const client = await getClient();
+      const now = new Date().toISOString();
+      const item = g({
+        patient_id: S(r.patient_id), record_id: S(r.request_id), request_id: S(r.request_id),
+        client_id: S(r.client_id), patient_name: S(r.patient_name), test: S(r.test),
+        result_value: pre.kind === 'text' ? undefined : S(main), result_text: pre.kind === 'text' ? S(main) : undefined,
+        unit: S(val('lb_unit')), reference_range: S(val('lb_ref')), flag: S(val('lb_flag')), comment: S(val('lb_comment')),
+        entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser())
+      });
+      await client.send(new PutItemCommand({ TableName: RESULTS_TABLE, Item: item }));
+      const upd = release
+        ? { expr: 'SET #s = :s, released_at = :t, released_by = :b, released_by_username = :u', vals: { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } } }
+        : { expr: 'SET #s = :s', vals: { ':s': { S: 'in-progress' } } };
+      await client.send(new UpdateItemCommand({ TableName: LAB_TABLE, Key: { request_id: { S: r.request_id } }, UpdateExpression: upd.expr, ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: upd.vals }));
+      r.status = release ? 'released' : 'in-progress';
+      if (release) { r.released_at = now; r.released_by = staffName(); }
+      document.getElementById('lbForm').style.display = 'none'; labSel = null;
+      renderLabQueue();
+      document.getElementById('lbMsg').innerHTML = `<div class="success">${release ? `Released: ${esc(r.test)} for ${esc(r.patient_name)} — the clinician will see "Labs in!". ` : `Draft saved for ${esc(r.test)}. `}Entered by ${esc(staffName())} at ${fmtDate(now)}.</div>`;
+    } catch (err) {
+      document.getElementById('lbMsg').innerHTML = `<div class="error-inline">Could not save: ${esc(err.message)}</div>`;
+      bR.disabled = bD.disabled = false; bR.textContent = 'Release to clinician'; bD.textContent = 'Save draft';
+    }
+  }
+
+  async function viewLabResult(requestId) {
+    const r = clLab.find(x => x.request_id === requestId);
+    const card = document.getElementById('lbForm');
+    if (!r) return;
+    card.style.display = 'block'; card.innerHTML = '<div class="loading-inline">Loading result…</div>';
+    try {
+      const x = await fetchResult(r);
+      const row = (k, v) => v ? `<div><span>${k}</span>${esc(v)}</div>` : '';
+      card.innerHTML = `<div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span></div><button class="btn-sm ghost" id="lbCancel">Close</button></div>
+        ${x ? `<div class="kv">${row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}${row('Reference range', x.reference_range)}${row('Flag', x.flag)}
+          ${row('Comment', x.comment)}${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
+          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}${row('Seen by clinician', r.seen_at ? `${r.seen_by || ''} · ${fmtDate(r.seen_at)}` : 'Not yet')}</div>` : '<div class="notice">Result record not found.</div>'}`;
+      document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; };
+      card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) { card.innerHTML = `<div class="error-inline">Could not load: ${esc(err.message)}</div>`; }
+  }
+
+  async function loadLabData() {
+    const liveEl = document.getElementById('liveContent');
+    liveEl.style.display = 'block';
+    liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
+    try {
+      clLab = await scanTable(LAB_TABLE);
+      clLab.sort((a, b) => (b.requested_at || '').localeCompare(a.requested_at || ''));
+      liveEl.innerHTML = labShellHtml();
+      if (!liveEl.dataset.boundL) {
+        liveEl.addEventListener('click', e => {
+          const o = e.target.closest('[data-lb]'); if (o) { e.preventDefault(); openLabForm(o.dataset.lb); return; }
+          const v = e.target.closest('[data-lbview]'); if (v) { e.preventDefault(); viewLabResult(v.dataset.lbview); }
+        });
+        liveEl.dataset.boundL = '1';
+      }
+      labSel = null;
+      renderLabQueue();
+    } catch (err) {
+      liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
+    }
+  }
+
   function openDeptDetail(dept, badgeClass, badgeText) {
     document.getElementById('gridView').style.display = 'none';
     document.getElementById('detailView').classList.add('active');
@@ -1124,6 +1305,7 @@
       liveEl.style.display = 'block';
       if (dept.slug === 'front-desk') loadFrontDeskData();
       if (dept.slug === 'clinicians') loadClinicianData();
+      if (dept.slug === 'lab') loadLabData();
     } else {
       liveEl.style.display = 'none';
       placeholderEl.style.display = 'block';
@@ -1153,6 +1335,7 @@
 
     canWrite = groups.includes('front-desk') && !groups.includes('admin');
     canClin = groups.includes('clinicians') && !groups.includes('admin');
+    canLab = groups.includes('lab') && !groups.includes('admin');
     renderDeptGrid(groups);
   }
 
