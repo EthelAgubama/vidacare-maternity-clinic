@@ -378,6 +378,7 @@ module "iam_lab" {
     { sid = "FamilyPlanningRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.family_planning_records.arn] },
     { sid = "ChildWelfareRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.child_welfare_records.arn] },
     { sid = "LabRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
+    { sid = "LabRequestsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] },
     { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] }
   ]
 }
@@ -434,7 +435,8 @@ module "iam_clinicians" {
     { sid = "LabourDeliveryRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.labour_delivery_records.arn}", "${aws_dynamodb_table.labour_delivery_records.arn}/index/*"] },
     { sid = "LabRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
     { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
-    { sid = "VisitsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.visits.arn] }
+    { sid = "VisitsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
+    { sid = "LabRequestsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] }
   ]
 }
 
@@ -454,7 +456,8 @@ module "iam_admin" {
       aws_dynamodb_table.billing.arn,
       aws_dynamodb_table.finance.arn,
       aws_dynamodb_table.procurement.arn,
-      aws_dynamodb_table.visits.arn
+      aws_dynamodb_table.visits.arn,
+      aws_dynamodb_table.lab_requests.arn
     ] }
   ]
 }
