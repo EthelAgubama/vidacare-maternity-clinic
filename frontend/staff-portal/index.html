@@ -159,6 +159,20 @@
   .vit { font-size:12.5px; color:var(--text-grey); line-height:1.7; }
   .vit b { color:var(--text-dark); font-weight:600; }
   @media (max-width:760px){ .kv{ grid-template-columns:1fr 1fr; } }
+
+  .chk-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px 16px; }
+  .fd-form label.chk { display:flex; align-items:center; gap:8px; font-weight:400; color:var(--text-dark); margin:0; font-size:13.5px; }
+  .fd-form .chk input { width:auto; padding:0; margin:0; }
+  .labs-in { background:linear-gradient(135deg,#FFF3CD,#FFE8A3); border:1.5px solid var(--gold-light); border-radius:16px; padding:16px 20px; margin-bottom:4px; box-shadow:0 10px 30px -14px rgba(184,134,11,.5); }
+  .labs-in-title { font-family:'Playfair Display',serif; font-weight:700; font-size:20px; color:#6B5300; margin-bottom:4px; }
+  .labs-in-row { display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; padding:8px 0; border-top:1px solid rgba(184,134,11,.25); font-size:13.5px; }
+  .st { display:inline-block; font-size:11px; font-weight:700; padding:2px 8px; border-radius:20px; }
+  .st.done { background:var(--card-tint); color:var(--forest); }
+  .st.wait { background:#EEF1EC; color:#555; }
+  .st.urgent { background:#FDECEA; color:var(--error); }
+  .result-card { border:1.5px solid var(--mid-green); }
+  @media (max-width:760px){ .chk-grid{ grid-template-columns:1fr 1fr; } }
+  @media (max-width:480px){ .chk-grid{ grid-template-columns:1fr; } }
   .recent-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   .recent-scroll { max-height:26vh; overflow:auto; }
   .recent-scroll table th { position:sticky; top:0; }
@@ -270,7 +284,7 @@
 </div>
 
 <script type="module">
-  import { DynamoDBClient, ScanCommand, PutItemCommand, UpdateItemCommand } from "https://cdn.jsdelivr.net/npm/@aws-sdk/client-dynamodb@3/+esm";
+  import { DynamoDBClient, ScanCommand, PutItemCommand, UpdateItemCommand, GetItemCommand } from "https://cdn.jsdelivr.net/npm/@aws-sdk/client-dynamodb@3/+esm";
 
   const CLIENT_ID = "5usb6pdhbmd3bl9t24dmtrutgc";
   const USER_POOL_ID = "us-east-1_jesPtVohe";
@@ -292,7 +306,7 @@
     { slug: "billing",          name: "Billing",           icon: "💳", live: false },
     { slug: "finance",          name: "Finance",           icon: "💰", live: false },
     { slug: "procurement",      name: "Procurement",       icon: "📦", live: false },
-    { slug: "clinicians",       name: "Clinicians",        icon: "🩺", live: false },
+    { slug: "clinicians",       name: "Clinicians",        icon: "🩺", live: true },
     { slug: "admin",            name: "Admin",             icon: "🛡️", live: false },
   ];
 
@@ -408,6 +422,8 @@
   let fdPatients = [];      // profile items (plain objects)
   let fdVisits = [];        // visit items (plain objects)
   let canWrite = false;
+  let fdConsults = [];
+  let fdReferrals = [];
   let fdSelected = null;    // existing client being seen, or null when registering new
 
   const uuid = () => { const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; const h = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`; };
@@ -448,6 +464,8 @@
     fdVisits = all.filter(i => String(i.record_type || '').startsWith('visit#'));
     fdPatients.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     fdVisits.sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
+    fdConsults = all.filter(i => String(i.record_type || '').startsWith('consult#')).sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
+    fdReferrals = all.filter(i => String(i.record_type || '').startsWith('referral#')).sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
   }
 
   async function nextClientId() {
@@ -764,6 +782,318 @@
     }
   }
 
+  // ================= CLINICIANS =================
+  const LAB_TABLE = 'vidacare-lab-requests';
+  const RESULTS_TABLE = 'vidacare-lab-results';
+  const LAB_TESTS = [
+    'Malaria parasite (RDT / film)', 'Full blood count', 'Haemoglobin', 'Blood group & Rh', 'Sickling test', 'Genotype',
+    'Blood glucose (random)', 'Fasting blood glucose', 'Urinalysis', 'Urine pregnancy test', 'HIV screening',
+    'Hepatitis B (HBsAg)', 'VDRL / syphilis', 'Widal test', 'Stool microscopy', 'Urine culture',
+    'Liver function', 'Kidney function (urea / creatinine)'
+  ];
+  let canClin = false;
+  let clLab = [];
+  let clSel = null;
+
+  async function scanTable(name) {
+    const client = await getClient();
+    let items = [], key;
+    do {
+      const r = await client.send(new ScanCommand({ TableName: name, ExclusiveStartKey: key, ConsistentRead: true }));
+      items = items.concat(r.Items || []);
+      key = r.LastEvaluatedKey;
+    } while (key);
+    return items.map(unmarshal);
+  }
+
+  async function refreshClinic() {
+    await refreshData();
+    clLab = await scanTable(LAB_TABLE);
+    clLab.sort((a, b) => (b.requested_at || '').localeCompare(a.requested_at || ''));
+  }
+
+  const labsInMine = () => clLab.filter(r => r.status === 'released' && r.requested_by_username === staffUser() && !r.seen_at);
+
+  function clinicShellHtml() {
+    return `
+    <div class="fd-wrap">
+      <div id="clLabsIn"></div>
+      <div id="clResult"></div>
+      <div class="data-card"><h4>Waiting today</h4><div class="recent-scroll" id="clQueue"></div></div>
+      <div class="data-card">
+        <h4>Find a client</h4>
+        <div class="fd-search"><input id="clSearch" type="search" placeholder="Search by name, phone, client ID (VMH-00001) or ID number" autocomplete="off"></div>
+        <div class="results" id="clResults"></div>
+      </div>
+      <div id="clMsg"></div>
+      <div class="data-card" id="clWork" style="display:none;"></div>
+      <div class="data-card"><h4>Lab requests</h4><div class="recent-scroll" id="clLabList"></div></div>
+    </div>`;
+  }
+
+  function renderLabsIn() {
+    const el = document.getElementById('clLabsIn');
+    const mine = labsInMine();
+    if (!mine.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="labs-in"><div class="labs-in-title">Labs in!</div>
+      <div style="font-size:13px;margin-bottom:8px">${mine.length} result${mine.length > 1 ? 's have' : ' has'} been released for your clients.</div>
+      ${mine.map(r => `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · released ${fmtDate(r.released_at)}</span>
+      <button class="btn-sm" data-result="${esc(r.request_id)}">View result</button></div>`).join('')}</div>`;
+  }
+
+  function renderQueue() {
+    const today = new Date().toDateString();
+    const rows = fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today)
+      .sort((a, b) => a.entered_at.localeCompare(b.entered_at))
+      .map(v => `<tr><td>${new Date(v.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
+        <td><a class="lnk" data-copen="${esc(v.patient_id)}">${esc(v.patient_name || '—')}</a><br><span class="cid">${esc(v.client_id || '—')}</span></td>
+        <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td><td class="vit">${vitalsSummary(v)}</td></tr>`).join('');
+    document.getElementById('clQueue').innerHTML = `<table class="data-table"><thead><tr><th>Arrived</th><th>Client</th><th>Service</th><th>Vitals</th></tr></thead>
+      <tbody>${rows || '<tr class="empty-row"><td colspan="4">No one is waiting. Clients checked in at the front desk today will appear here.</td></tr>'}</tbody></table>`;
+  }
+
+  function renderLabList() {
+    const rows = clLab.slice(0, 40).map(r => `<tr>
+      <td><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name || '—')}</a><br><span class="cid">${esc(r.client_id || '')}</span></td>
+      <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}</td>
+      <td>${labStatus(r)}</td>
+      <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td></tr>`).join('');
+    document.getElementById('clLabList').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Status</th><th>Requested by</th></tr></thead>
+      <tbody>${rows || '<tr class="empty-row"><td colspan="4">No lab requests yet.</td></tr>'}</tbody></table>`;
+  }
+
+  function labStatus(r) {
+    if (r.status === 'released') return `<span class="st done">Results in</span> <a class="lnk" data-result="${esc(r.request_id)}">View result</a>`;
+    if (r.status === 'in-progress') return '<span class="st wait">In progress</span>';
+    return '<span class="st wait">Requested</span>';
+  }
+
+  function renderClResults(q) {
+    const el = document.getElementById('clResults');
+    q = q.trim().toLowerCase();
+    if (!q) { el.innerHTML = ''; return; }
+    const digits = q.replace(/\D/g, '');
+    const hits = fdPatients.filter(p =>
+      (p.full_name || '').toLowerCase().includes(q) || (p.client_id || '').toLowerCase().includes(q) ||
+      (p.id_number || '').toLowerCase().includes(q) ||
+      (digits.length >= 4 && canonPhone(p.phone_number).includes(canonPhone(digits)))).slice(0, 8);
+    el.innerHTML = hits.length ? hits.map(p => `<div class="result-row">
+      <div><div class="who"><a class="lnk" data-copen="${esc(p.patient_id)}">${esc(p.full_name)}</a> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div>
+      <div class="meta">${esc(p.phone_number || '—')} · DOB ${esc(p.date_of_birth || '—')} · ${esc(p.sex || '')}</div></div>
+      <button class="btn-sm" data-copen="${esc(p.patient_id)}">Open</button></div>`).join('')
+      : `<div class="loading-inline">No client found for "${esc(q)}". New clients are registered at the Front Desk.</div>`;
+  }
+
+  function openClinicClient(pid) {
+    clSel = pid;
+    document.getElementById('clMsg').innerHTML = '';
+    renderWorkspace();
+    document.getElementById('clWork').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
+  function renderWorkspace() {
+    const p = fdPatients.find(x => x.patient_id === clSel);
+    const card = document.getElementById('clWork');
+    if (!p) { card.style.display = 'none'; return; }
+    const lastVit = fdVisits.find(v => v.patient_id === clSel && vitalsSummary(v).includes('<b>'));
+    const events = [];
+    fdVisits.filter(v => v.patient_id === clSel).forEach(v => events.push({ t: v.entered_at, type: 'Front desk visit', body: `${esc(SERVICE_LABEL[v.service] || v.service)}<div class="vit">${vitalsSummary(v)}</div>${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}`, by: v.entered_by }));
+    fdConsults.filter(c => c.patient_id === clSel).forEach(c => events.push({ t: c.entered_at, type: 'Consultation', body:
+      `<b>Diagnosis:</b> ${esc(c.diagnosis)}<div class="vit"><b>Complaints:</b> ${esc(c.complaints)}</div>` +
+      (c.examination ? `<div class="vit"><b>Examination:</b> ${esc(c.examination)}</div>` : '') +
+      (c.treatment_plan ? `<div class="vit"><b>Plan:</b> ${esc(c.treatment_plan)}</div>` : '') +
+      (c.prescriptions ? `<div class="vit"><b>Prescriptions:</b> ${esc(c.prescriptions).replace(/\n/g, '<br>')}</div>` : '') +
+      (c.next_appointment ? `<div class="vit"><b>Next appointment:</b> ${esc(c.next_appointment)}</div>` : ''), by: c.entered_by }));
+    clLab.filter(r => r.patient_id === clSel).forEach(r => events.push({ t: r.requested_at, type: 'Lab request', body: `${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''} · ${labStatus(r)}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}`, by: r.requested_by }));
+    fdReferrals.filter(r => r.patient_id === clSel).forEach(r => events.push({ t: r.entered_at, type: 'Referral', body: `To <b>${esc(r.destination)}</b>${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}<div class="vit">${esc(r.reason)}</div>`, by: r.entered_by }));
+    events.sort((a, b) => (b.t || '').localeCompare(a.t || ''));
+    const hist = events.map(e => `<tr><td>${fmtDate(e.t)}</td><td>${e.type}</td><td>${e.body}</td><td>${esc(e.by || '—')}</td></tr>`).join('');
+
+    const forms = !canClin ? '<div class="notice">You have read-only access here, so you can view this client but not record consultations, lab requests or referrals.</div>' : `
+      <div class="fd-form">
+        <h5>New consultation</h5>
+        <div class="grid2">
+          <div class="f"><label>Complaints / history <span class="req">*</span></label><textarea id="c_complaints" rows="3"></textarea></div>
+          <div class="f"><label>Examination findings</label><textarea id="c_exam" rows="3"></textarea></div>
+          <div class="f"><label>Diagnosis <span class="req">*</span></label><input id="c_dx"></div>
+          <div class="f"><label>Next appointment</label><input id="c_next" type="date"></div>
+          <div class="f"><label>Treatment plan</label><textarea id="c_plan" rows="3"></textarea></div>
+          <div class="f"><label>Prescriptions <span class="unit">one per line: drug, dose, frequency, duration</span></label><textarea id="c_rx" rows="3"></textarea></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn-sm" id="clSaveConsult">Save consultation</button></div>
+        <h5>Request lab tests</h5>
+        <div class="chk-grid">${LAB_TESTS.map(t => `<label class="chk"><input type="checkbox" name="labtest" value="${esc(t)}"> ${esc(t)}</label>`).join('')}</div>
+        <div class="grid2" style="margin-top:12px">
+          <div class="f"><label>Urgency</label><select id="l_urg"><option value="routine">Routine</option><option value="urgent">Urgent</option></select></div>
+          <div class="f"><label>Clinical notes for the lab</label><input id="l_notes" placeholder="Optional"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn-sm" id="clSendLab">Send lab request</button></div>
+        <h5>Create referral</h5>
+        <div class="grid3">
+          <div class="f"><label>Refer to <span class="req">*</span></label><input id="rf_dest" placeholder="Hospital, specialist or department"></div>
+          <div class="f"><label>Urgency</label><select id="rf_urg"><option value="routine">Routine</option><option value="urgent">Urgent</option></select></div>
+          <div class="f"><label>Reason <span class="req">*</span></label><input id="rf_reason"></div>
+        </div>
+        <div style="margin-top:12px"><button class="btn-sm" id="clSendRef">Create referral</button></div>
+        <div class="stamp">Everything you save here is recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}).</div>
+      </div>`;
+
+    card.innerHTML = `
+      <div class="client-banner">
+        <div><strong style="font-size:17px">${esc(p.full_name)}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span>
+          <div style="font-size:12.5px;color:#555">${esc(p.sex || '')}${p.date_of_birth ? ' · ' + esc(ageOf(p.date_of_birth)) : ''} · ${esc(p.phone_number || '')}${p.allergies ? ' · <b>Allergies:</b> ' + esc(p.allergies) : ''}</div></div>
+        <button class="btn-sm ghost" id="clClose">Close</button>
+      </div>
+      <div class="vit" style="margin-bottom:6px"><b>Latest vitals</b> ${lastVit ? `(${fmtDate(lastVit.entered_at)}): ${vitalsSummary(lastVit)}` : '— none recorded yet'}</div>
+      ${forms}
+      <h4 style="margin-top:26px">History (${events.length})</h4>
+      <div class="recent-scroll" style="max-height:none"><table class="data-table"><thead><tr><th>When</th><th>Type</th><th>Details</th><th>Entered by</th></tr></thead>
+      <tbody>${hist || '<tr class="empty-row"><td colspan="4">Nothing recorded for this client yet.</td></tr>'}</tbody></table></div>`;
+    card.style.display = 'block';
+    document.getElementById('clClose').onclick = () => { card.style.display = 'none'; clSel = null; };
+    if (canClin) {
+      document.getElementById('clSaveConsult').onclick = saveConsult;
+      document.getElementById('clSendLab').onclick = sendLab;
+      document.getElementById('clSendRef').onclick = sendReferral;
+    }
+  }
+
+  function clNote(html, kind) { document.getElementById('clMsg').innerHTML = `<div class="${kind === 'ok' ? 'success' : 'error-inline'}">${html}</div>`; }
+  const stampFields = now => ({ entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser()) });
+
+  async function saveConsult() {
+    const need = { c_complaints: val('c_complaints'), c_dx: val('c_dx') };
+    let ok = true;
+    Object.entries(need).forEach(([id, v]) => { mark(id, !v); if (!v) ok = false; });
+    if (!ok) { clNote('Please fill in the complaints and the diagnosis.'); return; }
+    const btn = document.getElementById('clSaveConsult'); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const client = await getClient();
+      const p = fdPatients.find(x => x.patient_id === clSel);
+      const now = new Date().toISOString();
+      const id = uuid();
+      const today = new Date().toDateString();
+      const visit = fdVisits.find(v => v.patient_id === clSel && v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today);
+      const item = g({
+        patient_id: S(clSel), record_type: S(`consult#${now}#${id.slice(0, 8)}`), consult_id: S(id),
+        client_id: S(p.client_id), patient_name: S(p.full_name), service: S(visit?.service),
+        complaints: S(val('c_complaints')), examination: S(val('c_exam')), diagnosis: S(val('c_dx')),
+        treatment_plan: S(val('c_plan')), prescriptions: S(document.getElementById('c_rx').value.trim()),
+        next_appointment: S(val('c_next')), visit_record: S(visit?.record_type), ...stampFields(now)
+      });
+      await client.send(new PutItemCommand({ TableName: TABLE, Item: item }));
+      if (visit) {
+        await client.send(new UpdateItemCommand({
+          TableName: TABLE, Key: { patient_id: { S: visit.patient_id }, record_type: { S: visit.record_type } },
+          UpdateExpression: 'SET #s = :s, seen_at = :t, seen_by = :b',
+          ExpressionAttributeNames: { '#s': 'status' },
+          ExpressionAttributeValues: { ':s': { S: 'seen' }, ':t': { S: now }, ':b': { S: staffName() } }
+        }));
+        visit.status = 'seen';
+      }
+      fdConsults.unshift(unmarshal(item));
+      renderWorkspace(); renderQueue();
+      clNote(`Consultation saved for ${esc(p.full_name)} — entered by ${esc(staffName())} at ${fmtDate(now)}.`, 'ok');
+    } catch (err) { clNote(`Could not save: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Save consultation'; }
+  }
+
+  async function sendLab() {
+    const tests = [...document.querySelectorAll('input[name="labtest"]:checked')].map(c => c.value);
+    if (!tests.length) { clNote('Tick at least one test to request.'); return; }
+    const btn = document.getElementById('clSendLab'); btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const client = await getClient();
+      const p = fdPatients.find(x => x.patient_id === clSel);
+      const now = new Date().toISOString();
+      const group = uuid();
+      const items = tests.map(t => g({
+        request_id: S(uuid()), group_id: S(group), patient_id: S(clSel), client_id: S(p.client_id), patient_name: S(p.full_name),
+        date_of_birth: S(p.date_of_birth), sex: S(p.sex), test: S(t), urgency: S(val('l_urg') || 'routine'), clinical_notes: S(val('l_notes')),
+        status: S('requested'), requested_at: S(now), requested_by: S(staffName()), requested_by_username: S(staffUser())
+      }));
+      await Promise.all(items.map(Item => client.send(new PutItemCommand({ TableName: LAB_TABLE, Item }))));
+      items.forEach(i => clLab.unshift(unmarshal(i)));
+      renderWorkspace(); renderLabList();
+      clNote(`${tests.length} lab test${tests.length > 1 ? 's' : ''} requested for ${esc(p.full_name)}. You'll see "Labs in!" here when the results are released.`, 'ok');
+    } catch (err) { clNote(`Could not send: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Send lab request'; }
+  }
+
+  async function sendReferral() {
+    const dest = val('rf_dest'), reason = val('rf_reason');
+    mark('rf_dest', !dest); mark('rf_reason', !reason);
+    if (!dest || !reason) { clNote('Please fill in who the client is referred to and the reason.'); return; }
+    const btn = document.getElementById('clSendRef'); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const client = await getClient();
+      const p = fdPatients.find(x => x.patient_id === clSel);
+      const now = new Date().toISOString();
+      const id = uuid();
+      const item = g({
+        patient_id: S(clSel), record_type: S(`referral#${now}#${id.slice(0, 8)}`), referral_id: S(id),
+        client_id: S(p.client_id), patient_name: S(p.full_name), destination: S(dest), reason: S(reason),
+        urgency: S(val('rf_urg') || 'routine'), ...stampFields(now)
+      });
+      await client.send(new PutItemCommand({ TableName: TABLE, Item: item }));
+      fdReferrals.unshift(unmarshal(item));
+      renderWorkspace();
+      clNote(`Referral to ${esc(dest)} created for ${esc(p.full_name)}.`, 'ok');
+    } catch (err) { clNote(`Could not save: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Create referral'; }
+  }
+
+  async function viewResult(requestId) {
+    const r = clLab.find(x => x.request_id === requestId);
+    const box = document.getElementById('clResult');
+    if (!r) return;
+    box.innerHTML = '<div class="loading-inline">Loading result…</div>';
+    try {
+      const client = await getClient();
+      const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
+      const x = res.Item ? unmarshal(res.Item) : null;
+      const row = (k, v) => v ? `<div><span>${k}</span>${esc(v)}</div>` : '';
+      box.innerHTML = `<div class="data-card result-card">
+        <div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span></div><button class="btn-sm ghost" id="clResultClose">Close</button></div>
+        ${x ? `<div class="kv">
+          ${row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}
+          ${row('Reference range', x.reference_range)}${row('Flag', x.flag)}
+          ${row('Comment', x.comment)}${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
+          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}
+        </div>` : '<div class="notice">The result record could not be found. Ask the lab to check this request.</div>'}</div>`;
+      document.getElementById('clResultClose').onclick = () => { box.innerHTML = ''; };
+      box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (canClin && r.status === 'released' && !r.seen_at && r.requested_by_username === staffUser()) {
+        const now = new Date().toISOString();
+        await client.send(new UpdateItemCommand({
+          TableName: LAB_TABLE, Key: { request_id: { S: r.request_id } },
+          UpdateExpression: 'SET seen_at = :t, seen_by = :b', ExpressionAttributeValues: { ':t': { S: now }, ':b': { S: staffName() } }
+        }));
+        r.seen_at = now; r.seen_by = staffName();
+        renderLabsIn();
+      }
+    } catch (err) { box.innerHTML = `<div class="error-inline">Could not load result: ${esc(err.message)}</div>`; }
+  }
+
+  async function loadClinicianData() {
+    const liveEl = document.getElementById('liveContent');
+    liveEl.style.display = 'block';
+    liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
+    try {
+      await refreshClinic();
+      liveEl.innerHTML = clinicShellHtml();
+      document.getElementById('clSearch').addEventListener('input', e => renderClResults(e.target.value));
+      if (!liveEl.dataset.boundC) {
+        liveEl.addEventListener('click', e => {
+          const o = e.target.closest('[data-copen]'); if (o) { e.preventDefault(); openClinicClient(o.dataset.copen); return; }
+          const r = e.target.closest('[data-result]'); if (r) { e.preventDefault(); viewResult(r.dataset.result); }
+        });
+        liveEl.dataset.boundC = '1';
+      }
+      clSel = null;
+      renderLabsIn(); renderQueue(); renderLabList();
+    } catch (err) {
+      liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
+    }
+  }
+
   function openDeptDetail(dept, badgeClass, badgeText) {
     document.getElementById('gridView').style.display = 'none';
     document.getElementById('detailView').classList.add('active');
@@ -780,6 +1110,7 @@
       placeholderEl.style.display = 'none';
       liveEl.style.display = 'block';
       if (dept.slug === 'front-desk') loadFrontDeskData();
+      if (dept.slug === 'clinicians') loadClinicianData();
     } else {
       liveEl.style.display = 'none';
       placeholderEl.style.display = 'block';
@@ -808,6 +1139,7 @@
     document.getElementById('sessionTime').textContent = new Date().toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 
     canWrite = groups.includes('front-desk') && !groups.includes('admin');
+    canClin = groups.includes('clinicians') && !groups.includes('admin');
     renderDeptGrid(groups);
   }
 
