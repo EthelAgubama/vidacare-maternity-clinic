@@ -151,6 +151,14 @@
   .notice { background:#FFF3CD; color:#6B5300; font-size:13px; padding:12px 16px; border-radius:10px; margin:14px 0; }
   .notice button { margin-left:8px; }
   .success { background:var(--bg-tint); color:var(--forest); font-size:13.5px; padding:12px 16px; border-radius:10px; margin-bottom:16px; font-weight:600; }
+  a.lnk { color:var(--forest); font-weight:600; text-decoration:none; cursor:pointer; border-bottom:1px dotted var(--mid-green); }
+  a.lnk:hover { color:#164A1A; border-bottom-style:solid; }
+  .kv { display:grid; grid-template-columns:repeat(3,1fr); gap:12px 20px; }
+  .kv div span { display:block; font-size:11.5px; font-weight:600; color:var(--mid-green); margin-bottom:2px; }
+  .kv div { font-size:14px; word-break:break-word; }
+  .vit { font-size:12.5px; color:var(--text-grey); line-height:1.7; }
+  .vit b { color:var(--text-dark); font-weight:600; }
+  @media (max-width:760px){ .kv{ grid-template-columns:1fr 1fr; } }
   .recent-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   .recent-scroll { max-height:26vh; overflow:auto; }
   .recent-scroll table th { position:sticky; top:0; }
@@ -468,6 +476,7 @@
         <div class="results" id="fdResults"></div>
       </div>
       <div id="fdMsg"></div>
+      <div class="data-card" id="fdProfileCard" style="display:none;"></div>
       <div class="data-card" id="fdFormCard" style="display:none;"></div>
       <div class="recent-grid">
         <div class="data-card"><h4>Recently registered</h4><div class="recent-scroll" id="fdRecentPatients"></div></div>
@@ -479,14 +488,14 @@
   function renderRecent() {
     const pr = fdPatients.slice(0, 25).map(p => `<tr>
       <td><span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID')}</span></td>
-      <td>${esc(p.full_name)}</td><td>${esc(p.phone_number || '—')}</td>
+      <td><a class="lnk" data-open="${esc(p.patient_id)}">${esc(p.full_name)}</a></td><td>${esc(p.phone_number || '—')}</td>
       <td>${esc(p.entered_by || 'Online booking')}<br><span style="color:#777;font-size:11.5px">${fmtDate(p.entered_at || p.created_at)}</span></td></tr>`).join('');
     document.getElementById('fdRecentPatients').innerHTML = `<table class="data-table"><thead><tr><th>Client ID</th><th>Name</th><th>Phone</th><th>Entered by</th></tr></thead><tbody>${pr || '<tr class="empty-row"><td colspan="4">No clients yet.</td></tr>'}</tbody></table>`;
 
     const byId = Object.fromEntries(fdPatients.map(p => [p.patient_id, p]));
     const vr = fdVisits.slice(0, 25).map(v => {
       const p = byId[v.patient_id] || {};
-      return `<tr><td>${esc(p.full_name || v.patient_name || '—')}<br><span class="cid">${esc(p.client_id || v.client_id || '—')}</span></td>
+      return `<tr><td><a class="lnk" data-open="${esc(v.patient_id)}">${esc(p.full_name || v.patient_name || '—')}</a><br><span class="cid">${esc(p.client_id || v.client_id || '—')}</span></td>
       <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td>
       <td>${esc(v.entered_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(v.entered_at)}</span></td></tr>`;
     }).join('');
@@ -510,7 +519,7 @@
       return;
     }
     el.innerHTML = hits.map(p => `<div class="result-row">
-      <div><div class="who">${esc(p.full_name)} <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div>
+      <div><div class="who"><a class="lnk" data-open="${esc(p.patient_id)}">${esc(p.full_name)}</a> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div>
       <div class="meta">${esc(p.phone_number || '—')} · DOB ${esc(p.date_of_birth || '—')} · ${esc(p.sex || '')}</div></div>
       ${canWrite ? `<button class="btn-sm" data-pid="${esc(p.patient_id)}">Start new visit</button>` : ''}</div>`).join('');
     el.querySelectorAll('button[data-pid]').forEach(b => b.onclick = () => openForm(fdPatients.find(p => p.patient_id === b.dataset.pid)));
@@ -559,10 +568,74 @@
       </div>`;
   }
 
+  function ageOf(dob) {
+    if (!dob) return '';
+    const d = new Date(dob); if (isNaN(d)) return '';
+    const now = new Date(); let y = now.getFullYear() - d.getFullYear(), m = now.getMonth() - d.getMonth();
+    if (now.getDate() < d.getDate()) m--;
+    if (m < 0) { y--; m += 12; }
+    return y >= 2 ? `${y} years` : `${y * 12 + m} months`;
+  }
+
+  function vitalsSummary(v) {
+    const parts = [];
+    if (v.bp_systolic && v.bp_diastolic) parts.push(['BP', `${v.bp_systolic}/${v.bp_diastolic} mmHg`]);
+    if (v.weight_kg) parts.push(['Weight', `${v.weight_kg} kg`]);
+    if (v.height_cm) parts.push(['Height', `${v.height_cm} cm`]);
+    if (v.temperature_c) parts.push(['Temp', `${v.temperature_c} °C`]);
+    if (v.pulse_bpm) parts.push(['Pulse', `${v.pulse_bpm} bpm`]);
+    if (v.resp_rate) parts.push(['Resp', `${v.resp_rate}/min`]);
+    if (v.spo2_pct) parts.push(['SpO₂', `${v.spo2_pct}%`]);
+    if (v.muac_cm) parts.push(['MUAC', `${v.muac_cm} cm`]);
+    if (v.head_circumference_cm) parts.push(['Head', `${v.head_circumference_cm} cm`]);
+    if (v.fundal_height_cm) parts.push(['Fundal ht', `${v.fundal_height_cm} cm`]);
+    return parts.length ? parts.map(([k, x]) => `${k} <b>${esc(x)}</b>`).join(' · ') : '<span style="color:#999">No vitals recorded</span>';
+  }
+
+  function openClient(pid) {
+    const p = fdPatients.find(x => x.patient_id === pid);
+    if (!p) return;
+    const visits = fdVisits.filter(v => v.patient_id === pid);
+    const card = document.getElementById('fdProfileCard');
+    const kv = (k, v) => `<div><span>${k}</span>${esc(v || '—')}</div>`;
+    const vrows = visits.map(v => `<tr>
+      <td>${fmtDate(v.entered_at)}</td>
+      <td>${esc(SERVICE_LABEL[v.service] || v.service)}${v.notes ? `<br><span style="color:#777;font-size:12px">${esc(v.notes)}</span>` : ''}</td>
+      <td class="vit">${vitalsSummary(v)}</td>
+      <td>${esc(v.entered_by || '—')}</td></tr>`).join('');
+    card.innerHTML = `
+      <div class="client-banner">
+        <div><strong style="font-size:17px">${esc(p.full_name)}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div>
+        <div style="display:flex;gap:8px">${canWrite ? '<button class="btn-sm" id="fdProfileVisit">Start new visit</button>' : ''}<button class="btn-sm ghost" id="fdProfileClose">Close</button></div>
+      </div>
+      <h4>Client details</h4>
+      <div class="kv">
+        ${kv('Date of birth', p.date_of_birth ? `${p.date_of_birth}${ageOf(p.date_of_birth) ? ' (' + ageOf(p.date_of_birth) + ')' : ''}` : '')}
+        ${kv('Sex', p.sex)}${kv('Phone', p.phone_number)}
+        ${kv('Email', p.email_address)}${kv('Address', p.address)}${kv('NHIS number', p.nhis_number)}
+        ${kv('ID', [p.id_type, p.id_number].filter(Boolean).join(' · '))}
+        ${kv('Emergency contact', [p.emergency_contact_name, p.emergency_contact_relationship && `(${p.emergency_contact_relationship})`].filter(Boolean).join(' '))}
+        ${kv('Emergency phone', p.emergency_contact_phone)}
+        ${kv('Blood group', p.blood_group)}${kv('Genotype', p.genotype)}${kv('Allergies', p.allergies)}
+        ${kv('Registered by', `${p.entered_by || 'Online booking'} · ${fmtDate(p.entered_at || p.created_at)}`)}
+      </div>
+      <h4 style="margin-top:24px">Visit history (${visits.length})</h4>
+      <div class="recent-scroll" style="max-height:none">
+      <table class="data-table"><thead><tr><th>Date</th><th>Service</th><th>Vitals</th><th>Entered by</th></tr></thead>
+      <tbody>${vrows || '<tr class="empty-row"><td colspan="4">No visits recorded by the front desk yet.</td></tr>'}</tbody></table></div>`;
+    card.style.display = 'block';
+    document.getElementById('fdFormCard').style.display = 'none';
+    document.getElementById('fdProfileClose').onclick = () => { card.style.display = 'none'; };
+    const vb = document.getElementById('fdProfileVisit');
+    if (vb) vb.onclick = () => { card.style.display = 'none'; openForm(p); };
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   function openForm(patient, prefillName) {
     if (!canWrite) { document.getElementById('fdMsg').innerHTML = '<div class="notice">You have read-only access here, so you can view records but not register clients or save visits.</div>'; return; }
     fdSelected = patient || null;
     document.getElementById('fdMsg').innerHTML = '';
+    document.getElementById('fdProfileCard').style.display = 'none';
     const card = document.getElementById('fdFormCard');
     card.style.display = 'block';
     const banner = patient
@@ -684,6 +757,8 @@
       document.getElementById('fdSearch').addEventListener('input', e => renderResults(e.target.value));
       document.getElementById('fdNew')?.addEventListener('click', () => openForm(null, document.getElementById('fdSearch').value));
       renderRecent();
+      if (!liveEl.dataset.bound) liveEl.addEventListener('click', e => { const a = e.target.closest('[data-open]'); if (a) { e.preventDefault(); openClient(a.dataset.open); } });
+      liveEl.dataset.bound = '1';
     } catch (err) {
       liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
     }
