@@ -198,6 +198,16 @@
   .rx-msg.reply { border-left-color:#2E7D32; background:#E8F5E9; }
   .rx-hist { border:1.5px solid #E5EBE2; border-radius:12px; padding:14px 16px; margin:12px 0; background:#FCFDFB; }
   .rx-hist h6 { font-family:'Playfair Display',serif; color:var(--forest); font-size:14px; margin:14px 0 6px; }
+  .ferr { color:#C62828; font-size:12.5px; font-weight:600; margin:4px 0 6px; }
+  .ph-tabs { display:flex; gap:8px; margin:2px 0 4px; flex-wrap:wrap; }
+  .ph-tab { background:#fff; border:1.5px solid #D5DED1; color:var(--forest); border-radius:12px; padding:11px 20px; font:inherit; font-weight:700; font-size:14.5px; cursor:pointer; }
+  .ph-tab.on { background:var(--forest); color:#fff; border-color:var(--forest); }
+  .ph-tab .n { display:inline-block; min-width:20px; padding:1px 7px; border-radius:20px; font-size:12px; margin-left:6px; background:#C62828; color:#fff; }
+  .ph-tab .n.green { background:#2E7D32; color:#fff; }
+  .ph-tab .n.amber { background:#F9B800; color:#3B2A00; }
+  tr.rowbar.red td:first-child { border-left:5px solid #C62828; }
+  tr.rowbar.green td:first-child { border-left:5px solid #2E7D32; }
+  .backbar { margin:0 0 10px; }
   .rx-row { display:grid; grid-template-columns:2.2fr 1fr 1.2fr 1fr .7fr 1.6fr auto; gap:8px; align-items:start; margin-bottom:10px; }
   .rx-row .x { background:none; border:none; color:var(--error); font-size:22px; cursor:pointer; margin-top:22px; padding:0 6px; }
   .rx-hint { font-size:11.5px; margin-top:3px; color:var(--text-grey); }
@@ -712,6 +722,22 @@
   }
 
   function mark(id, bad) { document.getElementById(id)?.classList.toggle('bad', bad); }
+  // Errors are shown right under the box that needs fixing, in red, and the page scrolls to the first one.
+  function clearErrs(root) { const r = root || document; r.querySelectorAll('.ferr').forEach(e => e.remove()); r.querySelectorAll('.bad').forEach(e => e.classList.remove('bad')); }
+  function fieldErr(target, msg) {
+    const el = typeof target === 'string' ? document.getElementById(target) : target; if (!el) return null;
+    el.classList.add('bad');
+    const d = document.createElement('div'); d.className = 'ferr'; d.textContent = '⚠ ' + msg;
+    (el.closest('label.chk') || el).insertAdjacentElement('afterend', d);
+    const clear = () => { d.remove(); el.classList.remove('bad'); };
+    el.addEventListener('input', clear, { once: true }); el.addEventListener('change', clear, { once: true });
+    return el;
+  }
+  function showErrs(list) {
+    const els = list.map(([t, m]) => fieldErr(t, m)).filter(Boolean);
+    if (els[0]) { els[0].scrollIntoView({ behavior: 'smooth', block: 'center' }); try { els[0].focus({ preventScroll: true }); } catch (e) { /* not focusable */ } }
+    return els.length;
+  }
 
   function validate() {
     let ok = true;
@@ -909,8 +935,10 @@
     const mine = clLab.filter(r => r.patient_id === pid);
     if (mine.some(r => r.status === 'released' && !r.seen_at)) tags.push('<span class="st done">Labs ready</span>');
     else if (mine.some(r => !['released', 'rejected'].includes(r.status) && (r.requested_at || '').slice(0, 10) === new Date().toISOString().slice(0, 10))) tags.push('<span class="st f-abnormal">Waiting for labs</span>');
+    const todayIso = new Date().toISOString().slice(0, 10);
     if (clRx.some(r => r.patient_id === pid && r.status === 'query')) tags.push('<span class="st rej">Pharmacy query</span>');
-    else if (clRx.some(r => r.patient_id === pid && ['pending', 'partial'].includes(r.status))) tags.push('<span class="st wait">At pharmacy</span>');
+    else if (clRx.some(r => r.patient_id === pid && ['pending', 'partial'].includes(r.status))) tags.push('<span class="st rej">Not served at pharmacy</span>');
+    else if (clRx.some(r => r.patient_id === pid && r.status === 'dispensed' && (r.dispensed_at || '').slice(0, 10) === todayIso)) tags.push('<span class="st rel">Served at pharmacy</span>');
     return tags.length ? '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' + tags.join('') + '</div>' : '';
   }
 
@@ -1205,13 +1233,13 @@
     return `<div class="rx-thread">${t.map(x => `<div class="rx-msg ${x.k}"><b>${esc(x.by)}</b> <span class="vit">${fmtDate(x.at)}</span> ${x.k === 'query' ? 'asked' : 'replied'}: ${esc(x.text)}${x.changed ? `<div class="vit"><b>Prescription changed.</b> Before: ${esc(x.before)}</div>` : ''}</div>`).join('')}</div>`;
   }
   function rxBadge(r, pharm) {
-    if (r.status === 'dispensed') return `<span class="st rel">Dispensed</span><div class="vit">${esc(r.dispensed_by || '')}<br>${fmtDate(r.dispensed_at)}</div>`;
-    if (r.status === 'cancelled') return `<span class="st rej">Not dispensed</span><div class="vit">${esc(r.dispensed_by || '')}<br>${fmtDate(r.dispensed_at)}</div>`;
+    if (r.status === 'dispensed') return `<span class="st rel">Served</span><div class="vit">${esc(r.dispensed_by || '')}<br>${fmtDate(r.dispensed_at)}</div>`;
+    if (r.status === 'cancelled') return `<span class="st wait">Closed, nothing given</span><div class="vit">${esc(r.dispensed_by || '')}<br>${fmtDate(r.dispensed_at)}</div>`;
     if (r.status === 'withdrawn') return `<span class="st wait">Withdrawn by the doctor</span><div class="vit">${fmtDate(r.withdrawn_at)}</div>`;
     if (r.status === 'query') return `<span class="st rej">${pharm ? 'Query with the doctor' : 'Pharmacy query: please answer'}</span><div class="vit">${pharm ? 'Waiting for ' + esc(r.prescribed_by || 'the doctor') : 'Asked by ' + esc(lastQuery(r).by || 'the pharmacy')}</div>`;
     const replied = (rxThread(r).slice(-1)[0] || {}).k === 'reply';
     if (r.status === 'partial') return '<span class="st f-abnormal">Partly dispensed</span>' + (replied && pharm ? ' <span class="st rel">Doctor replied</span>' : '');
-    return `<span class="st wait">${pharm ? 'To dispense' : 'Sent to pharmacy'}</span>` + (replied && pharm ? ' <span class="st rel">Doctor replied</span>' : '');
+    return `<span class="st rej">Not served yet</span>` + (replied && pharm ? ' <span class="st f-abnormal">Doctor replied</span>' : '');
   }
 
   // ---- Prescribe (clinician side) ----
@@ -1260,9 +1288,18 @@
 
   async function sendRx() {
     const rows = rxState.rows.filter(rxFilled);
-    if (!rows.length) { clNote('Add at least one drug to prescribe.'); return; }
-    const bad = rows.find(r => !r.n.trim() || !r.d.trim() || !r.f.trim() || !r.u.trim() || !(Number(r.q) >= 1) || !Number.isInteger(Number(r.q)));
-    if (bad) { clNote('Each drug needs a name, dose, frequency, duration and a whole-number quantity of at least 1.'); return; }
+    clearErrs(document.getElementById('rxBox')); document.getElementById('clMsg').innerHTML = '';
+    if (!rows.length) { showErrs([[document.querySelector('[data-rx="0|n"]'), 'Type the drug you are prescribing.']]); return; }
+    const errs = [], inp = (i, f) => document.querySelector(`[data-rx="${i}|${f}"]`);
+    rxState.rows.forEach((r, i) => {
+      if (!rxFilled(r)) return;
+      if (!r.n.trim()) errs.push([inp(i, 'n'), 'Type the drug name.']);
+      if (!r.d.trim()) errs.push([inp(i, 'd'), 'Enter the dose, e.g. 2 tablets.']);
+      if (!r.f.trim()) errs.push([inp(i, 'f'), 'Choose or type how often.']);
+      if (!r.u.trim()) errs.push([inp(i, 'u'), 'Choose or type for how long.']);
+      if (!(Number(r.q) >= 1) || !Number.isInteger(Number(r.q))) errs.push([inp(i, 'q'), 'Enter a whole number of 1 or more.']);
+    });
+    if (errs.length) { showErrs(errs); return; }
     const p = fdPatients.find(x => x.patient_id === clSel);
     const flagged = rows.map(r => [r.n, rxAllergy(r.n, p.allergies)]).filter(x => x[1]);
     if (flagged.length && !confirm('This client has a recorded allergy (' + (p.allergies || '') + ').\n\nCheck: ' + flagged.map(x => x[0]).join(', ') + '.\n\nSend to the pharmacy anyway?')) return;
@@ -1291,7 +1328,7 @@
 
   function renderRxList() {
     const el = document.getElementById('clRxList'); if (!el) return;
-    const rows = clRx.slice(0, 40).map(r => `<tr>
+    const rows = clRx.slice(0, 40).map(r => `<tr class="rowbar ${r.status === 'dispensed' ? 'green' : ['pending', 'partial', 'query'].includes(r.status) ? 'red' : ''}">
       <td><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name || '—')}</a><br><span class="cid">${esc(r.client_id || '')}</span></td>
       <td class="vit">${rxLinesHtml(r)}</td><td>${rxBadge(r, false)}${r.status === 'query' && r.prescribed_by_username === staffUser() ? `<div style="margin-top:4px"><button class="btn-sm b-recv" data-rxq="${esc(r.rx_id)}">Answer</button></div>` : ''}</td>
       <td>${esc(r.prescribed_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.prescribed_at)}</span></td></tr>`).join('');
@@ -1356,12 +1393,19 @@
   }
   async function sendRxReply(withdraw) {
     const r = clRx.find(x => x.rx_id === (rxReply && rxReply.id)); if (!r) return;
-    const text = val('rq_text'); mark('rq_text', !text);
-    if (!text) { clNote(withdraw ? 'Please say why you are withdrawing this prescription.' : 'Please write your reply to the pharmacy.'); return; }
+    const text = val('rq_text'); clearErrs(document.getElementById('clRxReply'));
+    if (!text) { showErrs([['rq_text', withdraw ? 'Say why you are withdrawing this prescription.' : 'Write your reply to the pharmacy.']]); return; }
     const old = parseLines(r), lines = rxReply.lines.map(l => ({ ...l }));
     if (!withdraw) {
-      const badL = lines.find(l => !l.s && (!String(l.n).trim() || !String(l.d).trim() || !String(l.f).trim() || !String(l.u).trim() || !/^\d+$/.test(String(l.q).trim()) || Number(l.q) < 1));
-      if (badL) { clNote('Each drug needs a name, dose, frequency, duration and a whole-number quantity of at least 1.'); return; }
+      const errs = [], inp = (i, f) => document.querySelector(`[data-rxe="${i}|${f}"]`);
+      lines.forEach((l, i) => { if (l.s) return;
+        if (!String(l.n).trim()) errs.push([inp(i, 'n'), 'Type the drug name.']);
+        if (!String(l.d).trim()) errs.push([inp(i, 'd'), 'Enter the dose.']);
+        if (!String(l.f).trim()) errs.push([inp(i, 'f'), 'Enter how often.']);
+        if (!String(l.u).trim()) errs.push([inp(i, 'u'), 'Enter for how long.']);
+        if (!/^\d+$/.test(String(l.q).trim()) || Number(l.q) < 1) errs.push([inp(i, 'q'), 'Enter a whole number of 1 or more.']);
+      });
+      if (errs.length) { showErrs(errs); return; }
       lines.forEach(l => { if (!l.s) { l.n = String(l.n).trim(); l.d = String(l.d).trim(); l.f = String(l.f).trim(); l.u = String(l.u).trim(); l.q = Number(l.q); l.i = String(l.i || '').trim(); } });
       const flagged = lines.filter(l => !l.s && rxAllergy(l.n, r.allergies));
       if (flagged.length && !confirm('This client has a recorded allergy (' + r.allergies + ').\n\nCheck: ' + flagged.map(l => l.n).join(', ') + '.\n\nSend anyway?')) return;
@@ -1784,9 +1828,44 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     <div class="fd-wrap">
       <div id="lbMsg"></div>
       <div class="data-card" id="lbForm" style="display:none;"></div>
-      <div class="data-card"><h4>Waiting for results</h4><div class="recent-scroll" id="lbQueue" style="max-height:48vh"></div></div>
-      <div class="data-card"><h4>Released and rejected</h4><div class="recent-scroll" id="lbDone"></div></div>
+      <div class="ph-tabs"><button class="ph-tab on" data-lbtab="wait">Waiting for results <span class="n" id="lbTabWait" style="display:none"></span></button><button class="ph-tab" data-lbtab="done">Released and rejected <span class="n green" id="lbTabDone" style="display:none"></span></button></div>
+      <div class="fd-search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input id="lbSearch" type="search" placeholder="Search by client name, client ID, test or sample ID" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="lbSearchBtn">Search</button><button class="btn-sm ghost" id="lbClearBtn">Clear</button></div>
+      <div id="lbPaneWait">
+        <div id="lbSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0"></div>
+        <div class="data-card"><h4>Waiting for results</h4><div class="recent-scroll" id="lbQueue" style="max-height:60vh"></div></div>
+      </div>
+      <div id="lbPaneDone" style="display:none">
+        <div class="data-card"><h4>Released and rejected</h4><div class="recent-scroll" id="lbDone"></div></div>
+      </div>
     </div>`;
+  }
+  let labTab = 'wait', labQ = '', labTimer = null;
+  const labMatch = r => { const n = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ''), q = n(labQ); return !q || n([r.patient_name, r.client_id, r.test, r.sample_id].join(' ')).includes(q); };
+  function setLabTab(t) {
+    labTab = t;
+    document.getElementById('lbPaneWait').style.display = t === 'wait' ? '' : 'none';
+    document.getElementById('lbPaneDone').style.display = t === 'done' ? '' : 'none';
+    document.querySelectorAll('[data-lbtab]').forEach(b => b.classList.toggle('on', b.dataset.lbtab === t));
+  }
+  function renderLabTabs() {
+    const wait = clLab.filter(r => !['released', 'rejected'].includes(r.status));
+    const toRecv = wait.filter(r => r.status !== 'received' && r.status !== 'in-progress' && r.status !== 'entered').length;
+    const toEnter = wait.filter(r => r.status === 'received' || r.status === 'in-progress').length;
+    const toVerify = wait.filter(r => r.status === 'entered').length;
+    const urgent = wait.filter(r => r.urgency === 'urgent').length;
+    const today = new Date().toISOString().slice(0, 10);
+    const doneToday = clLab.filter(r => r.status === 'released' && (r.released_at || '').slice(0, 10) === today).length;
+    const a = document.getElementById('lbTabWait'), b = document.getElementById('lbTabDone');
+    if (a) { a.textContent = wait.length; a.style.display = wait.length ? '' : 'none'; }
+    if (b) { b.textContent = doneToday; b.style.display = doneToday ? '' : 'none'; b.title = 'released today'; }
+    const s = document.getElementById('lbSummary');
+    if (s) s.innerHTML = wait.length ? [
+      toRecv ? `<span class="st rej">${toRecv} to receive</span>` : '', toEnter ? `<span class="st f-abnormal" style="background:#F9B800;color:#3B2A00">${toEnter} to enter</span>` : '',
+      toVerify ? `<span class="st rel">${toVerify} to verify</span>` : '', urgent ? `<span class="st urgent">${urgent} urgent</span>` : ''].join('') : '';
+  }
+  async function labAutoRefresh() {
+    if (!document.getElementById('lbQueue')) { clearInterval(labTimer); return; }
+    try { clLab = await scanTable(LAB_TABLE); clLab.sort((a, b) => (b.requested_at || '').localeCompare(a.requested_at || '')); renderLabQueue(); } catch (e) { /* try again next time */ }
   }
 
   const pending = () => clLab.filter(r => !['released', 'rejected'].includes(r.status))
@@ -1811,7 +1890,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   }
 
   function renderLabQueue() {
-    const rows = pending().map(r => `<tr>
+    const rows = pending().filter(labMatch).map(r => `<tr class="rowbar red">
       <td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '—')}</span>
         <span style="color:#777;font-size:12px"> ${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''}</span></td>
       <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}</td>
@@ -1819,11 +1898,11 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td>
       <td style="white-space:nowrap">${queueButtons(r)}</td></tr>`).join('');
     document.getElementById('lbQueue').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Status</th><th>Requested by</th><th></th></tr></thead>
-      <tbody>${rows || '<tr class="empty-row"><td colspan="5">No tests are waiting. New requests from clinicians appear here.</td></tr>'}</tbody></table>`;
-    const done = clLab.filter(r => ['released', 'rejected'].includes(r.status))
+      <tbody>${rows || `<tr class="empty-row"><td colspan="5">${labQ ? 'No waiting test matches your search.' : 'No tests are waiting. New requests from clinicians appear here.'}</td></tr>`}</tbody></table>`;
+    const done = clLab.filter(r => ['released', 'rejected'].includes(r.status) && labMatch(r))
       .sort((a, b) => (b.released_at || b.rejected_at || '').localeCompare(a.released_at || a.rejected_at || '')).slice(0, 30)
       .map(r => r.status === 'released'
-        ? `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
+        ? `<tr class="rowbar green"><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
         <td>${esc(r.test)}</td><td><span class="st rel">Released</span>${r.amended_at ? ' <span class="st wait">corrected</span>' : ''}${r.result_flag === 'critical' ? ' <span class="st f-critical">critical</span>' : ''}<div class="vit">${esc(r.sample_id || '')}</div></td>
         <td>${esc(r.released_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.released_at)}</span><div class="vit">Turnaround ${esc(dur(r.requested_at, r.released_at))}</div></td>
         <td style="white-space:nowrap"><a class="lnk" data-lbview="${esc(r.request_id)}">View</a>${canLab ? ` · <a class="lnk" data-lbact="amend|${esc(r.request_id)}">Correct</a>` : ''}</td></tr>`
@@ -1831,7 +1910,8 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
         <td>${esc(r.test)}</td><td><span class="st rej">Rejected</span><div class="vit">${esc(r.reject_reason || '')}${r.reject_note ? ' — ' + esc(r.reject_note) : ''}</div></td>
         <td>${esc(r.rejected_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.rejected_at)}</span></td><td></td></tr>`).join('');
     document.getElementById('lbDone').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Outcome</th><th>By</th><th></th></tr></thead>
-      <tbody>${done || '<tr class="empty-row"><td colspan="5">Nothing released yet.</td></tr>'}</tbody></table>`;
+      <tbody>${done || `<tr class="empty-row"><td colspan="5">${labQ ? 'No released or rejected test matches your search.' : 'Nothing released yet.'}</td></tr>`}</tbody></table>`;
+    renderLabTabs();
   }
 
   async function fetchResult(r, recordId) {
@@ -2118,12 +2198,17 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       liveEl.innerHTML = labShellHtml();
       if (!liveEl.dataset.boundL) {
         liveEl.addEventListener('click', e => {
-          const a = e.target.closest('[data-lbact]'); if (a) { e.preventDefault(); const [m, id] = a.dataset.lbact.split('|'); openLabForm(id, m); return; }
+          const tb = e.target.closest('[data-lbtab]'); if (tb) { setLabTab(tb.dataset.lbtab); return; }
+          const a = e.target.closest('[data-lbact]'); if (a) { e.preventDefault(); const [m, id] = a.dataset.lbact.split('|'); if (m !== 'amend') setLabTab('wait'); openLabForm(id, m); return; }
           const v = e.target.closest('[data-lbview]'); if (v) { e.preventDefault(); viewLabResult(v.dataset.lbview); }
         });
         liveEl.dataset.boundL = '1';
       }
-      labSel = null;
+      labSel = null; labQ = ''; labTab = 'wait';
+      document.getElementById('lbSearch').addEventListener('input', e => { labQ = e.target.value; renderLabQueue(); });
+      document.getElementById('lbSearchBtn').addEventListener('click', () => { labQ = document.getElementById('lbSearch').value; renderLabQueue(); });
+      document.getElementById('lbClearBtn').addEventListener('click', () => { document.getElementById('lbSearch').value = ''; labQ = ''; renderLabQueue(); });
+      clearInterval(labTimer); labTimer = setInterval(labAutoRefresh, 45000);
       renderLabQueue();
     } catch (err) {
       liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
@@ -2205,16 +2290,22 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     return `
     <div class="fd-wrap">
       <div id="phMsg"></div>
-      <div id="phAlerts"></div>
       <div class="data-card" id="phForm" style="display:none;"></div>
-      <div class="data-card"><h4>Prescriptions to dispense</h4><div class="recent-scroll" id="phQueue" style="max-height:48vh"></div></div>
+      <div class="ph-tabs"><button class="ph-tab on" data-phtab="rx">Prescriptions <span class="n" id="phTabRx" style="display:none"></span></button><button class="ph-tab" data-phtab="stock">Drug stock <span class="n amber" id="phTabStock" style="display:none"></span></button></div>
+      <div id="phPaneRx">
+      <div class="data-card"><h4>Prescriptions to serve</h4><div class="recent-scroll" id="phQueue" style="max-height:60vh"></div></div>
+      <div class="data-card"><h4>Served and closed</h4><div class="recent-scroll" id="phDone"></div></div>
+      </div>
+      <div id="phPaneStock" style="display:none">
+      <div id="phAlerts"></div>
       <div class="data-card"><h4>Drug stock</h4>
         <div class="fd-search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input id="phSearch" type="search" placeholder="Search a drug to check availability" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="phSearchBtn">Search</button><button class="btn-sm ghost" id="phClearBtn">Clear</button>
-        ${canPharm ? '<button class="btn-sm" data-phact="add|">Add a drug</button>' : ''}${canPharm && !phStock.length ? '<button class="btn-sm ghost" data-phact="starter|">Load a starter drug list</button>' : ''}</div>
+        ${canPharm ? '<button class="btn-sm" data-phact="add|">Add a drug</button>' : ''}${canPharm && !phStock.length ? '<button class="btn-sm ghost" data-phact="starter|">Add common drug names</button>' : ''}</div>
+        ${canPharm && !phStock.length ? '<div class="notice" style="margin-top:10px"><b>New here?</b> "Add common drug names" fills your list with about 25 common medicines (names only, with 0 in stock and no price) so you do not have to type each one. After that, use <b>Edit</b> to set each price and <b>Receive</b> to add the stock you have.</div>' : ''}
         <div class="vit" id="phCount" style="margin-top:8px"></div>
         <div class="recent-scroll" id="phStock" style="margin-top:6px"></div></div>
-      <div class="data-card"><h4>Recently dispensed</h4><div class="recent-scroll" id="phDone"></div></div>
       <div class="data-card"><h4>Stock movements</h4><div class="recent-scroll" id="phMoves"></div></div>
+      </div>
     </div>`;
   }
 
@@ -2231,7 +2322,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
 
   function renderPhQueue() {
     const open = phRx.filter(r => ['pending', 'partial', 'query'].includes(r.status)).sort((a, b) => (a.prescribed_at || '').localeCompare(b.prescribed_at || ''));
-    const rows = open.map(r => `<tr>
+    const rows = open.map(r => `<tr class="rowbar red">
       <td>${fmtDate(r.prescribed_at)}</td>
       <td><b>${esc(r.patient_name || '—')}</b><br><span class="cid">${esc(r.client_id || '')}</span>${r.allergies ? `<div style="margin-top:4px"><span class="st f-abnormal">Allergy: ${esc(r.allergies)}</span></div>` : ''}</td>
       <td class="vit">${rxLinesHtml(r)}</td><td>${esc(r.prescribed_by || '—')}<br><span style="color:#777;font-size:11.5px">${esc(r.rx_no || '')}</span></td><td>${rxBadge(r, true)}</td>
@@ -2257,7 +2348,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
 
   function renderPhDone() {
     const done = phRx.filter(r => ['dispensed', 'cancelled', 'withdrawn'].includes(r.status)).sort((a, b) => (b.dispensed_at || b.withdrawn_at || '').localeCompare(a.dispensed_at || a.withdrawn_at || '')).slice(0, 40);
-    const rows = done.map(r => `<tr><td>${esc(r.rx_no || '')}<div class="vit">${fmtDate(r.dispensed_at || r.withdrawn_at)}</div></td>
+    const rows = done.map(r => `<tr class="rowbar ${r.status === 'dispensed' ? 'green' : ''}"><td>${esc(r.rx_no || '')}<div class="vit">${fmtDate(r.dispensed_at || r.withdrawn_at)}</div></td>
       <td><b>${esc(r.patient_name || '—')}</b><br><span class="cid">${esc(r.client_id || '')}</span></td><td class="vit">${rxLinesHtml(r)}</td>
       <td>${r.status === 'dispensed' ? money(r.total) : '—'}</td><td>${rxBadge(r, true)}</td><td><a class="lnk" data-phact="view|${esc(r.rx_id)}">View</a></td></tr>`).join('');
     document.getElementById('phDone').innerHTML = `<table class="data-table"><thead><tr><th>Rx</th><th>Client</th><th>Medicines</th><th>Amount</th><th>Dispensed by</th><th></th></tr></thead>
@@ -2271,7 +2362,21 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     document.getElementById('phMoves').innerHTML = `<table class="data-table"><thead><tr><th>When</th><th>Drug</th><th>What</th><th>Qty</th><th>Details</th><th>By</th></tr></thead>
       <tbody>${rows || '<tr class="empty-row"><td colspan="6">No stock movements yet.</td></tr>'}</tbody></table>`;
   }
-  const phRenderAll = () => { renderPhAlerts(); renderPhQueue(); renderPhStock(); renderPhDone(); renderPhMoves(); };
+  let phTab = 'rx';
+  function setPhTab(t) {
+    phTab = t;
+    document.getElementById('phPaneRx').style.display = t === 'rx' ? '' : 'none';
+    document.getElementById('phPaneStock').style.display = t === 'stock' ? '' : 'none';
+    document.querySelectorAll('.ph-tab').forEach(b => b.classList.toggle('on', b.dataset.phtab === t));
+  }
+  function renderPhTabs() {
+    const nRx = phRx.filter(r => ['pending', 'partial', 'query'].includes(r.status)).length;
+    const nSt = phStock.filter(it => stockState(it) !== 'ok').length;
+    const a = document.getElementById('phTabRx'), b = document.getElementById('phTabStock');
+    if (a) { a.textContent = nRx; a.style.display = nRx ? '' : 'none'; }
+    if (b) { b.textContent = nSt; b.style.display = nSt ? '' : 'none'; }
+  }
+  const phRenderAll = () => { renderPhAlerts(); renderPhQueue(); renderPhStock(); renderPhDone(); renderPhMoves(); renderPhTabs(); };
   const phOk = html => { document.getElementById('phMsg').innerHTML = `<div class="success">${html}</div>`; };
   const phErr = html => { document.getElementById('phMsg').innerHTML = `<div class="error-inline">${html}</div>`; };
   const phClose = () => { const f = document.getElementById('phForm'); f.style.display = 'none'; f.oninput = f.onchange = null; phSel = null; phMode = null; };
@@ -2281,6 +2386,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   function openPhForm(mode, id) {
     document.getElementById('phMsg').innerHTML = '';
     phMode = mode; phSel = id || null;
+    setPhTab(['dispense', 'view'].includes(mode) ? 'rx' : 'stock');
     if (mode === 'starter') return phStarter();
     if (mode === 'add' || mode === 'edit') return phDrugForm(mode, id);
     if (mode === 'receive') return phReceiveForm(id);
@@ -2315,18 +2421,23 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   async function phSaveDrug() {
     const edit = phMode === 'edit';
     const f = { name: val('d_name'), str: val('d_str'), form: val('d_form'), unit: val('d_unit'), cat: val('d_cat'), price: val('d_price'), re: val('d_reorder') };
-    const bad = { d_name: !f.name, d_form: !f.form, d_unit: !f.unit, d_price: !(f.price !== '' && Number(f.price) >= 0), d_reorder: !/^\d+$/.test(f.re) };
-    Object.entries(bad).forEach(([k, b]) => mark(k, b));
-    if (Object.values(bad).some(Boolean)) { phErr('Please fill the highlighted boxes. Price and reorder level cannot be negative.'); return; }
+    clearErrs(document.getElementById('phForm')); document.getElementById('phMsg').innerHTML = '';
+    const errs = [];
+    if (!f.name) errs.push(['d_name', 'Enter the drug name.']);
+    if (!f.form) errs.push(['d_form', 'Choose the form (tablet, syrup, injection…).']);
+    if (!f.unit) errs.push(['d_unit', 'Enter how it is sold, for example tablet, bottle or vial.']);
+    if (!(f.price !== '' && Number(f.price) >= 0)) errs.push(['d_price', 'Enter the price per unit. It cannot be negative.']);
+    if (!/^\d+$/.test(f.re)) errs.push(['d_reorder', 'Enter a whole number, 0 or more.']);
     let qty = 0;
     if (!edit) {
       qty = val('d_qty') === '' ? 0 : phInt(val('d_qty'));
-      if (!(qty >= 0)) { mark('d_qty', true); phErr('Quantity must be a whole number, zero or more.'); return; }
-      if (qty > 0 && !val('d_exp')) { mark('d_exp', true); phErr('Please enter the expiry date for the opening stock.'); return; }
-      if (val('d_exp') && val('d_exp') < today10()) { mark('d_exp', true); phErr('That expiry date has already passed.'); return; }
+      if (!(qty >= 0)) errs.push(['d_qty', 'Enter a whole number, 0 or more.']);
+      else if (qty > 0 && !val('d_exp')) errs.push(['d_exp', 'Enter the expiry date for the opening stock.']);
+      if (val('d_exp') && val('d_exp') < today10()) errs.push(['d_exp', 'That expiry date has already passed.']);
     }
     const probe = { drug_name: f.name, drug_strength: f.str, drug_form: f.form };
-    if (phStock.some(x => x.item_id !== phSel && normDrug(drugLabel(x)) === normDrug(drugLabel(probe)))) { phErr(`${esc(drugLabel(probe))} is already in the drug list.`); return; }
+    if (f.name && phStock.some(x => x.item_id !== phSel && normDrug(drugLabel(x)) === normDrug(drugLabel(probe)))) errs.push(['d_name', `${drugLabel(probe)} is already in the drug list.`]);
+    if (errs.length) { showErrs(errs); return; }
     const btn = document.getElementById('phSave'); btn.disabled = true;
     try {
       const now = new Date().toISOString();
@@ -2380,10 +2491,12 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   async function phSaveReceive() {
     const it = phStock.find(x => x.item_id === phSel); if (!it) return;
     const q = phInt(val('r_qty')), exp = val('r_exp');
-    mark('r_qty', !(q >= 1)); mark('r_exp', !exp || exp < today10());
-    if (!(q >= 1)) { phErr('Quantity must be a whole number of at least 1.'); return; }
-    if (!exp) { phErr('Please enter the expiry date.'); return; }
-    if (exp < today10()) { phErr('That batch has already expired, so it cannot be added to stock.'); return; }
+    clearErrs(document.getElementById('phForm')); document.getElementById('phMsg').innerHTML = '';
+    const errs = [];
+    if (!(q >= 1)) errs.push(['r_qty', 'Enter the quantity received as a whole number of 1 or more.']);
+    if (!exp) errs.push(['r_exp', 'Enter the expiry date of this batch.']);
+    else if (exp < today10()) errs.push(['r_exp', 'This batch has already expired, so it cannot be added to stock.']);
+    if (errs.length) { showErrs(errs); return; }
     const btn = document.getElementById('phSave'); btn.disabled = true;
     try {
       const now = new Date().toISOString(), had = Number(it.qty_on_hand) || 0;
@@ -2414,10 +2527,13 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   async function phSaveAdjust() {
     const it = phStock.find(x => x.item_id === phSel); if (!it) return;
     const nq = phInt(val('a_qty')), why = val('a_why'), note = val('a_note'), old = Number(it.qty_on_hand) || 0;
-    mark('a_qty', !(nq >= 0)); mark('a_why', !why);
-    if (!(nq >= 0)) { phErr('Enter the counted quantity as a whole number, zero or more.'); return; }
-    if (!why || (why === 'Other' && !note)) { phErr('Please choose a reason' + (why === 'Other' ? ' and add a note.' : '.')); return; }
-    if (nq === old) { phErr('The count matches the system, so there is nothing to adjust.'); return; }
+    clearErrs(document.getElementById('phForm')); document.getElementById('phMsg').innerHTML = '';
+    const errs = [];
+    if (!(nq >= 0)) errs.push(['a_qty', 'Enter the counted quantity as a whole number, 0 or more.']);
+    else if (nq === old) errs.push(['a_qty', 'This matches what the system already shows, so there is nothing to adjust.']);
+    if (!why) errs.push(['a_why', 'Choose the reason for the adjustment.']);
+    if (why === 'Other' && !note) errs.push(['a_note', 'Write a short note, because you chose "Other".']);
+    if (errs.length) { showErrs(errs); return; }
     const btn = document.getElementById('phSave'); btn.disabled = true;
     try {
       const now = new Date().toISOString();
@@ -2447,7 +2563,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       ${r.notes ? `<div class="vit" style="margin-top:8px"><b>Note from the prescriber:</b> ${esc(r.notes)}</div>` : ''}
       ${rxThreadHtml(r)}
       ${r.status === 'dispensed' ? `<div class="ph-total">Total ${money(r.total)}</div><div class="vit">${r.counselled ? 'Dosage and warnings explained to the client.' : ''}</div>` : ''}
-      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">${r.status === 'dispensed' ? '<button class="btn-sm" data-phprint>Print receipt</button><button class="btn-sm ghost" data-phpdf>Download PDF</button>' : ''}<button class="btn-sm ghost" data-phhist="${esc(r.patient_id)}">Clinical history</button><button class="btn-sm ghost" id="phCancel">Close</button></div><div id="phHist"></div></div>`);
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm ghost" data-phhist="${esc(r.patient_id)}">Clinical history</button><button class="btn-sm ghost" id="phCancel">Close</button></div><div id="phHist"></div></div>`);
     document.getElementById('phCancel').onclick = phClose;
   }
 
@@ -2455,9 +2571,9 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   function phDispenseForm(id) {
     const r = phRx.find(x => x.rx_id === id); if (!r || !canPharm) return;
     const lines = parseLines(r);
-    const stockOpts = sel => '<option value="">Choose from the drug list…</option>' + phStock.map(it => {
-      const q = Number(it.qty_on_hand) || 0;
-      return `<option value="${esc(it.item_id)}" ${sel && sel.item_id === it.item_id ? 'selected' : ''}>${esc(drugLabel(it))} — ${q} in stock${Number(it.unit_price) > 0 ? ' — ' + money(it.unit_price) : ''}</option>`;
+    const stockOpts = sel => '<option value="">Choose the drug you are giving…</option>' + phStock.filter(it => !['out', 'expired'].includes(stockState(it)) || (sel && sel.item_id === it.item_id)).map(it => {
+      const q = Number(it.qty_on_hand) || 0, st = stockState(it);
+      return `<option value="${esc(it.item_id)}" ${sel && sel.item_id === it.item_id ? 'selected' : ''}>${esc(drugLabel(it))} — ${st === 'expired' ? 'EXPIRED' : q <= 0 ? 'OUT OF STOCK' : q + ' in stock'}${Number(it.unit_price) > 0 ? ' — ' + money(it.unit_price) : ''}</option>`;
     }).join('');
     if (r.status === 'query') { phErr('This prescription is on hold until the doctor replies to your query.'); return; }
     const todo = lines.map((l, i) => ({ l, i })).filter(x => !x.l.s);
@@ -2473,7 +2589,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
         <div class="what"><b>${esc(l.n)}</b> — ${esc([l.d, l.f, l.u].filter(Boolean).join(', '))} · prescribed qty <b>${l.q}</b>${l.i ? ' · ' + esc(l.i) : ''}</div>
         ${rxAllergy(l.n, r.allergies) ? `<div class="rx-hint bad" style="margin-bottom:6px">⚠ This may conflict with the recorded allergy (${esc(rxAllergy(l.n, r.allergies))}). Check with the prescriber before giving it.</div>` : ''}
         <div class="grid3">
-          <div class="f"><label>Stock item</label><select id="px_sel_${i}">${stockOpts(matchStock(l.n, phStock))}</select></div>
+          <div class="f"><label>Drug being given <span class="req">*</span></label><select id="px_sel_${i}">${stockOpts(matchStock(l.n, phStock))}</select><div class="rx-hint">Only drugs in stock are listed. If it is not there, tick "Not dispensing" below and choose "Out of stock".</div></div>
           <div class="f"><label>Quantity to give</label><input id="px_qty_${i}" type="number" min="1" step="1" value="${l.q}"></div>
           <div class="f"><label>Amount</label><div class="amt" id="px_tot_${i}">${money(0)}</div></div>
         </div>
@@ -2530,14 +2646,19 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   async function phSaveDispense(todo) {
     const rd = pxRead(todo);
     const r = phRx.find(x => x.rx_id === phSel); if (!r) return;
+    clearErrs(document.getElementById('phForm')); document.getElementById('phMsg').innerHTML = '';
+    const errs = [];
     for (const x of rd) {
-      if (x.skip) { if (!x.why) { phErr(`Choose why you are not dispensing ${esc(x.l.n)}.`); return; } continue; }
-      if (!x.it) { phErr(`Choose the stock item for ${esc(x.l.n)}, or tick "Not dispensing".`); return; }
-      if (stockState(x.it) === 'expired') { phErr(`${esc(drugLabel(x.it))} is expired and cannot be dispensed.`); return; }
-      if (!(x.q >= 1)) { phErr(`Enter a whole number quantity for ${esc(x.l.n)}.`); return; }
-      if (!(Number(x.it.unit_price) > 0)) { phErr(`${esc(drugLabel(x.it))} has no price. Set its price with Edit first.`); return; }
+      if (x.skip) { if (!x.why) errs.push(['px_why_' + x.i, `Choose why you are not giving ${x.l.n}.`]); continue; }
+      if (!x.it) { errs.push(['px_sel_' + x.i, `Choose the drug you are giving for ${x.l.n}, or tick "Not dispensing this medicine".`]); continue; }
+      const have = Number(x.it.qty_on_hand) || 0;
+      if (stockState(x.it) === 'expired') errs.push(['px_sel_' + x.i, `${drugLabel(x.it)} is expired and cannot be given. Choose another or tick "Not dispensing".`]);
+      else if (!(x.q >= 1)) errs.push(['px_qty_' + x.i, 'Enter a whole number of 1 or more.']);
+      else if (x.q > have) errs.push(['px_qty_' + x.i, `Only ${have} in stock. Give ${have} or fewer.`]);
+      if (!(Number(x.it.unit_price) > 0)) errs.push(['px_sel_' + x.i, 'This drug has no price yet. Open the Drug stock tab, click Edit and set the price.']);
     }
-    if (rd.some(x => !x.skip) && !document.getElementById('px_couns').checked) { phErr('Please tick that the dose and warnings were explained to the client.'); return; }
+    if (rd.some(x => !x.skip) && !document.getElementById('px_couns').checked) errs.push(['px_couns', 'Tick this box before you can dispense: confirm you explained the dose and warnings to the client.']);
+    if (errs.length) { showErrs(errs); phErr(`${errs.length === 1 ? 'One thing needs' : errs.length + ' things need'} fixing. ${errs.length === 1 ? 'It is' : 'They are'} marked in red below.`); return; }
     const btn = document.getElementById('phSave'); btn.disabled = true; btn.textContent = 'Saving…';
     try {
       await phRefresh();   // use the latest quantities and the latest prescription
@@ -2579,19 +2700,19 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       lastPh = phRx.find(x => x.rx_id === r.rx_id);
       if (failed) phErr(`Stopped at ${esc(failed.x.l.n)}: ${esc(failed.e.message)}. The medicines before it were dispensed and recorded; the prescription is still open for the rest.`);
       else if (status === 'cancelled') phOk(`Prescription ${esc(r.rx_no)} closed as not dispensed.`);
-      else phOk(`Dispensed for ${esc(r.patient_name)}: ${money(total)}. Recorded as dispensed by ${esc(staffName())}.${billNote} <button class="btn-sm" data-phprint style="margin-left:8px">Print receipt</button> <button class="btn-sm ghost" data-phpdf>Download PDF</button>`);
+      else phOk(`Dispensed for ${esc(r.patient_name)}: ${money(total)}. Recorded as dispensed by ${esc(staffName())}.${billNote} The receipt is issued by Billing.`);
     } catch (err) { phErr(`Could not dispense: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Dispense and record'; }
   }
 
   async function phAutoRefresh() {
     if (!document.getElementById('phQueue')) { clearInterval(phTimer); return; }
-    try { await phRefresh(); renderPhAlerts(); renderPhQueue(); renderPhStock(); renderPhDone(); renderPhMoves(); } catch (e) { /* try again next time */ }
+    try { await phRefresh(); phRenderAll(); } catch (e) { /* try again next time */ }
   }
   // ---- Query the prescriber ----
   async function phSendQuery() {
     const r = phRx.find(x => x.rx_id === phSel); if (!r) return;
-    const text = val('px_query'); mark('px_query', !text);
-    if (!text) { phErr('Write your question or concern for the doctor first.'); return; }
+    const text = val('px_query'); clearErrs(document.getElementById('phForm'));
+    if (!text) { showErrs([['px_query', 'Write your question or concern for the doctor before sending.']]); return; }
     const btn = document.getElementById('phSendQuery'); btn.disabled = true;
     try {
       const now = new Date().toISOString(), thread = rxThread(r);
@@ -2757,6 +2878,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       liveEl.innerHTML = phShellHtml();
       if (!liveEl.dataset.boundP) {
         liveEl.addEventListener('click', e => {
+          const tb = e.target.closest('[data-phtab]'); if (tb) { setPhTab(tb.dataset.phtab); return; }
           const a = e.target.closest('[data-phact]'); if (a) { e.preventDefault(); const [m, id] = a.dataset.phact.split('|'); openPhForm(m, id); return; }
           const hb = e.target.closest('[data-phhist]'); if (hb) { e.preventDefault(); phHistory(hb.dataset.phhist); return; }
           const lb = e.target.closest('[data-phlab]'); if (lb) { e.preventDefault(); phLabResult(lb.dataset.phlab); }
@@ -2773,6 +2895,21 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
     }
   }
+
+  // Every panel that opens inside a department gets a "Back" button at the top, so nobody has to go back to the department list.
+  const BACK_MAP = { phForm: 'phCancel', lbForm: 'lbCancel', clWork: 'clClose', clRxReply: 'rqClose', clResult: 'clResultClose', fdProfileCard: 'fdProfileClose', fdFormCard: 'fdCancel' };
+  function addBackBars() {
+    const name = (document.getElementById('detailTitle')?.textContent || '').replace(/ dashboard$/, '') || 'the list';
+    Object.entries(BACK_MAP).forEach(([pid, cid]) => {
+      const p = document.getElementById(pid); if (!p || p.style.display === 'none') return;
+      if (p.firstElementChild && p.firstElementChild.classList.contains('backbar')) return;
+      if (!document.getElementById(cid)) return;
+      const b = document.createElement('div'); b.className = 'backbar'; b.innerHTML = `<button class="back-link" type="button">&larr; Back to ${esc(name)}</button>`;
+      b.firstChild.onclick = () => { document.getElementById(cid)?.click(); window.scrollTo({ top: 0, behavior: 'smooth' }); };
+      p.insertBefore(b, p.firstChild);
+    });
+  }
+  new MutationObserver(addBackBars).observe(document.getElementById('liveContent'), { childList: true, subtree: true });
 
   function openDeptDetail(dept, badgeClass, badgeText) {
     document.getElementById('gridView').style.display = 'none';
