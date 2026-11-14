@@ -173,6 +173,12 @@
   .st.done { background:var(--card-tint); color:var(--forest); }
   .st.wait { background:#EEF1EC; color:#555; }
   .st.urgent { background:#FDECEA; color:var(--error); }
+  .st.f-normal { background:var(--card-tint); color:var(--forest); }
+  .st.f-low, .st.f-high, .st.f-abnormal { background:#FFF3CD; color:#6B5300; }
+  .st.f-critical { background:var(--error); color:#fff; }
+  .pt input, .pt select { width:100%; padding:8px 10px; border:1.5px solid #D5DDD3; border-radius:8px; font:inherit; font-size:13.5px; background:#fff; }
+  .pt input.bad, .pt select.bad { border-color:var(--error); }
+  details summary { cursor:pointer; font-size:13px; color:var(--text-grey); }
   .result-card { border:1.5px solid var(--mid-green); }
   @media (max-width:760px){ .chk-grid{ grid-template-columns:1fr 1fr; } }
   @media (max-width:480px){ .chk-grid{ grid-template-columns:1fr; } }
@@ -790,9 +796,9 @@
   const RESULTS_TABLE = 'vidacare-lab-results';
   const LAB_TESTS = [
     'Malaria parasite (RDT / film)', 'Full blood count', 'Haemoglobin', 'Blood group & Rh', 'Sickling test', 'Genotype',
-    'Blood glucose (random)', 'Fasting blood glucose', 'Urinalysis', 'Urine pregnancy test', 'HIV screening',
-    'Hepatitis B (HBsAg)', 'VDRL / syphilis', 'Widal test', 'Stool microscopy', 'Urine culture',
-    'Liver function', 'Kidney function (urea / creatinine)'
+    'Packed cell volume (PCV)', 'Blood glucose (random)', 'Fasting blood glucose', 'Oral glucose tolerance test (OGTT)',
+    'Urinalysis', 'Urine pregnancy test', 'Blood pregnancy test (serum β-hCG)', 'HIV screening', 'Hepatitis B (HBsAg)', 'VDRL / syphilis', 'Widal test',
+    'Stool microscopy', 'Urine culture'
   ];
   let canClin = false;
   let clLab = [];
@@ -815,7 +821,7 @@
     clLab.sort((a, b) => (b.requested_at || '').localeCompare(a.requested_at || ''));
   }
 
-  const labsInMine = () => clLab.filter(r => r.status === 'released' && r.requested_by_username === staffUser() && !r.seen_at);
+  const labsInMine = () => clLab.filter(r => (r.status === 'released' || r.status === 'rejected') && r.requested_by_username === staffUser() && !r.seen_at);
 
   function clinicShellHtml() {
     return `
@@ -838,9 +844,16 @@
     const el = document.getElementById('clLabsIn');
     const mine = labsInMine();
     if (!mine.length) { el.innerHTML = ''; return; }
+    const nRel = mine.filter(r => r.status === 'released').length, nRej = mine.length - nRel;
+    const parts = [];
+    if (nRel) parts.push(`${nRel} result${nRel > 1 ? 's have' : ' has'} been released`);
+    if (nRej) parts.push(`${nRej} sample${nRej > 1 ? 's were' : ' was'} rejected`);
     el.innerHTML = `<div class="labs-in"><div class="labs-in-title">Labs in!</div>
-      <div style="font-size:13px;margin-bottom:8px">${mine.length} result${mine.length > 1 ? 's have' : ' has'} been released for your clients.</div>
-      ${mine.map(r => `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · released ${fmtDate(r.released_at)}</span>
+      <div style="font-size:13px;margin-bottom:8px">${parts.join(' and ')} for your clients.</div>
+      ${mine.map(r => r.status === 'rejected'
+        ? `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · <span class="st urgent">Sample rejected</span> ${esc(r.reject_reason || '')}</span>
+      <button class="btn-sm" data-result="${esc(r.request_id)}">See details</button></div>`
+        : `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · ${r.amended_at ? '<b>corrected</b> ' + fmtDate(r.amended_at) : 'released ' + fmtDate(r.released_at)}</span>
       <button class="btn-sm" data-result="${esc(r.request_id)}">View result</button></div>`).join('')}</div>`;
   }
 
@@ -867,6 +880,8 @@
 
   function labStatus(r) {
     if (r.status === 'released') return `<span class="st done">Results in</span> <a class="lnk" data-result="${esc(r.request_id)}">View result</a>`;
+    if (r.status === 'rejected') return `<span class="st urgent">Sample rejected</span> <a class="lnk" data-result="${esc(r.request_id)}">Details</a>`;
+    if (r.status === 'received') return '<span class="st wait">Sample received</span>';
     if (r.status === 'in-progress') return '<span class="st wait">In progress</span>';
     return '<span class="st wait">Requested</span>';
   }
@@ -1060,20 +1075,27 @@
     box.innerHTML = '<div class="loading-inline">Loading result…</div>';
     try {
       const client = await getClient();
-      const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
-      const x = res.Item ? unmarshal(res.Item) : null;
       const row = (k, v) => v ? `<div><span>${k}</span>${esc(v)}</div>` : '';
-      box.innerHTML = `<div class="data-card result-card">
-        <div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span></div><button class="btn-sm ghost" id="clResultClose">Close</button></div>
-        ${x ? `<div class="kv">
-          ${row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}
-          ${row('Reference range', x.reference_range)}${row('Flag', x.flag)}
-          ${row('Comment', x.comment)}${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
+      const head = `<div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span></div><button class="btn-sm ghost" id="clResultClose">Close</button></div>`;
+      if (r.status === 'rejected') {
+        box.innerHTML = `<div class="data-card result-card">${head}<div class="notice"><b>Sample rejected</b> by ${esc(r.rejected_by || 'the lab')} on ${fmtDate(r.rejected_at)}.<br>Reason: ${esc(r.reject_reason || '—')}${r.reject_note ? ' — ' + esc(r.reject_note) : ''}<br>Please request the test again so a new sample can be taken.</div></div>`;
+      } else {
+        const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
+        const x = res.Item ? unmarshal(res.Item) : null;
+        const plist = parseParams(x);
+        box.innerHTML = `<div class="data-card result-card">${head}
+        ${x ? `${plist.length ? paramsTableHtml(plist) : ''}<div class="kv">
+          ${plist.length ? '' : row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}
+          ${plist.length ? '' : row('Reference range', x.reference_range)}${plist.length ? '' : row('Flag', x.flag)}
+          ${row('Comment', x.comment)}${row('Sample', [r.sample_id, r.sample_type].filter(Boolean).join(' · '))}
+          ${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
           ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}
+          ${r.amended_at ? row('Corrected', `${fmtDate(r.amended_at)} by ${r.amended_by || ''} — ${r.amend_reason || ''}`) : ''}
         </div>` : '<div class="notice">The result record could not be found. Ask the lab to check this request.</div>'}</div>`;
+      }
       document.getElementById('clResultClose').onclick = () => { box.innerHTML = ''; };
       box.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      if (canClin && r.status === 'released' && !r.seen_at && r.requested_by_username === staffUser()) {
+      if (canClin && (r.status === 'released' || r.status === 'rejected') && !r.seen_at && r.requested_by_username === staffUser()) {
         const now = new Date().toISOString();
         await client.send(new UpdateItemCommand({
           TableName: LAB_TABLE, Key: { request_id: { S: r.request_id } },
@@ -1109,24 +1131,125 @@
 
   // ================= LAB =================
   let canLab = false;
-  let labSel = null;
-  const POS_NEG = ['Negative', 'Positive', 'Invalid'];
-  const REACT = ['Non-reactive', 'Reactive', 'Invalid'];
-  const LAB_PRESETS = {
-    'Malaria parasite (RDT / film)': { kind: 'qual', options: POS_NEG },
-    'Sickling test': { kind: 'qual', options: ['Negative', 'Positive'] },
-    'Urine pregnancy test': { kind: 'qual', options: POS_NEG },
-    'HIV screening': { kind: 'qual', options: REACT },
-    'Hepatitis B (HBsAg)': { kind: 'qual', options: REACT },
-    'VDRL / syphilis': { kind: 'qual', options: REACT },
-    'Blood group & Rh': { kind: 'qual', options: ['A Positive', 'A Negative', 'B Positive', 'B Negative', 'AB Positive', 'AB Negative', 'O Positive', 'O Negative'] },
-    'Genotype': { kind: 'qual', options: ['AA', 'AS', 'SS', 'AC', 'SC', 'CC'] },
-    'Haemoglobin': { kind: 'num', unit: 'g/dL', ref: '11.0 - 16.0' },
-    'Blood glucose (random)': { kind: 'num', unit: 'mmol/L', ref: '3.9 - 7.8' },
-    'Fasting blood glucose': { kind: 'num', unit: 'mmol/L', ref: '3.9 - 5.6' }
+  let labSel = null;     // request id open in the form
+  let labMode = null;    // receive | reject | result | amend
+
+  // ---- Test panels: each test is a list of parameters. Ranges are defaults; confirm with the lab SOP. ----
+  const PN = ['Negative', 'Positive', 'Invalid'];
+  const RN = ['Non-reactive', 'Reactive', 'Invalid'];
+  const DIP = ['Negative', 'Trace', '+', '++', '+++'];
+  const TITRE = ['Non-reactive', '1:20', '1:40', '1:80', '1:160', '1:320', '> 1:320'];
+  const SAMPLE_TYPES = ['Blood (EDTA)', 'Blood (plain)', 'Blood (fluoride)', 'Urine', 'Stool', 'Swab', 'Other'];
+  const REJECT_REASONS = ['Haemolysed', 'Insufficient volume', 'Wrong container', 'Unlabelled or mislabelled', 'Clotted', 'Leaked or contaminated', 'Other'];
+  const num = (k, n, unit, ref, x = {}) => ({ k, n, t: 'num', unit, ref, ...x });
+  const sel = (k, n, options, normal, x = {}) => ({ k, n, t: 'sel', options, normal, ...x });
+  const txt = (k, n, x = {}) => ({ k, n, t: 'txt', ...x });
+  const PCV_REF = { M: [40, 52], F: [33, 46] };
+
+  const PANELS = {
+    'Malaria parasite (RDT / film)': { sample: 'Blood (EDTA)', p: [
+      sel('res', 'Malaria parasite', PN, ['Negative'], { req: 1 }),
+      sel('method', 'Method', ['RDT', 'Blood film (thick / thin)']),
+      sel('sp', 'Species', ['P. falciparum', 'P. malariae', 'P. ovale', 'P. vivax', 'Mixed infection']),
+      num('dens', 'Parasite density', '/µL', null),
+      sel('grade', 'Density grading', ['+', '++', '+++', '++++'])
+    ] },
+    'Full blood count': { sample: 'Blood (EDTA)', p: [
+      num('wbc', 'WBC', 'x10⁹/L', { any: [4, 11] }, { req: 1, clo: 2, chi: 30 }),
+      num('rbc', 'RBC', 'x10¹²/L', { M: [4.5, 5.9], F: [3.8, 5.2] }),
+      num('hb', 'Haemoglobin', 'g/dL', { M: [13, 17], F: [11, 16] }, { req: 1, clo: 7 }),
+      num('hct', 'HCT / PCV', '%', PCV_REF),
+      num('mcv', 'MCV', 'fL', { any: [80, 100] }),
+      num('mch', 'MCH', 'pg', { any: [27, 32] }),
+      num('mchc', 'MCHC', 'g/dL', { any: [32, 36] }),
+      num('plt', 'Platelets', 'x10⁹/L', { any: [150, 400] }, { req: 1, clo: 50, chi: 1000 }),
+      num('neut', 'Neutrophils', '%', { any: [40, 75] }),
+      num('lymph', 'Lymphocytes', '%', { any: [20, 45] }),
+      num('mono', 'Monocytes', '%', { any: [2, 10] }),
+      num('eos', 'Eosinophils', '%', { any: [1, 6] }),
+      num('baso', 'Basophils', '%', { any: [0, 1] })
+    ] },
+    'Haemoglobin': { sample: 'Blood (EDTA)', p: [num('hb', 'Haemoglobin', 'g/dL', { M: [13, 17], F: [11, 16] }, { req: 1, clo: 7 })] },
+    'Packed cell volume (PCV)': { sample: 'Blood (EDTA)', p: [num('pcv', 'Packed cell volume', '%', PCV_REF, { req: 1, clo: 21 })] },
+    'Blood group & Rh': { sample: 'Blood (EDTA)', p: [sel('res', 'Blood group & Rh', ['A Positive', 'A Negative', 'B Positive', 'B Negative', 'AB Positive', 'AB Negative', 'O Positive', 'O Negative'], null, { req: 1 })] },
+    'Sickling test': { sample: 'Blood (EDTA)', p: [sel('res', 'Sickling test', ['Negative', 'Positive'], ['Negative'], { req: 1 })] },
+    'Genotype': { sample: 'Blood (EDTA)', p: [sel('res', 'Genotype', ['AA', 'AS', 'SS', 'AC', 'SC', 'CC'], null, { req: 1 })] },
+    'Blood glucose (random)': { sample: 'Blood (fluoride)', p: [num('glu', 'Random blood glucose', 'mmol/L', { any: [3.9, 7.8] }, { req: 1, clo: 2.5, chi: 25 })] },
+    'Fasting blood glucose': { sample: 'Blood (fluoride)', p: [num('glu', 'Fasting blood glucose', 'mmol/L', { any: [3.9, 5.6] }, { req: 1, clo: 2.5, chi: 25 })] },
+    'Oral glucose tolerance test (OGTT)': { sample: 'Blood (fluoride)', p: [
+      num('f', 'Fasting glucose', 'mmol/L', { any: [3.9, 5.0] }, { req: 1, clo: 2.5, rt: '3.9 - 5.0' }),
+      num('h1', '1-hour glucose', 'mmol/L', { any: [0, 9.9] }, { req: 1, rt: '< 10.0' }),
+      num('h2', '2-hour glucose', 'mmol/L', { any: [0, 8.4] }, { req: 1, rt: '< 8.5' })
+    ] },
+    'Urinalysis': { sample: 'Urine', p: [
+      sel('app', 'Appearance', ['Clear', 'Slightly turbid', 'Turbid', 'Bloody'], ['Clear']),
+      sel('col', 'Colour', ['Pale yellow', 'Yellow', 'Dark yellow', 'Amber', 'Red / brown'], ['Pale yellow', 'Yellow']),
+      sel('prot', 'Protein', DIP, ['Negative'], { req: 1 }),
+      sel('glu', 'Glucose', DIP, ['Negative'], { req: 1 }),
+      sel('ket', 'Ketones', DIP, ['Negative'], { req: 1 }),
+      sel('bld', 'Blood', DIP, ['Negative'], { req: 1 }),
+      sel('leu', 'Leucocytes', DIP, ['Negative'], { req: 1 }),
+      sel('nit', 'Nitrite', ['Negative', 'Positive'], ['Negative'], { req: 1 }),
+      num('ph', 'pH', '', { any: [5, 8] }),
+      num('sg', 'Specific gravity', '', { any: [1.005, 1.03] }),
+      txt('pus', 'Pus cells (/HPF)'), txt('rbcs', 'Red cells (/HPF)'), txt('epi', 'Epithelial cells'),
+      txt('cast', 'Casts / crystals'), txt('bact', 'Bacteria / yeast')
+    ] },
+    'Urine culture': { sample: 'Urine', p: [
+      sel('growth', 'Growth', ['No growth', 'Significant growth', 'Mixed growth / contaminated'], ['No growth'], { req: 1 }),
+      txt('org', 'Organism isolated'), txt('count', 'Colony count (CFU/mL)'), txt('sens', 'Sensitivity / remarks')
+    ] },
+    'Urine pregnancy test': { sample: 'Urine', p: [sel('res', 'Urine pregnancy test', PN, null, { req: 1 })] },
+    'Blood pregnancy test (serum β-hCG)': { sample: 'Blood (plain)', p: [
+      sel('res', 'Serum β-hCG (pregnancy)', PN, null, { req: 1 }),
+      num('q', 'β-hCG level (if measured)', 'mIU/mL', null)
+    ] },
+    'HIV screening': { sample: 'Blood (plain)', p: [sel('res', 'HIV screening', RN, ['Non-reactive'], { req: 1 })] },
+    'Hepatitis B (HBsAg)': { sample: 'Blood (plain)', p: [sel('res', 'Hepatitis B surface antigen', RN, ['Non-reactive'], { req: 1 })] },
+    'VDRL / syphilis': { sample: 'Blood (plain)', p: [sel('res', 'VDRL / syphilis', RN, ['Non-reactive'], { req: 1 })] },
+    'Widal test': { sample: 'Blood (plain)', p: [
+      sel('o', 'S. typhi O', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { req: 1 }),
+      sel('h', 'S. typhi H', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { req: 1 }),
+      sel('ah', 'S. paratyphi AH', TITRE, ['Non-reactive', '1:20', '1:40', '1:80']),
+      sel('bh', 'S. paratyphi BH', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'])
+    ] },
+    'Stool microscopy': { sample: 'Stool', p: [
+      sel('cons', 'Consistency', ['Formed', 'Soft', 'Loose', 'Watery']),
+      txt('mac', 'Macroscopy (colour, mucus, blood)'),
+      sel('par', 'Ova / cysts / parasites', ['None seen', 'Seen'], ['None seen'], { req: 1 }),
+      txt('org', 'Organism(s) seen'), txt('pus', 'Pus cells'), txt('rbc', 'Red cells')
+    ] }
   };
-  const presetFor = t => LAB_PRESETS[t] || { kind: 'text' };
-  const FLAGS = [['normal', 'Normal'], ['low', 'Low'], ['high', 'High'], ['abnormal', 'Abnormal'], ['critical', 'Critical']];
+  const panelFor = t => PANELS[t] || { sample: 'Other', p: [txt('res', 'Result', { req: 1 })] };
+
+  const sexKey = s => /^m/i.test(s || '') ? 'M' : 'F';
+  const refOf = (p, sex) => p.ref ? (p.ref[sexKey(sex)] || p.ref.any) : null;
+  const refText = (p, sex) => {
+    if (p.rt) return p.rt;
+    if (p.t === 'num') { const r = refOf(p, sex); return r ? r.join(' - ') : ''; }
+    if (p.t === 'sel' && p.normal) return p.normal.length > 2 ? p.normal[0] + ' - ' + p.normal[p.normal.length - 1] : p.normal.join(' / ');
+    return '';
+  };
+  function flagOf(p, v, sex) {
+    if (v === '' || v == null) return '';
+    if (p.t === 'num') {
+      const n = parseFloat(v); if (isNaN(n)) return '';
+      if ((p.clo != null && n < p.clo) || (p.chi != null && n > p.chi)) return 'critical';
+      const r = refOf(p, sex); if (!r) return '';
+      return n < r[0] ? 'low' : n > r[1] ? 'high' : 'normal';
+    }
+    if (p.t === 'sel' && p.normal) return p.normal.includes(v) ? 'normal' : 'abnormal';
+    return '';
+  }
+  const SEV = { critical: 4, high: 3, low: 3, abnormal: 2, normal: 1, '': 0 };
+  const flagBadge = f => f ? `<span class="st f-${f}">${f === 'normal' ? 'Normal' : f.charAt(0).toUpperCase() + f.slice(1)}</span>` : '';
+  function paramsTableHtml(list) {
+    return `<table class="data-table"><thead><tr><th>Parameter</th><th>Result</th><th>Reference</th><th>Flag</th></tr></thead><tbody>` +
+      list.map(x => `<tr><td>${esc(x.n)}</td><td><strong>${esc(x.v)}</strong> ${esc(x.u || '')}</td><td>${esc(x.r || '')}</td><td>${flagBadge(x.f)}</td></tr>`).join('') + '</tbody></table>';
+  }
+  function parseParams(x) { try { return JSON.parse((x && x.params_json) || '[]'); } catch (e) { return []; } }
+  const toItem = o => g(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, S(v)])));
+  const makeSampleId = r => 'LAB-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + String(r.request_id).replace(/-/g, '').slice(0, 6).toUpperCase();
 
   function labShellHtml() {
     return `
@@ -1134,118 +1257,215 @@
       <div id="lbMsg"></div>
       <div class="data-card" id="lbForm" style="display:none;"></div>
       <div class="data-card"><h4>Waiting for results</h4><div class="recent-scroll" id="lbQueue" style="max-height:48vh"></div></div>
-      <div class="data-card"><h4>Released to clinicians</h4><div class="recent-scroll" id="lbDone"></div></div>
+      <div class="data-card"><h4>Released and rejected</h4><div class="recent-scroll" id="lbDone"></div></div>
     </div>`;
   }
 
-  const pending = () => clLab.filter(r => r.status !== 'released')
+  const pending = () => clLab.filter(r => !['released', 'rejected'].includes(r.status))
     .sort((a, b) => (a.urgency === 'urgent' ? 0 : 1) - (b.urgency === 'urgent' ? 0 : 1) || (a.requested_at || '').localeCompare(b.requested_at || ''));
 
+  function labStatusBadge(r) {
+    if (r.status === 'in-progress') return `<span class="st wait">Draft saved</span><div class="vit">${esc(r.sample_id || '')}</div>`;
+    if (r.status === 'received') return `<span class="st wait">Sample received</span><div class="vit">${esc(r.sample_id || '')} · ${esc(r.sample_type || '')}</div>`;
+    return '<span class="st wait">Requested</span>';
+  }
+
   function renderLabQueue() {
-    const rows = pending().map(r => `<tr>
+    const rows = pending().map(r => {
+      const got = r.status === 'received' || r.status === 'in-progress';
+      return `<tr>
       <td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '—')}</span>
         <span style="color:#777;font-size:12px"> ${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''}</span></td>
       <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}</td>
-      <td>${r.status === 'in-progress' ? '<span class="st wait">Draft saved</span>' : '<span class="st wait">Requested</span>'}</td>
+      <td>${labStatusBadge(r)}</td>
       <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td>
-      <td>${canLab ? `<button class="btn-sm" data-lb="${esc(r.request_id)}">Enter result</button>` : ''}</td></tr>`).join('');
+      <td style="white-space:nowrap">${canLab ? `${got ? `<button class="btn-sm" data-lbact="result|${esc(r.request_id)}">Enter result</button>` : `<button class="btn-sm" data-lbact="receive|${esc(r.request_id)}">Receive sample</button>`}
+        <button class="btn-sm ghost" data-lbact="reject|${esc(r.request_id)}">Reject</button>` : ''}</td></tr>`;
+    }).join('');
     document.getElementById('lbQueue').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Status</th><th>Requested by</th><th></th></tr></thead>
       <tbody>${rows || '<tr class="empty-row"><td colspan="5">No tests are waiting. New requests from clinicians appear here.</td></tr>'}</tbody></table>`;
-    const done = clLab.filter(r => r.status === 'released').sort((a, b) => (b.released_at || '').localeCompare(a.released_at || '')).slice(0, 30)
-      .map(r => `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
-        <td>${esc(r.test)}</td><td>${esc(r.released_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.released_at)}</span></td>
-        <td><a class="lnk" data-lbview="${esc(r.request_id)}">View</a></td></tr>`).join('');
-    document.getElementById('lbDone').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Released by</th><th></th></tr></thead>
-      <tbody>${done || '<tr class="empty-row"><td colspan="4">Nothing released yet.</td></tr>'}</tbody></table>`;
+    const done = clLab.filter(r => ['released', 'rejected'].includes(r.status))
+      .sort((a, b) => (b.released_at || b.rejected_at || '').localeCompare(a.released_at || a.rejected_at || '')).slice(0, 30)
+      .map(r => r.status === 'released'
+        ? `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
+        <td>${esc(r.test)}</td><td><span class="st done">Released</span>${r.amended_at ? ' <span class="st wait">corrected</span>' : ''}<div class="vit">${esc(r.sample_id || '')}</div></td>
+        <td>${esc(r.released_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.released_at)}</span></td>
+        <td style="white-space:nowrap"><a class="lnk" data-lbview="${esc(r.request_id)}">View</a>${canLab ? ` · <a class="lnk" data-lbact="amend|${esc(r.request_id)}">Correct</a>` : ''}</td></tr>`
+        : `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
+        <td>${esc(r.test)}</td><td><span class="st urgent">Rejected</span><div class="vit">${esc(r.reject_reason || '')}${r.reject_note ? ' — ' + esc(r.reject_note) : ''}</div></td>
+        <td>${esc(r.rejected_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.rejected_at)}</span></td><td></td></tr>`).join('');
+    document.getElementById('lbDone').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Outcome</th><th>By</th><th></th></tr></thead>
+      <tbody>${done || '<tr class="empty-row"><td colspan="5">Nothing released yet.</td></tr>'}</tbody></table>`;
   }
 
-  async function fetchResult(r) {
+  async function fetchResult(r, recordId) {
     const client = await getClient();
-    const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
+    const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: recordId || r.request_id } } }));
     return res.Item ? unmarshal(res.Item) : null;
   }
 
-  async function openLabForm(requestId) {
+  function labBanner(r) {
+    return `<div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span>
+      <div style="font-size:12.5px;color:#555">${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''} · requested by ${esc(r.requested_by || '—')} at ${fmtDate(r.requested_at)}${r.urgency === 'urgent' ? ' · <b>URGENT</b>' : ''}${r.clinical_notes ? ' · Notes: ' + esc(r.clinical_notes) : ''}${r.sample_id ? ` · Sample <b>${esc(r.sample_id)}</b> (${esc(r.sample_type || '')})` : ''}</div></div>
+      <button class="btn-sm ghost" id="lbCancel">Close</button></div>`;
+  }
+  const stampLine = () => `<div class="stamp">Recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}).</div>`;
+
+  async function openLabForm(requestId, mode) {
     const r = clLab.find(x => x.request_id === requestId);
     if (!r || !canLab) return;
-    labSel = requestId;
+    labSel = requestId; labMode = mode;
     document.getElementById('lbMsg').innerHTML = '';
-    const pre = presetFor(r.test);
-    let x = null;
-    if (r.status === 'in-progress') { try { x = await fetchResult(r); } catch (e) { x = null; } }
-    x = x || {};
     const card = document.getElementById('lbForm');
-    let fields = '';
-    if (pre.kind === 'qual') {
-      fields = `<div class="grid2"><div class="f"><label>Result <span class="req">*</span></label><select id="lb_value">${opt(pre.options, 'Select result')}</select></div>
-        <div class="f"><label>Flag</label><select id="lb_flag">${opt(FLAGS, 'Select')}</select></div></div>`;
-    } else if (pre.kind === 'num') {
-      fields = `<div class="grid4"><div class="f"><label>Result <span class="req">*</span></label><input id="lb_value" type="number" step="any"></div>
-        <div class="f"><label>Unit</label><input id="lb_unit" value="${esc(pre.unit)}"></div>
-        <div class="f"><label>Reference range</label><input id="lb_ref" value="${esc(pre.ref)}"></div>
-        <div class="f"><label>Flag</label><select id="lb_flag">${opt(FLAGS, 'Select')}</select></div></div>`;
+    const panel = panelFor(r.test);
+    let body = '';
+    if (mode === 'receive') {
+      body = `<div class="fd-form"><div class="grid2"><div class="f"><label>Sample type <span class="req">*</span></label><select id="lb_stype">${opt(SAMPLE_TYPES, 'Select')}</select></div>
+        <div class="f"><label>Sample ID</label><input id="lb_sid" value="${esc(r.sample_id || makeSampleId(r))}"></div></div>
+        ${stampLine()}<div style="margin-top:14px"><button class="btn-sm" id="lbSaveRecv">Confirm sample received</button></div></div>`;
+    } else if (mode === 'reject') {
+      body = `<div class="fd-form"><div class="grid2"><div class="f"><label>Reason <span class="req">*</span></label><select id="lb_reason">${opt(REJECT_REASONS, 'Select')}</select></div>
+        <div class="f"><label>Note to the clinician</label><input id="lb_note" placeholder="Optional"></div></div>
+        ${stampLine()}<div style="margin-top:14px"><button class="btn-sm" id="lbSaveRej">Reject sample</button></div></div>`;
     } else {
-      fields = `<div class="f"><label>Result <span class="req">*</span> <span class="unit">type each finding on its own line</span></label><textarea id="lb_text" rows="6"></textarea></div>
-        <div class="grid2" style="margin-top:12px"><div class="f"><label>Reference range</label><input id="lb_ref"></div>
-        <div class="f"><label>Flag</label><select id="lb_flag">${opt(FLAGS, 'Select')}</select></div></div>`;
-    }
-    card.innerHTML = `
-      <div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span>
-        <div style="font-size:12.5px;color:#555">${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''} · requested by ${esc(r.requested_by || '—')} at ${fmtDate(r.requested_at)}${r.urgency === 'urgent' ? ' · <b>URGENT</b>' : ''}${r.clinical_notes ? ' · Notes: ' + esc(r.clinical_notes) : ''}</div></div>
-        <button class="btn-sm ghost" id="lbCancel">Close</button></div>
-      <div class="fd-form">${fields}
+      let x = null;
+      if (mode === 'amend' || r.status === 'in-progress') { try { x = await fetchResult(r); } catch (e) { x = null; } }
+      const rows = panel.p.map((p, i) => {
+        const inp = p.t === 'sel' ? `<select id="lp_${i}">${opt(p.options, '—')}</select>` : `<input id="lp_${i}" type="${p.t === 'num' ? 'number' : 'text'}"${p.t === 'num' ? ' step="any"' : ''}>`;
+        return `<tr><td>${esc(p.n)}${p.req ? ' <span class="req">*</span>' : ''}</td><td>${inp}</td><td>${esc(p.unit || '')}</td><td>${esc(refText(p, r.sex))}</td><td id="lf_${i}"></td></tr>`;
+      }).join('');
+      body = `<div class="fd-form">
+        ${mode === 'amend' ? `<div class="notice">You are correcting a released result. The old values are kept in the history and the clinician will be told it was corrected.</div>
+          <div class="f" style="margin-bottom:12px"><label>Reason for correction <span class="req">*</span></label><input id="lb_areason" placeholder="e.g. transcription error"></div>` : ''}
+        <table class="data-table pt"><thead><tr><th>Parameter</th><th style="width:34%">Result</th><th>Unit</th><th>Reference</th><th>Flag</th></tr></thead><tbody>${rows}</tbody></table>
         <div class="f" style="margin-top:12px"><label>Comment for the clinician</label><input id="lb_comment" placeholder="Optional"></div>
-        <div class="stamp">Recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}). The clinician sees this result only after you release it.</div>
-        <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
-          <button class="btn-sm ghost" id="lbDraft">Save draft</button>
-          <button class="btn-sm" id="lbRelease">Release to clinician</button></div>
-      </div>`;
-    card.style.display = 'block';
-    const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined) el.value = v; };
-    set('lb_value', x.result_value); set('lb_unit', x.unit || pre.unit); set('lb_ref', x.reference_range || pre.ref);
-    set('lb_text', x.result_text); set('lb_flag', x.flag); set('lb_comment', x.comment);
-    if (pre.kind === 'qual') document.getElementById('lb_value').addEventListener('change', e => {
-      const v = e.target.value; document.getElementById('lb_flag').value = !v ? '' : (/^(positive|reactive)$/i.test(v) || v === 'Invalid') ? 'abnormal' : 'normal';
-    });
+        ${stampLine()}<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          ${mode === 'amend' ? '<button class="btn-sm" id="lbRelease">Save correction</button>'
+            : '<button class="btn-sm ghost" id="lbDraft">Save draft</button><button class="btn-sm" id="lbRelease">Release to clinician</button>'}</div></div>`;
+      card.innerHTML = labBanner(r) + body;
+      card.style.display = 'block';
+      const old = x ? parseParams(x) : [];
+      const upd = i => { const p = panel.p[i]; const f = flagOf(p, val('lp_' + i), r.sex); document.getElementById('lf_' + i).innerHTML = flagBadge(f); };
+      panel.p.forEach((p, i) => {
+        const el = document.getElementById('lp_' + i);
+        const o = old.find(q => q.k === p.k); if (o) el.value = o.v;
+        el.addEventListener('input', () => upd(i)); el.addEventListener('change', () => upd(i)); upd(i);
+      });
+      if (x && x.comment) document.getElementById('lb_comment').value = x.comment;
+      document.getElementById('lbRelease').onclick = () => saveLabResult(true);
+      const d = document.getElementById('lbDraft'); if (d) d.onclick = () => saveLabResult(false);
+    }
+    if (mode === 'receive' || mode === 'reject') { card.innerHTML = labBanner(r) + body; card.style.display = 'block'; }
+    if (mode === 'receive') {
+      document.getElementById('lb_stype').value = r.sample_type || panel.sample;
+      document.getElementById('lbSaveRecv').onclick = saveReceive;
+    }
+    if (mode === 'reject') document.getElementById('lbSaveRej').onclick = saveReject;
     document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; labSel = null; };
-    document.getElementById('lbDraft').onclick = () => saveLabResult(false);
-    document.getElementById('lbRelease').onclick = () => saveLabResult(true);
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  async function labUpdate(r, sets, vals, removes) {
+    const client = await getClient();
+    const usesStatus = sets.some(s => s.startsWith('#s'));
+    const cmd = { TableName: LAB_TABLE, Key: { request_id: { S: r.request_id } },
+      UpdateExpression: 'SET ' + sets.join(', ') + (removes ? ' REMOVE ' + removes : ''), ExpressionAttributeValues: vals };
+    if (usesStatus) cmd.ExpressionAttributeNames = { '#s': 'status' };
+    await client.send(new UpdateItemCommand(cmd));
+  }
+  const labOk = html => { document.getElementById('lbMsg').innerHTML = `<div class="success">${html}</div>`; };
+  const labErr = html => { document.getElementById('lbMsg').innerHTML = `<div class="error-inline">${html}</div>`; };
+  const labClose = () => { document.getElementById('lbForm').style.display = 'none'; labSel = null; renderLabQueue(); };
+
+  async function saveReceive() {
+    const r = clLab.find(x => x.request_id === labSel); if (!r) return;
+    const type = val('lb_stype'); mark('lb_stype', !type);
+    if (!type) { labErr('Please choose the sample type.'); return; }
+    const sid = val('lb_sid') || makeSampleId(r), now = new Date().toISOString();
+    const btn = document.getElementById('lbSaveRecv'); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      await labUpdate(r, ['#s = :s', 'sample_id = :i', 'sample_type = :y', 'received_at = :t', 'received_by = :b', 'received_by_username = :u'],
+        { ':s': { S: 'received' }, ':i': { S: sid }, ':y': { S: type }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } });
+      Object.assign(r, { status: 'received', sample_id: sid, sample_type: type, received_at: now, received_by: staffName() });
+      labClose(); labOk(`Sample received for ${esc(r.test)} (${esc(r.patient_name)}). Sample ID <b>${esc(sid)}</b>, received by ${esc(staffName())} at ${fmtDate(now)}.`);
+    } catch (err) { labErr('Could not save: ' + esc(err.message)); btn.disabled = false; btn.textContent = 'Confirm sample received'; }
+  }
+
+  async function saveReject() {
+    const r = clLab.find(x => x.request_id === labSel); if (!r) return;
+    const reason = val('lb_reason'); mark('lb_reason', !reason);
+    if (!reason) { labErr('Please choose the reason for rejecting the sample.'); return; }
+    const note = val('lb_note'), now = new Date().toISOString();
+    const btn = document.getElementById('lbSaveRej'); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const sets = ['#s = :s', 'reject_reason = :r', 'rejected_at = :t', 'rejected_by = :b', 'rejected_by_username = :u'];
+      const vals = { ':s': { S: 'rejected' }, ':r': { S: reason }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } };
+      if (note) { sets.push('reject_note = :n'); vals[':n'] = { S: note }; }
+      await labUpdate(r, sets, vals);
+      Object.assign(r, { status: 'rejected', reject_reason: reason, reject_note: note, rejected_at: now, rejected_by: staffName() });
+      labClose(); labOk(`Sample rejected (${esc(reason)}). ${esc(r.requested_by || 'The clinician')} will be told to send a new request.`);
+    } catch (err) { labErr('Could not save: ' + esc(err.message)); btn.disabled = false; btn.textContent = 'Reject sample'; }
+  }
+
   async function saveLabResult(release) {
-    const r = clLab.find(x => x.request_id === labSel);
-    if (!r) return;
-    const pre = presetFor(r.test);
-    const main = pre.kind === 'text' ? val('lb_text') : val('lb_value');
-    const mainId = pre.kind === 'text' ? 'lb_text' : 'lb_value';
-    mark(mainId, !main);
-    if (!main) { document.getElementById('lbMsg').innerHTML = '<div class="error-inline">Please enter the result.</div>'; return; }
-    const bR = document.getElementById('lbRelease'), bD = document.getElementById('lbDraft');
-    bR.disabled = bD.disabled = true; (release ? bR : bD).textContent = release ? 'Releasing…' : 'Saving…';
+    const r = clLab.find(x => x.request_id === labSel); if (!r) return;
+    const amend = labMode === 'amend';
+    const panel = panelFor(r.test);
+    const list = [], missing = [];
+    panel.p.forEach((p, i) => {
+      mark('lp_' + i, false);
+      const v = val('lp_' + i);
+      if (!v) { if (p.req) missing.push(i); return; }
+      list.push({ k: p.k, n: p.n, v, u: p.unit || '', r: refText(p, r.sex), f: flagOf(p, v, r.sex) });
+    });
+    const areason = amend ? val('lb_areason') : '';
+    if (amend) mark('lb_areason', !areason);
+    if (!list.length) { labErr('Please enter at least one result.'); return; }
+    if (release && missing.length) { missing.forEach(i => mark('lp_' + i, true)); labErr('Please fill the highlighted required results before releasing.'); return; }
+    if (amend && !areason) { labErr('Please give the reason for the correction.'); return; }
+    const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
     try {
       const client = await getClient();
       const now = new Date().toISOString();
+      const worst = list.reduce((a, x) => SEV[x.f] > SEV[a] ? x.f : a, '');
+      const single = panel.p.length === 1;
+      const abn = list.filter(x => x.f && x.f !== 'normal');
+      const summary = abn.length ? abn.map(x => `${x.n} ${x.v}${x.u ? ' ' + x.u : ''} (${x.f})`).join('; ') : 'All reported parameters within range';
+      let old = null, ver = 1;
+      if (amend) {
+        old = await fetchResult(r);
+        ver = old ? parseInt(old.version || '1', 10) : 1;
+        if (old) await client.send(new PutItemCommand({ TableName: RESULTS_TABLE, Item: toItem({ ...old, record_id: `${r.request_id}#v${ver}`, superseded_at: now, superseded_by: staffName(), superseded_by_username: staffUser() }) }));
+      }
       const item = g({
         patient_id: S(r.patient_id), record_id: S(r.request_id), request_id: S(r.request_id),
         client_id: S(r.client_id), patient_name: S(r.patient_name), test: S(r.test),
-        result_value: pre.kind === 'text' ? undefined : S(main), result_text: pre.kind === 'text' ? S(main) : undefined,
-        unit: S(val('lb_unit')), reference_range: S(val('lb_ref')), flag: S(val('lb_flag')), comment: S(val('lb_comment')),
-        entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser())
+        params_json: S(JSON.stringify(list)),
+        result_value: single ? S(list[0].v) : undefined, unit: single ? S(list[0].u) : undefined, reference_range: single ? S(list[0].r) : undefined,
+        result_text: single ? undefined : S(summary),
+        flag: S(worst), comment: S(val('lb_comment')), sample_id: S(r.sample_id), sample_type: S(r.sample_type),
+        entered_at: S(old ? old.entered_at : now), entered_by: S(old ? old.entered_by : staffName()), entered_by_username: S(old ? old.entered_by_username : staffUser()),
+        version: S(String(amend ? ver + 1 : 1)),
+        amended_at: amend ? S(now) : undefined, amended_by: amend ? S(staffName()) : undefined, amend_reason: amend ? S(areason) : undefined
       });
       await client.send(new PutItemCommand({ TableName: RESULTS_TABLE, Item: item }));
-      const upd = release
-        ? { expr: 'SET #s = :s, released_at = :t, released_by = :b, released_by_username = :u', vals: { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } } }
-        : { expr: 'SET #s = :s', vals: { ':s': { S: 'in-progress' } } };
-      await client.send(new UpdateItemCommand({ TableName: LAB_TABLE, Key: { request_id: { S: r.request_id } }, UpdateExpression: upd.expr, ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: upd.vals }));
-      r.status = release ? 'released' : 'in-progress';
-      if (release) { r.released_at = now; r.released_by = staffName(); }
-      document.getElementById('lbForm').style.display = 'none'; labSel = null;
-      renderLabQueue();
-      document.getElementById('lbMsg').innerHTML = `<div class="success">${release ? `Released: ${esc(r.test)} for ${esc(r.patient_name)} — the clinician will see "Labs in!". ` : `Draft saved for ${esc(r.test)}. `}Entered by ${esc(staffName())} at ${fmtDate(now)}.</div>`;
+      if (amend) {
+        await labUpdate(r, ['amended_at = :t', 'amended_by = :b', 'amend_reason = :r', 'result_version = :n'],
+          { ':t': { S: now }, ':b': { S: staffName() }, ':r': { S: areason }, ':n': { S: String(ver + 1) } }, 'seen_at, seen_by');
+        Object.assign(r, { amended_at: now, amended_by: staffName(), amend_reason: areason }); delete r.seen_at; delete r.seen_by;
+        labClose(); labOk(`Correction saved for ${esc(r.test)} (${esc(r.patient_name)}). The clinician will see "Labs in!" again, marked as corrected.`);
+      } else if (release) {
+        await labUpdate(r, ['#s = :s', 'released_at = :t', 'released_by = :b', 'released_by_username = :u'],
+          { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } });
+        Object.assign(r, { status: 'released', released_at: now, released_by: staffName() });
+        labClose(); labOk(`Released: ${esc(r.test)} for ${esc(r.patient_name)}. The clinician will see "Labs in!". Entered by ${esc(staffName())} at ${fmtDate(now)}.`);
+      } else {
+        await labUpdate(r, ['#s = :s'], { ':s': { S: 'in-progress' } });
+        r.status = 'in-progress';
+        labClose(); labOk(`Draft saved for ${esc(r.test)} (${esc(r.patient_name)}). It has not been released.`);
+      }
     } catch (err) {
-      document.getElementById('lbMsg').innerHTML = `<div class="error-inline">Could not save: ${esc(err.message)}</div>`;
-      bR.disabled = bD.disabled = false; bR.textContent = 'Release to clinician'; bD.textContent = 'Save draft';
+      labErr('Could not save: ' + esc(err.message)); btns.forEach(b => b.disabled = false);
     }
   }
 
@@ -1257,10 +1477,20 @@
     try {
       const x = await fetchResult(r);
       const row = (k, v) => v ? `<div><span>${k}</span>${esc(v)}</div>` : '';
-      card.innerHTML = `<div class="client-banner"><div><strong>${esc(r.test)}</strong> — ${esc(r.patient_name)} <span class="cid">${esc(r.client_id || '')}</span></div><button class="btn-sm ghost" id="lbCancel">Close</button></div>
-        ${x ? `<div class="kv">${row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}${row('Reference range', x.reference_range)}${row('Flag', x.flag)}
-          ${row('Comment', x.comment)}${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
-          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}${row('Seen by clinician', r.seen_at ? `${r.seen_by || ''} · ${fmtDate(r.seen_at)}` : 'Not yet')}</div>` : '<div class="notice">Result record not found.</div>'}`;
+      const plist = parseParams(x);
+      const ver = x ? parseInt(x.version || '1', 10) : 1;
+      let hist = '';
+      for (let k = ver - 1; k >= 1; k--) {
+        const h = await fetchResult(r, `${r.request_id}#v${k}`);
+        if (h) hist += `<details style="margin-top:10px"><summary>Version ${k} (replaced ${fmtDate(h.superseded_at)} by ${esc(h.superseded_by || '')})</summary>
+          ${parseParams(h).length ? paramsTableHtml(parseParams(h)) : `<div class="vit">${esc(h.result_value || h.result_text || '')}</div>`}</details>`;
+      }
+      card.innerHTML = labBanner(r) + (x ? `${plist.length ? paramsTableHtml(plist) : ''}
+        <div class="kv">${plist.length ? '' : row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}${row('Comment', x.comment)}
+          ${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
+          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}
+          ${r.amended_at ? row('Corrected', `${fmtDate(r.amended_at)} by ${r.amended_by || ''} — ${r.amend_reason || ''}`) : ''}
+          ${row('Seen by clinician', r.seen_at ? `${r.seen_by || ''} · ${fmtDate(r.seen_at)}` : 'Not yet')}</div>${hist}` : '<div class="notice">Result record not found.</div>');
       document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; };
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) { card.innerHTML = `<div class="error-inline">Could not load: ${esc(err.message)}</div>`; }
@@ -1276,7 +1506,7 @@
       liveEl.innerHTML = labShellHtml();
       if (!liveEl.dataset.boundL) {
         liveEl.addEventListener('click', e => {
-          const o = e.target.closest('[data-lb]'); if (o) { e.preventDefault(); openLabForm(o.dataset.lb); return; }
+          const a = e.target.closest('[data-lbact]'); if (a) { e.preventDefault(); const [m, id] = a.dataset.lbact.split('|'); openLabForm(id, m); return; }
           const v = e.target.closest('[data-lbview]'); if (v) { e.preventDefault(); viewLabResult(v.dataset.lbview); }
         });
         liveEl.dataset.boundL = '1';
