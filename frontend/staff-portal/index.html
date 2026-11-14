@@ -1249,7 +1249,15 @@
   }
   function parseParams(x) { try { return JSON.parse((x && x.params_json) || '[]'); } catch (e) { return []; } }
   const toItem = o => g(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, S(v)])));
-  const makeSampleId = r => 'LAB-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + String(r.request_id).replace(/-/g, '').slice(0, 6).toUpperCase();
+  const TEST_CODE = {
+    'Malaria parasite (RDT / film)': 'MAL', 'Full blood count': 'FBC', 'Haemoglobin': 'HB', 'Packed cell volume (PCV)': 'PCV',
+    'Blood group & Rh': 'BGR', 'Sickling test': 'SKL', 'Genotype': 'GEN', 'Blood glucose (random)': 'RBS', 'Fasting blood glucose': 'FBS',
+    'Oral glucose tolerance test (OGTT)': 'OGT', 'Urinalysis': 'URI', 'Urine culture': 'UCS', 'Urine pregnancy test': 'UPT',
+    'Blood pregnancy test (serum β-hCG)': 'BPT', 'HIV screening': 'HIV', 'Hepatitis B (HBsAg)': 'HBS', 'VDRL / syphilis': 'VDR',
+    'Widal test': 'WID', 'Stool microscopy': 'STL'
+  };
+  // Sample ID = test code - date received (YYMMDD) - first 6 characters of the request's random ID
+  const makeSampleId = r => (TEST_CODE[r.test] || 'LAB') + '-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + String(r.request_id).replace(/-/g, '').slice(0, 6).toUpperCase();
 
   function labShellHtml() {
     return `
@@ -1331,7 +1339,7 @@
       let x = null;
       if (mode === 'amend' || r.status === 'in-progress') { try { x = await fetchResult(r); } catch (e) { x = null; } }
       const rows = panel.p.map((p, i) => {
-        const inp = p.t === 'sel' ? `<select id="lp_${i}">${opt(p.options, '—')}</select>` : `<input id="lp_${i}" type="${p.t === 'num' ? 'number' : 'text'}"${p.t === 'num' ? ' step="any"' : ''}>`;
+        const inp = p.t === 'sel' ? `<select id="lp_${i}">${opt(p.options, '—')}</select>` : `<input id="lp_${i}" type="${p.t === 'num' ? 'number' : 'text'}"${p.t === 'num' ? ' step="any" min="0"' : ''}>`;
         return `<tr><td>${esc(p.n)}${p.req ? ' <span class="req">*</span>' : ''}</td><td>${inp}</td><td>${esc(p.unit || '')}</td><td>${esc(refText(p, r.sex))}</td><td id="lf_${i}"></td></tr>`;
       }).join('');
       body = `<div class="fd-form">
@@ -1418,6 +1426,8 @@
       if (!v) { if (p.req) missing.push(i); return; }
       list.push({ k: p.k, n: p.n, v, u: p.unit || '', r: refText(p, r.sex), f: flagOf(p, v, r.sex) });
     });
+    const badNum = panel.p.map((p, i) => ({ p, i })).filter(({ p, i }) => p.t === 'num' && val('lp_' + i) !== '' && !(parseFloat(val('lp_' + i)) >= 0));
+    if (badNum.length) { badNum.forEach(({ i }) => mark('lp_' + i, true)); labErr('Results cannot be negative or empty numbers. Please correct the highlighted fields.'); return; }
     const areason = amend ? val('lb_areason') : '';
     if (amend) mark('lb_areason', !areason);
     if (!list.length) { labErr('Please enter at least one result.'); return; }
