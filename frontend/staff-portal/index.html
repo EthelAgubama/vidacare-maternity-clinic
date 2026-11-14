@@ -861,7 +861,7 @@
       ${mine.map(r => r.status === 'rejected'
         ? `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · <span class="st urgent">Sample rejected</span> ${esc(r.reject_reason || '')}</span>
       <button class="btn-sm" data-result="${esc(r.request_id)}">See details</button></div>`
-        : `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · ${r.amended_at ? '<b>corrected</b> ' + fmtDate(r.amended_at) : 'released ' + fmtDate(r.released_at)}</span>
+        : `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · ${r.result_flag === 'critical' ? '<span class="st f-critical">CRITICAL</span> ' : ''}${r.amended_at ? '<b>corrected</b> ' + fmtDate(r.amended_at) : 'released ' + fmtDate(r.released_at)}</span>
       <button class="btn-sm" data-result="${esc(r.request_id)}">View result</button></div>`).join('')}</div>`;
   }
 
@@ -890,7 +890,7 @@
     if (r.status === 'released') return `<span class="st done">Results in</span> <a class="lnk" data-result="${esc(r.request_id)}">View result</a>`;
     if (r.status === 'rejected') return `<span class="st urgent">Sample rejected</span> <a class="lnk" data-result="${esc(r.request_id)}">Details</a>`;
     if (r.status === 'received') return '<span class="st wait">Sample received</span>';
-    if (r.status === 'in-progress') return '<span class="st wait">In progress</span>';
+    if (r.status === 'in-progress' || r.status === 'entered') return '<span class="st wait">In progress</span>';
     return '<span class="st wait">Requested</span>';
   }
 
@@ -1091,13 +1091,16 @@
         const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
         const x = res.Item ? unmarshal(res.Item) : null;
         const plist = parseParams(x);
+        const prevs = plist.length ? await prevResults(r, 2) : [];
+        lastReport = { r, x, plist };
         box.innerHTML = `<div class="data-card result-card">${head}
-        ${x ? `${plist.length ? paramsTableHtml(plist) : ''}<div class="kv">
+        ${x ? `<div style="margin:0 0 10px"><button class="btn-sm ghost" data-lbprint="1">Print report</button> <button class="btn-sm ghost" data-lbpdf="1">Download PDF</button></div>${plist.length ? paramsTableHtml(plist, prevs) : ''}<div class="kv">
           ${plist.length ? '' : row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}
           ${plist.length ? '' : row('Reference range', x.reference_range)}${plist.length ? '' : row('Flag', x.flag)}
-          ${row('Comment', x.comment)}${row('Sample', [r.sample_id, r.sample_type].filter(Boolean).join(' · '))}
+          ${row('Comment', x.comment)}${row('Critical value reported to', x.critical_informed)}${row('Sample', [r.sample_id, r.sample_type].filter(Boolean).join(' · '))}
           ${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
-          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}
+          ${row('Verified by', x.verified_by ? `${x.verified_by} · ${fmtDate(x.verified_at)}` : (x.self_verified ? 'Not independently verified (only lab staff on duty)' : ''))}
+          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}${row('Turnaround', dur(r.requested_at, r.released_at))}
           ${r.amended_at ? row('Corrected', `${fmtDate(r.amended_at)} by ${r.amended_by || ''} — ${r.amend_reason || ''}`) : ''}
         </div>` : '<div class="notice">The result record could not be found. Ask the lab to check this request.</div>'}</div>`;
       }
@@ -1251,10 +1254,106 @@
   }
   const SEV = { critical: 4, high: 3, low: 3, abnormal: 2, normal: 1, '': 0 };
   const flagBadge = f => f ? `<span class="st f-${f}">${f === 'normal' ? 'Normal' : f.charAt(0).toUpperCase() + f.slice(1)}</span>` : '';
-  function paramsTableHtml(list) {
-    return `<table class="data-table"><thead><tr><th>Parameter</th><th>Result</th><th>Reference</th><th>Flag</th></tr></thead><tbody>` +
-      list.map(x => `<tr><td>${esc(x.n)}</td><td><strong>${esc(x.v)}</strong> ${esc(x.u || '')}</td><td>${esc(x.r || '')}</td><td>${flagBadge(x.f)}</td></tr>`).join('') + '</tbody></table>';
+  const shortDate = iso => iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short' }) : '';
+  const dur = (a, b) => {
+    if (!a || !b) return '';
+    const m = Math.max(0, Math.round((new Date(b) - new Date(a)) / 60000));
+    if (m < 60) return m + ' min';
+    const h = Math.floor(m / 60);
+    return h < 24 ? `${h} h ${m % 60} min` : `${Math.floor(h / 24)} d ${h % 24} h`;
+  };
+  function paramsTableHtml(list, prevs = []) {
+    const ph = prevs.map(p => `<th>${esc(shortDate(p.when))}</th>`).join('');
+    return `<table class="data-table"><thead><tr><th>Parameter</th><th>Result</th><th>Reference</th><th>Flag</th>${ph}</tr></thead><tbody>` +
+      list.map(x => `<tr><td>${esc(x.n)}</td><td><strong>${esc(x.v)}</strong> ${esc(x.u || '')}</td><td>${esc(x.r || '')}</td><td>${flagBadge(x.f)}</td>` +
+        prevs.map(p => { const q = p.by.find(z => z.k === x.k); return `<td style="color:#777">${q ? esc(q.v) : ''}</td>`; }).join('') + '</tr>').join('') +
+      '</tbody></table>' + (prevs.length ? '<div class="vit">The columns on the right are this client\'s earlier results for the same test.</div>' : '');
   }
+  // Earlier released results for the same client and test (up to max), newest first.
+  async function prevResults(r, max) {
+    const before = r.released_at || new Date().toISOString();
+    const prior = clLab.filter(q => q.patient_id === r.patient_id && q.test === r.test && q.request_id !== r.request_id && q.status === 'released' && (q.released_at || '') < before)
+      .sort((a, b) => (b.released_at || '').localeCompare(a.released_at || '')).slice(0, max || 2);
+    const out = [];
+    for (const q of prior) {
+      try { const client = await getClient(); const res = await client.send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: q.patient_id }, record_id: { S: q.request_id } } }));
+        if (res.Item) out.push({ when: q.released_at, by: parseParams(unmarshal(res.Item)) }); } catch (e) { /* skip */ }
+    }
+    return out;
+  }
+  let lastReport = null;
+  // One model of the report, used by both Print and Download PDF
+  function reportModel() {
+    const { r, x, plist } = lastReport;
+    const meta = [
+      ['Client', (r.patient_name || '') + (r.client_id ? ' (' + r.client_id + ')' : '')],
+      ['Sex / age', [r.sex, r.date_of_birth ? ageOf(r.date_of_birth) : ''].filter(Boolean).join(' · ')],
+      ['Test', r.test],
+      ['Sample', [r.sample_id, r.sample_type].filter(Boolean).join(' · ')],
+      ['Requested by', (r.requested_by || '') + ' — ' + fmtDate(r.requested_at)],
+      ['Sample received', r.received_by ? r.received_by + ' — ' + fmtDate(r.received_at) : ''],
+      ['Result entered by', x && x.entered_by ? x.entered_by + ' — ' + fmtDate(x.entered_at) : ''],
+      ['Verified by', x && x.verified_by ? x.verified_by + ' — ' + fmtDate(x.verified_at) : (x && x.self_verified ? 'Not independently verified (only lab staff on duty)' : '')],
+      ['Released by', r.released_by ? r.released_by + ' — ' + fmtDate(r.released_at) : ''],
+      ['Corrected', r.amended_at ? fmtDate(r.amended_at) + ' by ' + (r.amended_by || '') + ' — ' + (r.amend_reason || '') : '']
+    ].filter(m => m[1]);
+    const rows = plist.length
+      ? plist.map(p => [p.n, [p.v, p.u].filter(Boolean).join(' '), p.r || '', p.f ? (p.f === 'normal' ? 'Normal' : p.f.toUpperCase()) : ''])
+      : [[r.test, [x && x.result_value, x && x.unit].filter(Boolean).join(' ') || (x && x.result_text) || '', (x && x.reference_range) || '', (x && x.flag) || '']];
+    return { r, meta, rows, comment: x && x.comment, critical: x && x.critical_informed,
+      footer: `Printed by ${staffName()} on ${fmtDate(new Date().toISOString())}. Reference ranges are guides; interpret with the clinical picture.` };
+  }
+  function printLabReport() {
+    if (!lastReport) return;
+    const m = reportModel();
+    const w = window.open('', '_blank');
+    if (!w) { alert('Please allow pop-ups for this page to print the report.'); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Lab report ${esc(m.r.client_id || '')}</title>
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:13px}h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 16px}
+table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #bbb;padding:6px 8px;text-align:left}th{background:#E8F5E9}
+.meta td{border:none;padding:2px 14px 2px 0}.meta td.k{color:#555;width:150px}.crit{font-weight:700;color:#C62828}
+.foot{margin-top:26px;font-size:11.5px;color:#555}.btn{margin-top:14px;padding:8px 16px}@media print{.btn{display:none}}</style></head><body>
+<h1>VidaCare Maternity Home</h1><div class="sub">Laboratory report</div>
+<table class="meta"><tbody>${m.meta.map(k => `<tr><td class="k">${esc(k[0])}</td><td>${esc(k[1])}</td></tr>`).join('')}</tbody></table>
+<table><thead><tr><th>Parameter</th><th>Result</th><th>Reference</th><th>Flag</th></tr></thead><tbody>${m.rows.map(q => `<tr><td>${esc(q[0])}</td><td><b>${esc(q[1])}</b></td><td>${esc(q[2])}</td><td class="${q[3] === 'CRITICAL' ? 'crit' : ''}">${esc(q[3])}</td></tr>`).join('')}</tbody></table>
+${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p><b>Critical value reported to:</b> ${esc(m.critical)}</p>` : ''}
+<div class="foot">${esc(m.footer)}</div><button class="btn" onclick="window.print()">Print</button></body></html>`);
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 350);
+  }
+  const loadScript = src => new Promise((res, rej) => { const el = document.createElement('script'); el.src = src; el.onload = res; el.onerror = () => rej(new Error('Could not load the PDF tool. Check the internet connection.')); document.head.appendChild(el); });
+  // jsPDF's built-in font has no superscripts or Greek letters
+  const pdfSafe = t => String(t ?? '').replace(/⁹/g, '^9').replace(/¹²/g, '^12').replace(/β/g, 'beta').replace(/[^\x00-\xFF–—‘’“”•]/g, '?');
+  async function downloadLabPdf() {
+    if (!lastReport) return;
+    const btns = [...document.querySelectorAll('[data-lbpdf]')]; btns.forEach(b => { b.disabled = true; b.dataset.t = b.textContent; b.textContent = 'Preparing PDF…'; });
+    try {
+      if (!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable)) {
+        if (!(window.jspdf && window.jspdf.jsPDF)) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+        await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+      }
+      const m = reportModel();
+      const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(27, 94, 32); doc.text('VidaCare Maternity Home', 14, 18);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90); doc.text('Laboratory report', 14, 24);
+      doc.autoTable({ startY: 29, body: m.meta.map(k => [pdfSafe(k[0]), pdfSafe(k[1])]), theme: 'plain',
+        styles: { fontSize: 9.5, cellPadding: 1.2, textColor: 20 }, columnStyles: { 0: { cellWidth: 38, textColor: 90 } } });
+      doc.autoTable({ startY: doc.lastAutoTable.finalY + 5, head: [['Parameter', 'Result', 'Reference', 'Flag']], body: m.rows.map(q => q.map(pdfSafe)),
+        headStyles: { fillColor: [27, 94, 32], textColor: 255 }, styles: { fontSize: 10, cellPadding: 2 },
+        didParseCell: d => { if (d.section === 'body' && d.column.index === 3) { const v = d.cell.raw; if (v === 'CRITICAL') { d.cell.styles.textColor = [198, 40, 40]; d.cell.styles.fontStyle = 'bold'; } else if (v && v !== 'Normal') d.cell.styles.fontStyle = 'bold'; } } });
+      let y = doc.lastAutoTable.finalY + 8;
+      doc.setFontSize(10); doc.setTextColor(20);
+      if (m.comment) { const t = doc.splitTextToSize('Comment: ' + pdfSafe(m.comment), 180); doc.text(t, 14, y); y += t.length * 5 + 2; }
+      if (m.critical) { const t = doc.splitTextToSize('Critical value reported to: ' + pdfSafe(m.critical), 180); doc.text(t, 14, y); y += t.length * 5 + 2; }
+      doc.setFontSize(8.5); doc.setTextColor(110); doc.text(doc.splitTextToSize(pdfSafe(m.footer), 180), 14, Math.min(y + 8, 285));
+      const safe = t => String(t || '').replace(/[^A-Za-z0-9-]+/g, '_');
+      doc.save(`LabReport_${safe(m.r.client_id || m.r.patient_name)}_${safe(m.r.sample_id || m.r.test)}.pdf`);
+    } catch (err) { alert('Could not make the PDF: ' + err.message); }
+    btns.forEach(b => { b.disabled = false; b.textContent = b.dataset.t; });
+  }
+  document.addEventListener('click', e => {
+    if (e.target.closest('[data-lbprint]')) { e.preventDefault(); printLabReport(); }
+    else if (e.target.closest('[data-lbpdf]')) { e.preventDefault(); downloadLabPdf(); }
+  });
   function parseParams(x) { try { return JSON.parse((x && x.params_json) || '[]'); } catch (e) { return []; } }
   const toItem = o => g(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, S(v)])));
   const TEST_CODE = {
@@ -1281,31 +1380,39 @@
     .sort((a, b) => (a.urgency === 'urgent' ? 0 : 1) - (b.urgency === 'urgent' ? 0 : 1) || (a.requested_at || '').localeCompare(b.requested_at || ''));
 
   function labStatusBadge(r) {
-    if (r.status === 'in-progress') return `<span class="st wait">Draft saved</span><div class="vit">${esc(r.sample_id || '')}</div>`;
+    if (r.status === 'entered') return `<span class="st f-abnormal">Awaiting verification</span><div class="vit">Entered by ${esc(r.entered_by || '—')}<br>${esc(r.sample_id || '')}</div>`;
+    if (r.status === 'in-progress') return `<span class="st wait">${r.return_reason ? 'Returned for correction' : 'Draft saved'}</span><div class="vit">${r.return_reason ? esc(r.return_reason) + '<br>' : ''}${esc(r.sample_id || '')}</div>`;
     if (r.status === 'received') return `<span class="st wait">Sample received</span><div class="vit">${esc(r.sample_id || '')} · ${esc(r.sample_type || '')}</div>`;
     return '<span class="st wait">Requested</span>';
   }
 
+  function queueButtons(r) {
+    if (!canLab) return '';
+    const id = esc(r.request_id);
+    let main;
+    if (r.status === 'entered') main = r.entered_by_username !== staffUser()
+      ? `<button class="btn-sm b-rel" data-lbact="verify|${id}">Verify</button>` : `<button class="btn-sm ghost" data-lbact="verify|${id}">Open</button>`;
+    else if (r.status === 'received' || r.status === 'in-progress') main = `<button class="btn-sm b-enter" data-lbact="result|${id}">Enter result</button>`;
+    else main = `<button class="btn-sm b-recv" data-lbact="receive|${id}">Receive sample</button>`;
+    return `${main} <button class="btn-sm ghost" data-lbact="reject|${id}">Reject</button>`;
+  }
+
   function renderLabQueue() {
-    const rows = pending().map(r => {
-      const got = r.status === 'received' || r.status === 'in-progress';
-      return `<tr>
+    const rows = pending().map(r => `<tr>
       <td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '—')}</span>
         <span style="color:#777;font-size:12px"> ${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''}</span></td>
       <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}</td>
       <td>${labStatusBadge(r)}</td>
       <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td>
-      <td style="white-space:nowrap">${canLab ? `${got ? `<button class="btn-sm b-enter" data-lbact="result|${esc(r.request_id)}">Enter result</button>` : `<button class="btn-sm b-recv" data-lbact="receive|${esc(r.request_id)}">Receive sample</button>`}
-        <button class="btn-sm ghost" data-lbact="reject|${esc(r.request_id)}">Reject</button>` : ''}</td></tr>`;
-    }).join('');
+      <td style="white-space:nowrap">${queueButtons(r)}</td></tr>`).join('');
     document.getElementById('lbQueue').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Status</th><th>Requested by</th><th></th></tr></thead>
       <tbody>${rows || '<tr class="empty-row"><td colspan="5">No tests are waiting. New requests from clinicians appear here.</td></tr>'}</tbody></table>`;
     const done = clLab.filter(r => ['released', 'rejected'].includes(r.status))
       .sort((a, b) => (b.released_at || b.rejected_at || '').localeCompare(a.released_at || a.rejected_at || '')).slice(0, 30)
       .map(r => r.status === 'released'
         ? `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
-        <td>${esc(r.test)}</td><td><span class="st rel">Released</span>${r.amended_at ? ' <span class="st wait">corrected</span>' : ''}<div class="vit">${esc(r.sample_id || '')}</div></td>
-        <td>${esc(r.released_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.released_at)}</span></td>
+        <td>${esc(r.test)}</td><td><span class="st rel">Released</span>${r.amended_at ? ' <span class="st wait">corrected</span>' : ''}${r.result_flag === 'critical' ? ' <span class="st f-critical">critical</span>' : ''}<div class="vit">${esc(r.sample_id || '')}</div></td>
+        <td>${esc(r.released_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.released_at)}</span><div class="vit">Turnaround ${esc(dur(r.requested_at, r.released_at))}</div></td>
         <td style="white-space:nowrap"><a class="lnk" data-lbview="${esc(r.request_id)}">View</a>${canLab ? ` · <a class="lnk" data-lbact="amend|${esc(r.request_id)}">Correct</a>` : ''}</td></tr>`
         : `<tr><td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '')}</span></td>
         <td>${esc(r.test)}</td><td><span class="st rej">Rejected</span><div class="vit">${esc(r.reject_reason || '')}${r.reject_note ? ' — ' + esc(r.reject_note) : ''}</div></td>
@@ -1326,6 +1433,9 @@
       <button class="btn-sm ghost" id="lbCancel">Close</button></div>`;
   }
   const stampLine = () => `<div class="stamp">Recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}).</div>`;
+  const critBlock = show => `<div id="lbCrit" class="notice" style="display:${show ? 'block' : 'none'}"><b>Critical value.</b> Please tell the clinician before releasing.
+    <div class="f" style="margin-top:8px"><label>Who was informed, and how <span class="req">*</span></label><input id="lb_crit" placeholder="e.g. Dr Kofi, by phone at 14:20"></div></div>`;
+  const kvRow = (k, v) => v ? `<div><span>${k}</span>${esc(v)}</div>` : '';
 
   async function openLabForm(requestId, mode) {
     const r = clLab.find(x => x.request_id === requestId);
@@ -1334,49 +1444,70 @@
     document.getElementById('lbMsg').innerHTML = '';
     const card = document.getElementById('lbForm');
     const panel = panelFor(r.test);
-    let body = '';
+    const show = body => { card.innerHTML = labBanner(r) + body; card.style.display = 'block'; };
     if (mode === 'receive') {
-      body = `<div class="fd-form"><div class="grid2"><div class="f"><label>Sample type <span class="req">*</span></label><select id="lb_stype">${opt(SAMPLE_TYPES, 'Select')}</select></div>
+      show(`<div class="fd-form"><div class="grid2"><div class="f"><label>Sample type <span class="req">*</span></label><select id="lb_stype">${opt(SAMPLE_TYPES, 'Select')}</select></div>
         <div class="f"><label>Sample ID</label><input id="lb_sid" value="${esc(r.sample_id || makeSampleId(r))}"></div></div>
-        ${stampLine()}<div style="margin-top:14px"><button class="btn-sm b-recv" id="lbSaveRecv">Confirm sample received</button></div></div>`;
+        ${stampLine()}<div style="margin-top:14px"><button class="btn-sm b-recv" id="lbSaveRecv">Confirm sample received</button></div></div>`);
+      document.getElementById('lb_stype').value = r.sample_type || panel.sample;
+      document.getElementById('lbSaveRecv').onclick = saveReceive;
     } else if (mode === 'reject') {
-      body = `<div class="fd-form"><div class="grid2"><div class="f"><label>Reason <span class="req">*</span></label><select id="lb_reason">${opt(REJECT_REASONS, 'Select')}</select></div>
+      show(`<div class="fd-form"><div class="grid2"><div class="f"><label>Reason <span class="req">*</span></label><select id="lb_reason">${opt(REJECT_REASONS, 'Select')}</select></div>
         <div class="f"><label>Note to the clinician</label><input id="lb_note" placeholder="Optional"></div></div>
-        ${stampLine()}<div style="margin-top:14px"><button class="btn-sm" id="lbSaveRej">Reject sample</button></div></div>`;
+        ${stampLine()}<div style="margin-top:14px"><button class="btn-sm" id="lbSaveRej">Reject sample</button></div></div>`);
+      document.getElementById('lbSaveRej').onclick = saveReject;
+    } else if (mode === 'verify') {
+      let x = null; try { x = await fetchResult(r); } catch (e) { x = null; }
+      const plist = x ? parseParams(x) : [];
+      const prevs = await prevResults(r, 2);
+      const same = r.entered_by_username === staffUser();
+      show(`<div class="fd-form">${x ? paramsTableHtml(plist, prevs) : '<div class="notice">The result record was not found.</div>'}
+        <div class="kv">${kvRow('Comment', x && x.comment)}${kvRow('Entered by', x && x.entered_by)}${kvRow('Entered at', x && x.entered_at && fmtDate(x.entered_at))}</div>
+        ${x && x.flag === 'critical' ? critBlock(true) : ''}
+        ${same ? '<div class="notice">You entered this result, so a different lab staff member must verify it.</div>'
+               : '<div class="f" style="margin-top:12px"><label>If something is wrong, why is it being returned?</label><input id="lb_ret" placeholder="Needed only when returning"></div>'}
+        ${stampLine()}<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
+          ${same ? '<button class="btn-sm b-enter" id="lbEdit">Edit result</button>'
+                 : '<button class="btn-sm b-rel" id="lbVerify">Verify and release</button><button class="btn-sm ghost" id="lbReturn">Return for correction</button>'}</div></div>`);
+      if (same) document.getElementById('lbEdit').onclick = () => openLabForm(requestId, 'result');
+      else { document.getElementById('lbVerify').onclick = saveVerify; document.getElementById('lbReturn').onclick = saveReturn; }
     } else {
+      const amend = mode === 'amend';
       let x = null;
-      if (mode === 'amend' || r.status === 'in-progress') { try { x = await fetchResult(r); } catch (e) { x = null; } }
+      if (amend || ['in-progress', 'entered'].includes(r.status)) { try { x = await fetchResult(r); } catch (e) { x = null; } }
       const rows = panel.p.map((p, i) => {
         const inp = p.t === 'sel' ? `<select id="lp_${i}">${opt(p.options, '—')}</select>` : `<input id="lp_${i}" type="${p.t === 'num' ? 'number' : 'text'}"${p.t === 'num' ? ' step="any" min="0"' : ''}>`;
-        return `<tr><td>${esc(p.n)}${p.req ? ' <span class="req">*</span>' : ''}</td><td>${inp}</td><td>${esc(p.unit || '')}</td><td>${esc(refText(p, r.sex))}</td><td id="lf_${i}"></td></tr>`;
+        return `<tr><td>${esc(p.n)}${p.req ? ' <span class="req">*</span>' : ''}</td><td>${inp}</td><td>${esc(p.unit || '')}</td><td>${esc(refText(p, r.sex))}</td><td id="lf_${i}"></td><td id="lpv_${i}" style="color:#777;font-size:12.5px"></td></tr>`;
       }).join('');
-      body = `<div class="fd-form">
-        ${mode === 'amend' ? `<div class="notice">You are correcting a released result. The old values are kept in the history and the clinician will be told it was corrected.</div>
+      show(`<div class="fd-form">
+        ${amend ? `<div class="notice">You are correcting a released result. The old values are kept in the history and the clinician will be told it was corrected.</div>
           <div class="f" style="margin-bottom:12px"><label>Reason for correction <span class="req">*</span></label><input id="lb_areason" placeholder="e.g. transcription error"></div>` : ''}
-        <table class="data-table pt"><thead><tr><th>Parameter</th><th style="width:34%">Result</th><th>Unit</th><th>Reference</th><th>Flag</th></tr></thead><tbody>${rows}</tbody></table>
+        ${r.return_reason ? `<div class="notice"><b>Returned for correction</b> by ${esc(r.returned_by || '')}: ${esc(r.return_reason)}</div>` : ''}
+        <table class="data-table pt"><thead><tr><th>Parameter</th><th style="width:28%">Result</th><th>Unit</th><th>Reference</th><th>Flag</th><th>Previous</th></tr></thead><tbody>${rows}</tbody></table>
         <div class="f" style="margin-top:12px"><label>Comment for the clinician</label><input id="lb_comment" placeholder="Optional"></div>
+        ${critBlock(false)}
+        ${amend ? '' : '<label class="chk" style="margin-top:12px"><input type="checkbox" id="lb_solo"> I am the only lab staff on duty (release without a second person verifying)</label>'}
         ${stampLine()}<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">
-          ${mode === 'amend' ? '<button class="btn-sm b-rel" id="lbRelease">Save correction</button>'
-            : '<button class="btn-sm ghost" id="lbDraft">Save draft</button><button class="btn-sm b-rel" id="lbRelease">Release to clinician</button>'}</div></div>`;
-      card.innerHTML = labBanner(r) + body;
-      card.style.display = 'block';
+          ${amend ? '<button class="btn-sm b-rel" id="lbRelease">Save correction</button>'
+            : '<button class="btn-sm ghost" id="lbDraft">Save draft</button><button class="btn-sm b-enter" id="lbRelease">Submit for verification</button>'}</div></div>`);
+      const solo = () => !!document.getElementById('lb_solo')?.checked;
+      const worstNow = () => panel.p.reduce((a, p, i) => { const f = flagOf(p, val('lp_' + i), r.sex); return SEV[f] > SEV[a] ? f : a; }, '');
+      const syncCrit = () => { document.getElementById('lbCrit').style.display = (worstNow() === 'critical' && (amend || solo())) ? 'block' : 'none'; };
+      const syncBtn = () => { if (amend) return; const b = document.getElementById('lbRelease'); const s = solo();
+        b.textContent = s ? 'Release to clinician' : 'Submit for verification'; b.className = 'btn-sm ' + (s ? 'b-rel' : 'b-enter'); syncCrit(); };
       const old = x ? parseParams(x) : [];
-      const upd = i => { const p = panel.p[i]; const f = flagOf(p, val('lp_' + i), r.sex); document.getElementById('lf_' + i).innerHTML = flagBadge(f); };
+      const upd = i => { document.getElementById('lf_' + i).innerHTML = flagBadge(flagOf(panel.p[i], val('lp_' + i), r.sex)); syncCrit(); };
       panel.p.forEach((p, i) => {
         const el = document.getElementById('lp_' + i);
         const o = old.find(q => q.k === p.k); if (o) el.value = o.v;
         el.addEventListener('input', () => upd(i)); el.addEventListener('change', () => upd(i)); upd(i);
       });
       if (x && x.comment) document.getElementById('lb_comment').value = x.comment;
-      document.getElementById('lbRelease').onclick = () => saveLabResult(true);
-      const d = document.getElementById('lbDraft'); if (d) d.onclick = () => saveLabResult(false);
+      if (!amend) document.getElementById('lb_solo').addEventListener('change', syncBtn);
+      document.getElementById('lbRelease').onclick = () => saveLabResult(amend || solo() ? 'release' : 'submit');
+      const d = document.getElementById('lbDraft'); if (d) d.onclick = () => saveLabResult('draft');
+      prevResults(r, 1).then(pv => { if (pv[0] && labSel === requestId) panel.p.forEach((p, i) => { const q = pv[0].by.find(z => z.k === p.k); const c = document.getElementById('lpv_' + i); if (q && c) c.textContent = `${q.v} (${shortDate(pv[0].when)})`; }); });
     }
-    if (mode === 'receive' || mode === 'reject') { card.innerHTML = labBanner(r) + body; card.style.display = 'block'; }
-    if (mode === 'receive') {
-      document.getElementById('lb_stype').value = r.sample_type || panel.sample;
-      document.getElementById('lbSaveRecv').onclick = saveReceive;
-    }
-    if (mode === 'reject') document.getElementById('lbSaveRej').onclick = saveReject;
     document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; labSel = null; };
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1392,6 +1523,7 @@
   const labOk = html => { document.getElementById('lbMsg').innerHTML = `<div class="success">${html}</div>`; };
   const labErr = html => { document.getElementById('lbMsg').innerHTML = `<div class="error-inline">${html}</div>`; };
   const labClose = () => { document.getElementById('lbForm').style.display = 'none'; labSel = null; renderLabQueue(); };
+  const CLEAR_RETURN = 'return_reason, returned_by, returned_at';
 
   async function saveReceive() {
     const r = clLab.find(x => x.request_id === labSel); if (!r) return;
@@ -1423,29 +1555,32 @@
     } catch (err) { labErr('Could not save: ' + esc(err.message)); btn.disabled = false; btn.textContent = 'Reject sample'; }
   }
 
-  async function saveLabResult(release) {
+  // action: draft | submit (needs a second person to verify) | release (only lab staff on duty, or a correction)
+  async function saveLabResult(action) {
     const r = clLab.find(x => x.request_id === labSel); if (!r) return;
     const amend = labMode === 'amend';
     const panel = panelFor(r.test);
-    const list = [], missing = [];
+    const list = [], missing = [], bad = [];
     panel.p.forEach((p, i) => {
       mark('lp_' + i, false);
       const v = val('lp_' + i);
       if (!v) { if (p.req) missing.push(i); return; }
+      if (p.t === 'num' && !(parseFloat(v) >= 0)) bad.push(i);
       list.push({ k: p.k, n: p.n, v, u: p.unit || '', r: refText(p, r.sex), f: flagOf(p, v, r.sex) });
     });
-    const badNum = panel.p.map((p, i) => ({ p, i })).filter(({ p, i }) => p.t === 'num' && val('lp_' + i) !== '' && !(parseFloat(val('lp_' + i)) >= 0));
-    if (badNum.length) { badNum.forEach(({ i }) => mark('lp_' + i, true)); labErr('Results cannot be negative or empty numbers. Please correct the highlighted fields.'); return; }
     const areason = amend ? val('lb_areason') : '';
     if (amend) mark('lb_areason', !areason);
+    const worst = list.reduce((a, x) => SEV[x.f] > SEV[a] ? x.f : a, '');
+    const crit = val('lb_crit');
+    if (bad.length) { bad.forEach(i => mark('lp_' + i, true)); labErr('Results cannot be negative or empty numbers. Please correct the highlighted fields.'); return; }
     if (!list.length) { labErr('Please enter at least one result.'); return; }
-    if (release && missing.length) { missing.forEach(i => mark('lp_' + i, true)); labErr('Please fill the highlighted required results before releasing.'); return; }
+    if (action !== 'draft' && missing.length) { missing.forEach(i => mark('lp_' + i, true)); labErr('Please fill the highlighted required results first.'); return; }
     if (amend && !areason) { labErr('Please give the reason for the correction.'); return; }
+    if (action === 'release' && worst === 'critical' && !crit) { mark('lb_crit', true); labErr('This is a critical result. Please record who was informed.'); return; }
     const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
     try {
       const client = await getClient();
       const now = new Date().toISOString();
-      const worst = list.reduce((a, x) => SEV[x.f] > SEV[a] ? x.f : a, '');
       const single = panel.p.length === 1;
       const abn = list.filter(x => x.f && x.f !== 'normal');
       const summary = abn.length ? abn.map(x => `${x.n} ${x.v}${x.u ? ' ' + x.u : ''} (${x.f})`).join('; ') : 'All reported parameters within range';
@@ -1463,20 +1598,28 @@
         result_text: single ? undefined : S(summary),
         flag: S(worst), comment: S(val('lb_comment')), sample_id: S(r.sample_id), sample_type: S(r.sample_type),
         entered_at: S(old ? old.entered_at : now), entered_by: S(old ? old.entered_by : staffName()), entered_by_username: S(old ? old.entered_by_username : staffUser()),
+        verified_by: old ? S(old.verified_by) : undefined, verified_by_username: old ? S(old.verified_by_username) : undefined, verified_at: old ? S(old.verified_at) : undefined,
+        self_verified: old ? S(old.self_verified) : (action === 'release' ? S('yes') : undefined),
+        critical_informed: worst === 'critical' ? S(crit) : undefined, critical_informed_at: worst === 'critical' && crit ? S(now) : undefined,
         version: S(String(amend ? ver + 1 : 1)),
         amended_at: amend ? S(now) : undefined, amended_by: amend ? S(staffName()) : undefined, amend_reason: amend ? S(areason) : undefined
       });
       await client.send(new PutItemCommand({ TableName: RESULTS_TABLE, Item: item }));
       if (amend) {
-        await labUpdate(r, ['amended_at = :t', 'amended_by = :b', 'amend_reason = :r', 'result_version = :n'],
-          { ':t': { S: now }, ':b': { S: staffName() }, ':r': { S: areason }, ':n': { S: String(ver + 1) } }, 'seen_at, seen_by');
-        Object.assign(r, { amended_at: now, amended_by: staffName(), amend_reason: areason }); delete r.seen_at; delete r.seen_by;
+        await labUpdate(r, ['amended_at = :t', 'amended_by = :b', 'amend_reason = :r', 'result_version = :n', 'result_flag = :f'],
+          { ':t': { S: now }, ':b': { S: staffName() }, ':r': { S: areason }, ':n': { S: String(ver + 1) }, ':f': { S: worst } }, 'seen_at, seen_by');
+        Object.assign(r, { amended_at: now, amended_by: staffName(), amend_reason: areason, result_flag: worst }); delete r.seen_at; delete r.seen_by;
         labClose(); labOk(`Correction saved for ${esc(r.test)} (${esc(r.patient_name)}). The clinician will see "Labs in!" again, marked as corrected.`);
-      } else if (release) {
-        await labUpdate(r, ['#s = :s', 'released_at = :t', 'released_by = :b', 'released_by_username = :u'],
-          { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } });
-        Object.assign(r, { status: 'released', released_at: now, released_by: staffName() });
-        labClose(); labOk(`Released: ${esc(r.test)} for ${esc(r.patient_name)}. The clinician will see "Labs in!". Entered by ${esc(staffName())} at ${fmtDate(now)}.`);
+      } else if (action === 'release') {
+        await labUpdate(r, ['#s = :s', 'released_at = :t', 'released_by = :b', 'released_by_username = :u', 'entered_by_username = :u', 'result_flag = :f', 'self_verified = :y'],
+          { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() }, ':f': { S: worst }, ':y': { S: 'yes' } }, CLEAR_RETURN);
+        Object.assign(r, { status: 'released', released_at: now, released_by: staffName(), result_flag: worst, entered_by_username: staffUser() });
+        labClose(); labOk(`Released: ${esc(r.test)} for ${esc(r.patient_name)}. The clinician will see "Labs in!". Recorded as released without a second verifier.`);
+      } else if (action === 'submit') {
+        await labUpdate(r, ['#s = :s', 'entered_at = :t', 'entered_by = :b', 'entered_by_username = :u', 'result_flag = :f'],
+          { ':s': { S: 'entered' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() }, ':f': { S: worst } }, CLEAR_RETURN);
+        Object.assign(r, { status: 'entered', entered_by: staffName(), entered_by_username: staffUser(), result_flag: worst }); delete r.return_reason;
+        labClose(); labOk(`Submitted: ${esc(r.test)} for ${esc(r.patient_name)} is waiting for another lab staff member to verify it.`);
       } else {
         await labUpdate(r, ['#s = :s'], { ':s': { S: 'in-progress' } });
         r.status = 'in-progress';
@@ -1487,6 +1630,40 @@
     }
   }
 
+  async function saveVerify() {
+    const r = clLab.find(x => x.request_id === labSel); if (!r) return;
+    if (r.entered_by_username === staffUser()) { labErr('A different lab staff member must verify this result.'); return; }
+    const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
+    try {
+      const client = await getClient();
+      const x = await fetchResult(r);
+      if (!x) throw new Error('Result record not found');
+      const crit = val('lb_crit');
+      if (x.flag === 'critical' && !crit) { mark('lb_crit', true); labErr('This is a critical result. Please record who was informed.'); btns.forEach(b => b.disabled = false); return; }
+      const now = new Date().toISOString();
+      await client.send(new PutItemCommand({ TableName: RESULTS_TABLE, Item: toItem({ ...x, verified_by: staffName(), verified_by_username: staffUser(), verified_at: now,
+        ...(x.flag === 'critical' ? { critical_informed: crit, critical_informed_at: now } : {}) }) }));
+      await labUpdate(r, ['#s = :s', 'released_at = :t', 'released_by = :b', 'released_by_username = :u', 'verified_by = :b'],
+        { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } });
+      Object.assign(r, { status: 'released', released_at: now, released_by: staffName(), verified_by: staffName() });
+      labClose(); labOk(`Verified and released: ${esc(r.test)} for ${esc(r.patient_name)}. Entered by ${esc(r.entered_by || '—')}, verified by ${esc(staffName())} at ${fmtDate(now)}.`);
+    } catch (err) { labErr('Could not save: ' + esc(err.message)); btns.forEach(b => b.disabled = false); }
+  }
+
+  async function saveReturn() {
+    const r = clLab.find(x => x.request_id === labSel); if (!r) return;
+    const why = val('lb_ret'); mark('lb_ret', !why);
+    if (!why) { labErr('Please say why the result is being returned.'); return; }
+    const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
+    try {
+      const now = new Date().toISOString();
+      await labUpdate(r, ['#s = :s', 'return_reason = :r', 'returned_by = :b', 'returned_at = :t'],
+        { ':s': { S: 'in-progress' }, ':r': { S: why }, ':b': { S: staffName() }, ':t': { S: now } });
+      Object.assign(r, { status: 'in-progress', return_reason: why, returned_by: staffName(), returned_at: now });
+      labClose(); labOk(`Returned to ${esc(r.entered_by || 'the person who entered it')} for correction: ${esc(why)}.`);
+    } catch (err) { labErr('Could not save: ' + esc(err.message)); btns.forEach(b => b.disabled = false); }
+  }
+
   async function viewLabResult(requestId) {
     const r = clLab.find(x => x.request_id === requestId);
     const card = document.getElementById('lbForm');
@@ -1494,8 +1671,8 @@
     card.style.display = 'block'; card.innerHTML = '<div class="loading-inline">Loading result…</div>';
     try {
       const x = await fetchResult(r);
-      const row = (k, v) => v ? `<div><span>${k}</span>${esc(v)}</div>` : '';
       const plist = parseParams(x);
+      const prevs = plist.length ? await prevResults(r, 2) : [];
       const ver = x ? parseInt(x.version || '1', 10) : 1;
       let hist = '';
       for (let k = ver - 1; k >= 1; k--) {
@@ -1503,12 +1680,16 @@
         if (h) hist += `<details style="margin-top:10px"><summary>Version ${k} (replaced ${fmtDate(h.superseded_at)} by ${esc(h.superseded_by || '')})</summary>
           ${parseParams(h).length ? paramsTableHtml(parseParams(h)) : `<div class="vit">${esc(h.result_value || h.result_text || '')}</div>`}</details>`;
       }
-      card.innerHTML = labBanner(r) + (x ? `${plist.length ? paramsTableHtml(plist) : ''}
-        <div class="kv">${plist.length ? '' : row('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}${row('Comment', x.comment)}
-          ${row('Entered by', x.entered_by)}${row('Entered at', x.entered_at && fmtDate(x.entered_at))}
-          ${row('Released by', r.released_by)}${row('Released at', r.released_at && fmtDate(r.released_at))}
-          ${r.amended_at ? row('Corrected', `${fmtDate(r.amended_at)} by ${r.amended_by || ''} — ${r.amend_reason || ''}`) : ''}
-          ${row('Seen by clinician', r.seen_at ? `${r.seen_by || ''} · ${fmtDate(r.seen_at)}` : 'Not yet')}</div>${hist}` : '<div class="notice">Result record not found.</div>');
+      lastReport = { r, x, plist };
+      card.innerHTML = labBanner(r) + (x ? `<div style="margin:0 0 10px"><button class="btn-sm ghost" data-lbprint="1">Print report</button> <button class="btn-sm ghost" data-lbpdf="1">Download PDF</button></div>
+        ${plist.length ? paramsTableHtml(plist, prevs) : ''}
+        <div class="kv">${plist.length ? '' : kvRow('Result', [x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text)}${kvRow('Comment', x.comment)}
+          ${kvRow('Entered by', x.entered_by)}${kvRow('Entered at', x.entered_at && fmtDate(x.entered_at))}
+          ${kvRow('Verified by', x.verified_by ? `${x.verified_by} · ${fmtDate(x.verified_at)}` : (x.self_verified ? 'Not independently verified (only lab staff on duty)' : ''))}
+          ${kvRow('Released by', r.released_by)}${kvRow('Released at', r.released_at && fmtDate(r.released_at))}${kvRow('Turnaround', dur(r.requested_at, r.released_at))}
+          ${kvRow('Critical value reported to', x.critical_informed)}
+          ${r.amended_at ? kvRow('Corrected', `${fmtDate(r.amended_at)} by ${r.amended_by || ''} — ${r.amend_reason || ''}`) : ''}
+          ${kvRow('Seen by clinician', r.seen_at ? `${r.seen_by || ''} · ${fmtDate(r.seen_at)}` : 'Not yet')}</div>${hist}` : '<div class="notice">Result record not found.</div>');
       document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; };
       card.scrollIntoView({ behavior: 'smooth', block: 'start' });
     } catch (err) { card.innerHTML = `<div class="error-inline">Could not load: ${esc(err.message)}</div>`; }
