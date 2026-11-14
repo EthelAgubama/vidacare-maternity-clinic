@@ -441,6 +441,7 @@
   let canWrite = false;
   let fdConsults = [];
   let fdReferrals = [];
+  let fdDrafts = [];        // unsaved consultation notes saved as drafts
   let fdSelected = null;    // existing client being seen, or null when registering new
 
   const uuid = () => { const b = crypto.getRandomValues(new Uint8Array(16)); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; const h = [...b].map(x => x.toString(16).padStart(2, '0')).join(''); return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`; };
@@ -482,6 +483,7 @@
     fdPatients.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
     fdVisits.sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
     fdConsults = all.filter(i => String(i.record_type || '').startsWith('consult#')).sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
+    fdDrafts = all.filter(i => String(i.record_type || '').startsWith('draft#consult#'));
     fdReferrals = all.filter(i => String(i.record_type || '').startsWith('referral#')).sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
   }
 
@@ -865,12 +867,21 @@
       <button class="btn-sm" data-result="${esc(r.request_id)}">View result</button></div>`).join('')}</div>`;
   }
 
+  function queueTags(pid) {
+    const tags = [];
+    if (fdDrafts.some(d => d.patient_id === pid && !d.cleared_at)) tags.push('<span class="st wait">Draft notes</span>');
+    const mine = clLab.filter(r => r.patient_id === pid);
+    if (mine.some(r => r.status === 'released' && !r.seen_at)) tags.push('<span class="st done">Labs ready</span>');
+    else if (mine.some(r => !['released', 'rejected'].includes(r.status) && (r.requested_at || '').slice(0, 10) === new Date().toISOString().slice(0, 10))) tags.push('<span class="st f-abnormal">Waiting for labs</span>');
+    return tags.length ? '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' + tags.join('') + '</div>' : '';
+  }
+
   function renderQueue() {
     const today = new Date().toDateString();
     const rows = fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today)
       .sort((a, b) => a.entered_at.localeCompare(b.entered_at))
       .map(v => `<tr><td>${new Date(v.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
-        <td><a class="lnk" data-copen="${esc(v.patient_id)}">${esc(v.patient_name || '—')}</a><br><span class="cid">${esc(v.client_id || '—')}</span></td>
+        <td><a class="lnk" data-copen="${esc(v.patient_id)}">${esc(v.patient_name || '—')}</a><br><span class="cid">${esc(v.client_id || '—')}</span>${queueTags(v.patient_id)}</td>
         <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td><td class="vit">${vitalsSummary(v)}</td></tr>`).join('');
     document.getElementById('clQueue').innerHTML = `<table class="data-table"><thead><tr><th>Arrived</th><th>Client</th><th>Service</th><th>Vitals</th></tr></thead>
       <tbody>${rows || '<tr class="empty-row"><td colspan="4">No one is waiting. Clients checked in at the front desk today will appear here.</td></tr>'}</tbody></table>`;
@@ -917,10 +928,51 @@
     document.getElementById('clWork').scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
+  const CL_GROUPS = { consult: ['c_complaints', 'c_exam', 'c_dx', 'c_next', 'c_plan', 'c_rx'], lab: ['l_urg', 'l_notes'], ref: ['rf_dest', 'rf_urg', 'rf_reason'] };
+  const DRAFT_FIELDS = { complaints: 'c_complaints', examination: 'c_exam', diagnosis: 'c_dx', next_appointment: 'c_next', treatment_plan: 'c_plan', prescriptions: 'c_rx' };
+  let clBlank = new Set();   // groups to leave empty on the next render (just sent or saved)
+  const myDraftKey = () => `draft#consult#${staffUser()}`;
+  const myDraft = () => fdDrafts.find(d => d.patient_id === clSel && d.record_type === myDraftKey() && !d.cleared_at);
+  function captureCl() {
+    const o = { ids: {}, tests: [] };
+    Object.values(CL_GROUPS).flat().forEach(id => { const el = document.getElementById(id); if (el) o.ids[id] = el.value; });
+    o.tests = [...document.querySelectorAll('input[name="labtest"]:checked')].map(c => c.value);
+    return o;
+  }
+  function applyCl(o, blank) {
+    Object.entries(CL_GROUPS).forEach(([grp, ids]) => { if (blank.has(grp)) return; ids.forEach(id => { const el = document.getElementById(id); if (el && o.ids[id] !== undefined) el.value = o.ids[id]; }); });
+    if (!blank.has('lab')) document.querySelectorAll('input[name="labtest"]').forEach(c => { c.checked = o.tests.includes(c.value); });
+  }
+  function updateDraftNote() {
+    const el = document.getElementById('clDraftNote'); if (!el) return;
+    const d = myDraft();
+    el.innerHTML = d ? `<div class="notice">You have a saved draft from ${fmtDate(d.saved_at)}. It is not part of the client's record until you press <b>Save consultation</b>.</div>` : '';
+  }
+  async function saveConsultDraft(silent) {
+    const f = { complaints: val('c_complaints'), examination: val('c_exam'), diagnosis: val('c_dx'), next_appointment: val('c_next'), treatment_plan: val('c_plan'), prescriptions: (document.getElementById('c_rx')?.value || '').trim() };
+    if (!Object.values(f).some(Boolean)) { if (!silent) clNote('Type something in the consultation first, then save the draft.'); return false; }
+    const btn = document.getElementById('clSaveDraft'); if (btn && !silent) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      const client = await getClient();
+      const p = fdPatients.find(x => x.patient_id === clSel);
+      const now = new Date().toISOString();
+      const item = g({ patient_id: S(clSel), record_type: S(myDraftKey()), client_id: S(p.client_id), patient_name: S(p.full_name),
+        ...Object.fromEntries(Object.entries(f).map(([k, v]) => [k, S(v)])), saved_at: S(now), saved_by: S(staffName()), saved_by_username: S(staffUser()) });
+      await client.send(new PutItemCommand({ TableName: TABLE, Item: item }));
+      fdDrafts = fdDrafts.filter(d => !(d.patient_id === clSel && d.record_type === myDraftKey()));
+      fdDrafts.unshift(unmarshal(item));
+      updateDraftNote(); renderQueue();
+      if (!silent) clNote(`Draft saved for ${esc(p.full_name)} at ${fmtDate(now)}. You can leave and come back; nothing needs to be typed again.`, 'ok');
+      return true;
+    } catch (err) { if (!silent) clNote(`Could not save the draft: ${esc(err.message)}`); return false; }
+    finally { if (btn && !silent) { btn.disabled = false; btn.textContent = 'Save draft'; } }
+  }
+
   function renderWorkspace() {
     const p = fdPatients.find(x => x.patient_id === clSel);
     const card = document.getElementById('clWork');
     if (!p) { card.style.display = 'none'; return; }
+    const kept = (canClin && card.dataset.sel === clSel && document.getElementById('c_complaints')) ? captureCl() : null;
     const lastVit = fdVisits.find(v => v.patient_id === clSel && vitalsSummary(v).includes('<b>'));
     const todayStr = new Date().toDateString();
     const curVisit = fdVisits.find(v => v.patient_id === clSel && v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === todayStr)
@@ -947,6 +999,7 @@
     const forms = !canClin ? '<div class="notice">You have read-only access here, so you can view this client but not record consultations, lab requests or referrals.</div>' : `
       <div class="fd-form">
         <h5>New consultation</h5>
+        <div id="clDraftNote"></div>
         <div class="grid2">
           <div class="f"><label>Complaints / history <span class="req">*</span></label><textarea id="c_complaints" rows="3"></textarea></div>
           <div class="f"><label>Examination findings</label><textarea id="c_exam" rows="3"></textarea></div>
@@ -955,7 +1008,7 @@
           <div class="f"><label>Treatment plan</label><textarea id="c_plan" rows="3"></textarea></div>
           <div class="f"><label>Prescriptions <span class="unit">one per line: drug, dose, frequency, duration</span></label><textarea id="c_rx" rows="3"></textarea></div>
         </div>
-        <div style="margin-top:12px"><button class="btn-sm" id="clSaveConsult">Save consultation</button></div>
+        <div style="margin-top:12px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm ghost" id="clSaveDraft">Save draft</button><button class="btn-sm" id="clSaveConsult">Save consultation</button></div>
         <h5>Request lab tests</h5>
         <div class="chk-grid">${LAB_TESTS.map(t => `<label class="chk"><input type="checkbox" name="labtest" value="${esc(t)}"> ${esc(t)}</label>`).join('')}</div>
         <div class="grid2" style="margin-top:12px">
@@ -987,7 +1040,13 @@
       <tbody>${hist || '<tr class="empty-row"><td colspan="4">Nothing recorded for this client yet.</td></tr>'}</tbody></table></div>`;
     card.style.display = 'block';
     document.getElementById('clClose').onclick = () => { card.style.display = 'none'; clSel = null; };
+    card.dataset.sel = clSel;
     if (canClin) {
+      const blank = clBlank; clBlank = new Set();
+      if (kept) applyCl(kept, blank);
+      else { const d = myDraft(); if (d && !blank.has('consult')) Object.entries(DRAFT_FIELDS).forEach(([k, id]) => { const el = document.getElementById(id); if (el && d[k]) el.value = d[k]; }); }
+      updateDraftNote();
+      document.getElementById('clSaveDraft').onclick = () => saveConsultDraft(false);
       document.getElementById('clSaveConsult').onclick = saveConsult;
       document.getElementById('clSendLab').onclick = sendLab;
       document.getElementById('clSendRef').onclick = sendReferral;
@@ -1028,6 +1087,13 @@
         visit.status = 'seen';
       }
       fdConsults.unshift(unmarshal(item));
+      if (myDraft()) {
+        try {
+          await client.send(new PutItemCommand({ TableName: TABLE, Item: g({ patient_id: S(clSel), record_type: S(myDraftKey()), cleared_at: S(now), cleared_by: S(staffName()) }) }));
+          fdDrafts = fdDrafts.filter(d => !(d.patient_id === clSel && d.record_type === myDraftKey()));
+        } catch (e) { /* the consultation itself is saved; the old draft is simply left */ }
+      }
+      clBlank.add('consult');
       renderWorkspace(); renderQueue();
       clNote(`Consultation saved for ${esc(p.full_name)} — entered by ${esc(staffName())} at ${fmtDate(now)}.`, 'ok');
     } catch (err) { clNote(`Could not save: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Save consultation'; }
@@ -1049,8 +1115,10 @@
       }));
       await Promise.all(items.map(Item => client.send(new PutItemCommand({ TableName: LAB_TABLE, Item }))));
       items.forEach(i => clLab.unshift(unmarshal(i)));
-      renderWorkspace(); renderLabList();
-      clNote(`${tests.length} lab test${tests.length > 1 ? 's' : ''} requested for ${esc(p.full_name)}. You'll see "Labs in!" here when the results are released.`, 'ok');
+      const kept = await saveConsultDraft(true);
+      clBlank.add('lab');
+      renderWorkspace(); renderLabList(); renderQueue();
+      clNote(`${tests.length} lab test${tests.length > 1 ? 's' : ''} requested for ${esc(p.full_name)}. You'll see "Labs in!" here when the results are released.${kept ? ' Your consultation notes were kept as a draft, so you can continue when the results are back.' : ''}`, 'ok');
     } catch (err) { clNote(`Could not send: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Send lab request'; }
   }
 
@@ -1071,6 +1139,8 @@
       });
       await client.send(new PutItemCommand({ TableName: TABLE, Item: item }));
       fdReferrals.unshift(unmarshal(item));
+      await saveConsultDraft(true);
+      clBlank.add('ref');
       renderWorkspace();
       clNote(`Referral to ${esc(dest)} created for ${esc(p.full_name)}.`, 'ok');
     } catch (err) { clNote(`Could not save: ${esc(err.message)}`); btn.disabled = false; btn.textContent = 'Create referral'; }
@@ -1161,8 +1231,8 @@
     'Malaria parasite (RDT / film)': { sample: 'Blood (EDTA)', p: [
       sel('res', 'Malaria parasite', PN, ['Negative'], { req: 1 }),
       sel('method', 'Method', ['RDT', 'Blood film (thick / thin)']),
-      sel('sp', 'Species', ['P. falciparum', 'P. malariae', 'P. ovale', 'P. vivax', 'Mixed infection']),
-      num('dens', 'Parasite density', '/µL', null),
+      sel('sp', 'Species', ['P. falciparum', 'P. malariae', 'P. ovale', 'P. vivax', 'Mixed infection'], null, { rt: 'None' }),
+      num('dens', 'Parasite density', '/µL', null, { rt: 'None seen (0)' }),
       sel('grade', 'Density grading', ['+', '++', '+++', '++++'])
     ] },
     'Full blood count': { sample: 'Blood (EDTA)', p: [
@@ -1182,9 +1252,9 @@
     ] },
     'Haemoglobin': { sample: 'Blood (EDTA)', p: [num('hb', 'Haemoglobin', 'g/dL', { M: [13, 17], F: [11, 16] }, { req: 1, clo: 7 })] },
     'Packed cell volume (PCV)': { sample: 'Blood (EDTA)', p: [num('pcv', 'Packed cell volume', '%', PCV_REF, { req: 1, clo: 21 })] },
-    'Blood group & Rh': { sample: 'Blood (EDTA)', p: [sel('res', 'Blood group & Rh', ['A Positive', 'A Negative', 'B Positive', 'B Negative', 'AB Positive', 'AB Negative', 'O Positive', 'O Negative'], null, { req: 1 })] },
+    'Blood group & Rh': { sample: 'Blood (EDTA)', p: [sel('res', 'Blood group & Rh', ['A Positive', 'A Negative', 'B Positive', 'B Negative', 'AB Positive', 'AB Negative', 'O Positive', 'O Negative'], null, { req: 1, rt: 'A, B, AB or O; Rh positive or negative' })] },
     'Sickling test': { sample: 'Blood (EDTA)', p: [sel('res', 'Sickling test', ['Negative', 'Positive'], ['Negative'], { req: 1 })] },
-    'Genotype': { sample: 'Blood (EDTA)', p: [sel('res', 'Genotype', ['AA', 'AS', 'SS', 'AC', 'SC', 'CC'], null, { req: 1 })] },
+    'Genotype': { sample: 'Blood (EDTA)', p: [sel('res', 'Genotype', ['AA', 'AS', 'SS', 'AC', 'SC', 'CC'], null, { req: 1, rt: 'AA is the usual result' })] },
     'Blood glucose (random)': { sample: 'Blood (fluoride)', p: [num('glu', 'Random blood glucose', 'mmol/L', { any: [3.9, 7.8] }, { req: 1, clo: 2.5, chi: 25 })] },
     'Fasting blood glucose': { sample: 'Blood (fluoride)', p: [num('glu', 'Fasting blood glucose', 'mmol/L', { any: [3.9, 5.6] }, { req: 1, clo: 2.5, chi: 25 })] },
     'Oral glucose tolerance test (OGTT)': { sample: 'Blood (fluoride)', p: [
@@ -1203,32 +1273,32 @@
       sel('nit', 'Nitrite', ['Negative', 'Positive'], ['Negative'], { req: 1 }),
       num('ph', 'pH', '', { any: [5, 8] }),
       num('sg', 'Specific gravity', '', { any: [1.005, 1.03] }),
-      txt('pus', 'Pus cells (/HPF)'), txt('rbcs', 'Red cells (/HPF)'), txt('epi', 'Epithelial cells'),
-      txt('cast', 'Casts / crystals'), txt('bact', 'Bacteria / yeast')
+      txt('pus', 'Pus cells (/HPF)', { rt: '0 - 5' }), txt('rbcs', 'Red cells (/HPF)', { rt: '0 - 2' }), txt('epi', 'Epithelial cells', { rt: 'Few' }),
+      txt('cast', 'Casts / crystals', { rt: 'None' }), txt('bact', 'Bacteria / yeast', { rt: 'None' })
     ] },
     'Urine culture': { sample: 'Urine', p: [
       sel('growth', 'Growth', ['No growth', 'Significant growth', 'Mixed growth / contaminated'], ['No growth'], { req: 1 }),
-      txt('org', 'Organism isolated'), txt('count', 'Colony count (CFU/mL)'), txt('sens', 'Sensitivity / remarks')
+      txt('org', 'Organism isolated', { rt: 'None' }), txt('count', 'Colony count (CFU/mL)', { rt: '< 100,000 CFU/mL' }), txt('sens', 'Sensitivity / remarks')
     ] },
-    'Urine pregnancy test': { sample: 'Urine', p: [sel('res', 'Urine pregnancy test', PN, null, { req: 1 })] },
+    'Urine pregnancy test': { sample: 'Urine', p: [sel('res', 'Urine pregnancy test', PN, null, { req: 1, rt: 'Negative = not pregnant' })] },
     'Blood pregnancy test (serum β-hCG)': { sample: 'Blood (plain)', p: [
-      sel('res', 'Serum β-hCG (pregnancy)', PN, null, { req: 1 }),
-      num('q', 'β-hCG level (if measured)', 'mIU/mL', null)
+      sel('res', 'Serum β-hCG (pregnancy)', PN, null, { req: 1, rt: 'Negative = not pregnant' }),
+      num('q', 'β-hCG level (if measured)', 'mIU/mL', null, { rt: '< 5 if not pregnant' })
     ] },
     'HIV screening': { sample: 'Blood (plain)', p: [sel('res', 'HIV screening', RN, ['Non-reactive'], { req: 1 })] },
     'Hepatitis B (HBsAg)': { sample: 'Blood (plain)', p: [sel('res', 'Hepatitis B surface antigen', RN, ['Non-reactive'], { req: 1 })] },
     'VDRL / syphilis': { sample: 'Blood (plain)', p: [sel('res', 'VDRL / syphilis', RN, ['Non-reactive'], { req: 1 })] },
     'Widal test': { sample: 'Blood (plain)', p: [
-      sel('o', 'S. typhi O', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { req: 1 }),
-      sel('h', 'S. typhi H', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { req: 1 }),
-      sel('ah', 'S. paratyphi AH', TITRE, ['Non-reactive', '1:20', '1:40', '1:80']),
-      sel('bh', 'S. paratyphi BH', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'])
+      sel('o', 'S. typhi O', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { req: 1, rt: 'Up to 1:80' }),
+      sel('h', 'S. typhi H', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { req: 1, rt: 'Up to 1:80' }),
+      sel('ah', 'S. paratyphi AH', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { rt: 'Up to 1:80' }),
+      sel('bh', 'S. paratyphi BH', TITRE, ['Non-reactive', '1:20', '1:40', '1:80'], { rt: 'Up to 1:80' })
     ] },
     'Stool microscopy': { sample: 'Stool', p: [
-      sel('cons', 'Consistency', ['Formed', 'Soft', 'Loose', 'Watery']),
-      txt('mac', 'Macroscopy (colour, mucus, blood)'),
+      sel('cons', 'Consistency', ['Formed', 'Soft', 'Loose', 'Watery'], null, { rt: 'Formed' }),
+      txt('mac', 'Macroscopy (colour, mucus, blood)', { rt: 'Brown; no mucus or blood' }),
       sel('par', 'Ova / cysts / parasites', ['None seen', 'Seen'], ['None seen'], { req: 1 }),
-      txt('org', 'Organism(s) seen'), txt('pus', 'Pus cells'), txt('rbc', 'Red cells')
+      txt('org', 'Organism(s) seen', { rt: 'None' }), txt('pus', 'Pus cells', { rt: 'None or occasional' }), txt('rbc', 'Red cells', { rt: 'None' })
     ] }
   };
   const panelFor = t => PANELS[t] || { sample: 'Other', p: [txt('res', 'Result', { req: 1 })] };
@@ -1285,9 +1355,11 @@
   // One model of the report, used by both Print and Download PDF
   function reportModel() {
     const { r, x, plist } = lastReport;
+    const dOnly = iso => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const ident = [['Name', r.patient_name || '—'], ['Client ID', r.client_id || '—'],
+      ['Sex', r.sex ? r.sex.charAt(0).toUpperCase() + r.sex.slice(1) : '—'], ['Age', r.date_of_birth ? ageOf(r.date_of_birth) : '—'],
+      ['Date', dOnly(r.released_at || new Date().toISOString())]];
     const meta = [
-      ['Client', (r.patient_name || '') + (r.client_id ? ' (' + r.client_id + ')' : '')],
-      ['Sex / age', [r.sex, r.date_of_birth ? ageOf(r.date_of_birth) : ''].filter(Boolean).join(' · ')],
       ['Test', r.test],
       ['Sample', [r.sample_id, r.sample_type].filter(Boolean).join(' · ')],
       ['Requested by', (r.requested_by || '') + ' — ' + fmtDate(r.requested_at)],
@@ -1300,25 +1372,66 @@
     const rows = plist.length
       ? plist.map(p => [p.n, [p.v, p.u].filter(Boolean).join(' '), p.r || '', p.f ? (p.f === 'normal' ? 'Normal' : p.f.toUpperCase()) : ''])
       : [[r.test, [x && x.result_value, x && x.unit].filter(Boolean).join(' ') || (x && x.result_text) || '', (x && x.reference_range) || '', (x && x.flag) || '']];
-    return { r, meta, rows, comment: x && x.comment, critical: x && x.critical_informed,
+    const sign = [['Result entered by', x && x.entered_by], [x && x.verified_by ? 'Verified by' : 'Released by', (x && x.verified_by) || r.released_by]].filter(q => q[1]);
+    return { r, ident, meta, rows, sign, comment: x && x.comment, critical: x && x.critical_informed,
       footer: `Printed by ${staffName()} on ${fmtDate(new Date().toISOString())}. Reference ranges are guides; interpret with the clinical picture.` };
   }
-  function printLabReport() {
+  // Clinic details shown at the bottom of every report page. Empty ones are left out.
+  const CLINIC = {
+    name: 'VidaCare Maternity Home',
+    motto: 'Caring for Mothers, Nurturing Futures',
+    address: 'New Site, Prang/Yeji Highway, opposite Charcoal Factory, Prang, Pru West District, Bono East Region',
+    gps: 'TP-4206-2504',
+    phone: '020 872 6334 / 055 647 3698',
+    email: 'Vidacareclinic@gmail.com'
+  };
+  const clinicLines = () => [CLINIC.address, [CLINIC.gps && 'GPS: ' + CLINIC.gps, CLINIC.phone && 'Tel: ' + CLINIC.phone, CLINIC.email && 'Email: ' + CLINIC.email].filter(Boolean).join('   ·   ')].filter(Boolean);
+  const LOGO_FALLBACK = 'https://vidacare-frontend-prod.s3.amazonaws.com/assets/vidacare-logo.jpg';
+  let logoCache;
+  // The logo lives in the same bucket as this page, so it can be read without CORS.
+  async function getLogo() {
+    if (logoCache !== undefined) return logoCache;
+    logoCache = null;
+    try {
+      const res = await fetch(new URL('../assets/vidacare-logo.jpg', location.href).href);
+      if (!res.ok) throw new Error('no logo');
+      const url = URL.createObjectURL(await res.blob());
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const k = Math.min(1, 600 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      const ctx = c.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+      logoCache = { data: c.toDataURL('image/jpeg', 0.92), w: c.width, h: c.height };
+    } catch (e) { logoCache = null; }
+    return logoCache;
+  }
+  async function printLabReport() {
     if (!lastReport) return;
-    const m = reportModel();
-    const w = window.open('', '_blank');
+    const w = window.open('', '_blank');   // open first so the browser allows the pop-up
     if (!w) { alert('Please allow pop-ups for this page to print the report.'); return; }
+    const m = reportModel();
+    const logo = await getLogo();
+    const logoSrc = logo ? logo.data : LOGO_FALLBACK;
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Lab report ${esc(m.r.client_id || '')}</title>
-<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:13px}h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 16px}
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:13px}.hd{display:flex;align-items:center;gap:16px;margin-bottom:16px;border-bottom:2px solid #1B5E20;padding-bottom:12px}.hd img{height:64px;width:auto}
+h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}
 table{width:100%;border-collapse:collapse;margin:10px 0}th,td{border:1px solid #bbb;padding:6px 8px;text-align:left}th{background:#E8F5E9}
+.idrow{display:flex;gap:6px;background:#E8F5E9;border-radius:8px;padding:10px 14px;margin-bottom:10px}.idrow div{flex:1}.idrow div:first-child{flex:2}.idrow small{display:block;color:#555;font-size:10.5px}.idrow b{font-size:14px}
 .meta td{border:none;padding:2px 14px 2px 0}.meta td.k{color:#555;width:150px}.crit{font-weight:700;color:#C62828}
+.wm{position:fixed;top:50%;left:50%;width:62%;transform:translate(-50%,-50%);opacity:.07;z-index:-1}.sig{display:flex;gap:40px;margin-top:38px}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:12px}.sig small{color:#666}
+.contact{position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:11px;color:#555;border-top:1px solid #ccc;padding:6px 20px;background:#fff}
 .foot{margin-top:26px;font-size:11.5px;color:#555}.btn{margin-top:14px;padding:8px 16px}@media print{.btn{display:none}}</style></head><body>
-<h1>VidaCare Maternity Home</h1><div class="sub">Laboratory report</div>
+<img class="wm" src="${logoSrc}" alt="">
+<div class="hd"><img src="${logoSrc}" alt=""><div><h1>${esc(CLINIC.name)}</h1><div class="sub">Laboratory report</div><div class="sub" style="font-size:11.5px;font-style:italic;color:#B8860B">${esc(CLINIC.motto)}</div></div></div>
+<div class="idrow">${m.ident.map(q => `<div><small>${esc(q[0])}</small><b>${esc(q[1])}</b></div>`).join('')}</div>
 <table class="meta"><tbody>${m.meta.map(k => `<tr><td class="k">${esc(k[0])}</td><td>${esc(k[1])}</td></tr>`).join('')}</tbody></table>
 <table><thead><tr><th>Parameter</th><th>Result</th><th>Reference</th><th>Flag</th></tr></thead><tbody>${m.rows.map(q => `<tr><td>${esc(q[0])}</td><td><b>${esc(q[1])}</b></td><td>${esc(q[2])}</td><td class="${q[3] === 'CRITICAL' ? 'crit' : ''}">${esc(q[3])}</td></tr>`).join('')}</tbody></table>
 ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p><b>Critical value reported to:</b> ${esc(m.critical)}</p>` : ''}
-<div class="foot">${esc(m.footer)}</div><button class="btn" onclick="window.print()">Print</button></body></html>`);
-    w.document.close(); w.focus(); setTimeout(() => w.print(), 350);
+<div class="sig">${m.sign.map(q => `<div>${esc(q[0])}: <b>${esc(q[1])}</b><br><small>Signature / stamp</small></div>`).join('')}</div>
+<div class="foot">${esc(m.footer)}</div><button class="btn" onclick="window.print()">Print</button>
+<div style="height:90px"></div>${clinicLines().length ? `<div class="contact">${clinicLines().map(esc).join('<br>')}</div>` : ''}</body></html>`);
+    w.document.close(); w.focus();
+    const go = () => setTimeout(() => w.print(), 250);
+    const im = w.document.querySelector('img'); if (im && !im.complete) { im.onload = go; im.onerror = go; } else go();
   }
   const loadScript = src => new Promise((res, rej) => { const el = document.createElement('script'); el.src = src; el.onload = res; el.onerror = () => rej(new Error('Could not load the PDF tool. Check the internet connection.')); document.head.appendChild(el); });
   // jsPDF's built-in font has no superscripts or Greek letters
@@ -1333,18 +1446,51 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       }
       const m = reportModel();
       const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' });
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(27, 94, 32); doc.text('VidaCare Maternity Home', 14, 18);
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90); doc.text('Laboratory report', 14, 24);
-      doc.autoTable({ startY: 29, body: m.meta.map(k => [pdfSafe(k[0]), pdfSafe(k[1])]), theme: 'plain',
-        styles: { fontSize: 9.5, cellPadding: 1.2, textColor: 20 }, columnStyles: { 0: { cellWidth: 38, textColor: 90 } } });
-      doc.autoTable({ startY: doc.lastAutoTable.finalY + 5, head: [['Parameter', 'Result', 'Reference', 'Flag']], body: m.rows.map(q => q.map(pdfSafe)),
-        headStyles: { fillColor: [27, 94, 32], textColor: 255 }, styles: { fontSize: 10, cellPadding: 2 },
+      const logo = await getLogo();
+      const wmDone = new Set();
+      const wm = () => {
+        if (!logo) return;
+        const n = doc.internal.getCurrentPageInfo().pageNumber; if (wmDone.has(n)) return; wmDone.add(n);
+        const size = 125, h = size * logo.h / logo.w;
+        doc.saveGraphicsState(); doc.setGState(new doc.GState({ opacity: 0.07 })); doc.addImage(logo.data, 'JPEG', (210 - size) / 2, (297 - h) / 2, size, h); doc.restoreGraphicsState();
+      };
+      wm();
+      let tx = 14;
+      if (logo) { const lh = 20, lw = lh * logo.w / logo.h; doc.addImage(logo.data, 'JPEG', 14, 9, lw, lh); tx = 14 + lw + 5; }
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(27, 94, 32); doc.text('VidaCare Maternity Home', tx, 18);
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90); doc.text('Laboratory report', tx, 24.5); doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(184, 134, 11); doc.text(pdfSafe(CLINIC.motto), tx, 29.5); doc.setFont('helvetica', 'normal');
+      doc.setDrawColor(27, 94, 32); doc.setLineWidth(0.5); doc.line(14, 32, 196, 32);
+      doc.setFillColor(232, 245, 233); doc.roundedRect(14, 36, 182, 17, 2, 2, 'F');
+      let cx = 17;
+      [58, 32, 20, 24, 40].forEach((w, i) => {
+        const it = m.ident[i];
+        doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(95); doc.text(pdfSafe(it[0]), cx, 41.5);
+        doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(20);
+        const ln = doc.splitTextToSize(pdfSafe(it[1]), w - 4); doc.text(ln[0], cx, 47.5); if (ln[1]) { doc.setFontSize(8.5); doc.text(ln[1], cx, 51.2); }
+        cx += w;
+      });
+      doc.setFont('helvetica', 'normal');
+      doc.autoTable({ margin: { bottom: 26 }, startY: 57, body: m.meta.map(k => [pdfSafe(k[0]), pdfSafe(k[1])]), theme: 'plain',
+        styles: { fontSize: 9.5, cellPadding: 1.2, textColor: 20 }, columnStyles: { 0: { cellWidth: 38, textColor: 90 } }, willDrawPage: wm });
+      doc.autoTable({ margin: { bottom: 26 }, startY: doc.lastAutoTable.finalY + 5, head: [['Parameter', 'Result', 'Reference', 'Flag']], body: m.rows.map(q => q.map(pdfSafe)),
+        theme: 'grid', willDrawPage: wm, headStyles: { fillColor: [27, 94, 32], textColor: 255, lineColor: [27, 94, 32] }, styles: { fontSize: 10, cellPadding: 2, lineColor: [200, 200, 200], lineWidth: 0.2, textColor: 20 },
         didParseCell: d => { if (d.section === 'body' && d.column.index === 3) { const v = d.cell.raw; if (v === 'CRITICAL') { d.cell.styles.textColor = [198, 40, 40]; d.cell.styles.fontStyle = 'bold'; } else if (v && v !== 'Normal') d.cell.styles.fontStyle = 'bold'; } } });
       let y = doc.lastAutoTable.finalY + 8;
       doc.setFontSize(10); doc.setTextColor(20);
       if (m.comment) { const t = doc.splitTextToSize('Comment: ' + pdfSafe(m.comment), 180); doc.text(t, 14, y); y += t.length * 5 + 2; }
       if (m.critical) { const t = doc.splitTextToSize('Critical value reported to: ' + pdfSafe(m.critical), 180); doc.text(t, 14, y); y += t.length * 5 + 2; }
-      doc.setFontSize(8.5); doc.setTextColor(110); doc.text(doc.splitTextToSize(pdfSafe(m.footer), 180), 14, Math.min(y + 8, 285));
+      // signature block
+      let sy = y + 20; if (sy > 245) { doc.addPage(); wm(); sy = 40; }
+      doc.setDrawColor(60); doc.setLineWidth(0.3); doc.setFontSize(9.5);
+      m.sign.forEach((q, i) => { const x0 = 14 + i * 95; doc.line(x0, sy, x0 + 82, sy); doc.setTextColor(20); doc.text(pdfSafe(q[0] + ': ' + q[1]), x0, sy + 5); doc.setTextColor(120); doc.setFontSize(8.5); doc.text('Signature / stamp', x0, sy + 10); doc.setFontSize(9.5); });
+      doc.setFontSize(8.5); doc.setTextColor(110); doc.text(doc.splitTextToSize(pdfSafe(m.footer), 180), 14, sy + 20);
+      // footer on every page
+      const pages = doc.getNumberOfPages();
+      for (let i = 1; i <= pages; i++) {
+        doc.setPage(i); doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(14, 280, 196, 280); doc.setFontSize(7.5); doc.setTextColor(95);
+        let fy = 284.5; clinicLines().forEach(l => { doc.splitTextToSize(pdfSafe(l), 182).forEach(part => { doc.text(part, 105, fy, { align: 'center' }); fy += 3.6; }); });
+        doc.text(`Page ${i} of ${pages}`, 196, 294.5, { align: 'right' });
+      }
       const safe = t => String(t || '').replace(/[^A-Za-z0-9-]+/g, '_');
       doc.save(`LabReport_${safe(m.r.client_id || m.r.patient_name)}_${safe(m.r.sample_id || m.r.test)}.pdf`);
     } catch (err) { alert('Could not make the PDF: ' + err.message); }
