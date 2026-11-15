@@ -223,7 +223,8 @@
   @media (max-width:760px){ .chk-grid{ grid-template-columns:1fr 1fr; } }
   @media (max-width:480px){ .chk-grid{ grid-template-columns:1fr; } }
   .recent-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
-  .recent-scroll { max-height:26vh; overflow:auto; }
+  /* long lists use most of the screen height (v24) */
+  .recent-scroll { max-height:70vh; overflow:auto; }
   .recent-scroll table th { position:sticky; top:0; }
   @media (max-width:760px){ .grid2,.grid3,.grid4,.recent-grid{ grid-template-columns:1fr 1fr; } .recent-grid{grid-template-columns:1fr;} }
   @media (max-width:480px){ .grid2,.grid3,.grid4{ grid-template-columns:1fr; } }
