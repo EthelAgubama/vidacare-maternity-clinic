@@ -3008,10 +3008,10 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       </div>
       <div id="bgPanePaid" style="display:none">
         <div class="data-card"><h4>Today's takings</h4><div id="bgToday"></div></div>
-        <div class="data-card"><h4>Payments received</h4><div class="recent-scroll" id="bgPaid"></div></div>
+        <div class="data-card"><h4>Payments received</h4><div class="recent-scroll" id="bgPaid" style="max-height:60vh"></div></div>
       </div>
       <div id="bgPaneAccts" style="display:none">
-        <div class="data-card"><h4>Client accounts</h4><div class="vit" style="margin-bottom:8px">Everything billed to and paid by each client. Press a name to see the full payment trail.</div><div class="recent-scroll" id="bgAccts"></div></div>
+        <div class="data-card"><h4>Client accounts</h4><div class="vit" style="margin-bottom:8px">Everything billed to and paid by each client. Press a name to see the full payment trail.</div><div class="recent-scroll" id="bgAccts" style="max-height:65vh"></div></div>
       </div>
       <div id="bgPanePrices" style="display:none">
         <div class="data-card"><h4>Service price list</h4>
@@ -3020,7 +3020,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
           <div id="bgPriceNote"></div>
           ${bgPriceErr ? `<div class="error-inline" style="margin-top:10px">The price list could not be loaded (${esc(bgPriceErr)}). If this is new, ask the administrator to finish the Billing setup.</div>` : ''}
           <div class="vit" id="bgPCount" style="margin-top:8px"></div>
-          <div class="recent-scroll" id="bgPriceList" style="margin-top:6px"></div></div>
+          <div class="recent-scroll" id="bgPriceList" style="margin-top:6px;max-height:75vh"></div></div>
       </div>
     </div>`;
   }
