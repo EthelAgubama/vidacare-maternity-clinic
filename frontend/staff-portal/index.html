@@ -2947,10 +2947,21 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   const METHOD_SHORT = { 'Cash': 'Cash', 'Mobile money (MoMo)': 'MoMo', 'Card / POS': 'Card / POS', 'NHIS / insurance': 'NHIS / insurance' };
   const MOMO_NETS = ['MTN MoMo', 'Telecel Cash', 'AirtelTigo Money'];
   const INS_TYPES = ['NHIS', 'Private insurance', 'Company / other'];
-  const PRICE_CATS = ['Consultation', 'Antenatal', 'Postnatal', 'Family planning', 'Child welfare', 'Delivery', 'Lab test', 'Procedure', 'Ward / admission', 'Other'];
-  const SERVICE_STARTER = [['Consultation (general OPD)', 'Consultation'], ['Antenatal visit', 'Antenatal'], ['Postnatal visit', 'Postnatal'], ['Family planning consultation', 'Family planning'],
-    ['Child welfare visit', 'Child welfare'], ['Normal delivery', 'Delivery'], ['Caesarean section', 'Delivery'], ['Ultrasound scan', 'Procedure'], ['Dressing / wound care', 'Procedure'],
-    ['Injection (administration)', 'Procedure'], ['IV drip (administration)', 'Procedure'], ['Ward admission (per day)', 'Ward / admission']];
+  const PRICE_CATS = ['Consultation', 'Antenatal', 'Delivery', 'Postnatal', 'Family planning', 'Child welfare', 'Procedure', 'Lab test', 'Ward / admission', 'Other'];
+  const catRank = c => c === 'Other' ? 9999 : (PRICE_CATS.indexOf(c) >= 0 ? PRICE_CATS.indexOf(c) : 500);
+  const catCmp = (a, b) => catRank(a) - catRank(b) || String(a).localeCompare(String(b));
+  const allCats = () => [...new Set([...PRICE_CATS.filter(c => c !== 'Other'), ...bgPrices.map(p => p.category).filter(Boolean)])].sort(catCmp).concat(['Other']).filter((c, i, a) => a.indexOf(c) === i);
+  const SERVICE_STARTER = [
+    ['General OPD consultation', 'Consultation'], ['Doctor / specialist review', 'Consultation'], ['Follow-up review', 'Consultation'], ['Emergency consultation', 'Consultation'],
+    ['Antenatal booking visit', 'Antenatal'], ['Antenatal review visit', 'Antenatal'], ['Obstetric ultrasound scan', 'Antenatal'], ['Fetal heart monitoring (CTG)', 'Antenatal'], ['Antenatal counselling', 'Antenatal'],
+    ['Normal delivery', 'Delivery'], ['Assisted (vacuum) delivery', 'Delivery'], ['Caesarean section', 'Delivery'], ['Episiotomy and repair', 'Delivery'], ['Perineal tear repair', 'Delivery'], ['Newborn care package', 'Delivery'], ['Delivery room and bed (per stay)', 'Delivery'],
+    ['Postnatal visit (mother)', 'Postnatal'], ['Postnatal baby check', 'Postnatal'], ['Breastfeeding support', 'Postnatal'],
+    ['Family planning consultation', 'Family planning'], ['Implant insertion', 'Family planning'], ['Implant removal', 'Family planning'], ['IUD insertion', 'Family planning'], ['IUD removal', 'Family planning'], ['Injectable contraceptive (administration)', 'Family planning'],
+    ['Child welfare visit', 'Child welfare'], ['Immunisation (administration)', 'Child welfare'], ['Growth monitoring', 'Child welfare'],
+    ['Circumcision', 'Procedure'], ['Ultrasound scan (general)', 'Procedure'], ['Cervical screening (Pap smear)', 'Procedure'], ['Dressing / wound care', 'Procedure'], ['Suturing', 'Procedure'], ['Incision and drainage', 'Procedure'],
+    ['Injection (administration)', 'Procedure'], ['IV cannulation and drip (administration)', 'Procedure'], ['Nebulisation', 'Procedure'], ['Urinary catheterisation', 'Procedure'], ['Blood transfusion (administration)', 'Procedure'], ['Minor surgical procedure', 'Procedure'],
+    ['Ward admission (per day)', 'Ward / admission'], ['Observation bed (per day)', 'Ward / admission'], ['Newborn nursery (per day)', 'Ward / admission'],
+    ['Registration / folder fee', 'Other'], ['Medical report / certificate', 'Other'], ['Ambulance / referral transport', 'Other']];
   const bgLinesOf = inv => { try { return JSON.parse(inv.lines_json || '[]'); } catch (e) { return []; } };
   const bgAmt = inv => Number(inv.amount) || 0;
   const to2 = n => Math.round((Number(n) || 0) * 100) / 100;
@@ -3005,8 +3016,8 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <div id="bgPanePrices" style="display:none">
         <div class="data-card"><h4>Service price list</h4>
           <div class="fd-search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input id="bgPSearch" type="search" placeholder="Search a service" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm ghost" id="bgPClear">Clear</button>
-            ${canBill ? '<button class="btn-sm" data-bgact="padd|||">Add a service</button>' : ''}${canBill && !bgPrices.length && !bgPriceErr ? '<button class="btn-sm ghost" data-bgact="pstarter|||">Add common services</button>' : ''}</div>
-          ${canBill && !bgPrices.length && !bgPriceErr ? '<div class="notice" id="bgStarterNote" style="margin-top:10px"><b>New here?</b> "Add common services" fills the list with common clinic services and all the lab tests (names only, with no price). Then press Edit on each one and type its price. A service with no price cannot be charged.</div>' : ''}
+            ${canBill ? '<button class="btn-sm" data-bgact="padd|||">Add a service</button>' : ''}${canBill ? '<button class="btn-sm ghost" data-bgact="pstarter|||">Add missing common services</button>' : ''}</div>
+          <div id="bgPriceNote"></div>
           ${bgPriceErr ? `<div class="error-inline" style="margin-top:10px">The price list could not be loaded (${esc(bgPriceErr)}). If this is new, ask the administrator to finish the Billing setup.</div>` : ''}
           <div class="vit" id="bgPCount" style="margin-top:8px"></div>
           <div class="recent-scroll" id="bgPriceList" style="margin-top:6px"></div></div>
@@ -3065,14 +3076,35 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   }
   function renderBgPrices() {
     const el = document.getElementById('bgPriceList'); if (!el) return;
-    const q = String(document.getElementById('bgPSearch')?.value || '').toLowerCase().trim();
-    const list = bgPrices.filter(p => !q || (p.name + ' ' + (p.category || '')).toLowerCase().includes(q)).sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || ''));
-    document.getElementById('bgPCount').textContent = `${list.length} service${list.length === 1 ? '' : 's'}${bgPrices.some(p => p.price === undefined || p.price === null || p.price === '') ? ' · some have no price yet' : ''}`;
-    const rows = list.map(p => { const has = p.price !== undefined && p.price !== null && p.price !== '', off = p.active === 'no'; return `<tr${off ? ' style="opacity:.55"' : ''}>
-      <td><b>${esc(p.name)}</b></td><td>${esc(p.category || '')}</td><td class="n">${has ? money(p.price) : '<span class="st f-abnormal">No price</span>'}</td>
+    const q = String(document.getElementById('bgPSearch')?.value || '').toLowerCase().trim(), hasP = p => p.price !== undefined && p.price !== null && p.price !== '';
+    const list = bgPrices.filter(p => !q || (p.name + ' ' + (p.category || '')).toLowerCase().includes(q)).sort((a, b) => catCmp(a.category || 'Other', b.category || 'Other') || (a.name || '').localeCompare(b.name || ''));
+    const nNo = bgPrices.filter(p => p.active !== 'no' && !hasP(p)).length;
+    document.getElementById('bgPCount').textContent = `${list.length} service${list.length === 1 ? '' : 's'}${nNo ? ` · ${nNo} still without a price` : ' · all priced'}`;
+    const note = document.getElementById('bgPriceNote');
+    if (note) note.innerHTML = canBill && nNo ? `<div class="notice" style="margin-top:10px"><b>${nNo} service${nNo > 1 ? 's have' : ' has'} no price yet.</b> Type a price in the Price box and press Enter (or click away) to save it. A service with no price cannot be charged. You can do this a few at a time.</div>` : '';
+    let cat = '';
+    const rows = list.map(p => { const has = hasP(p), off = p.active === 'no', head = p.category !== cat ? (cat = p.category, `<tr><td colspan="4" style="background:#E8F5E9;font-weight:700;color:#1B5E20">${esc(p.category || 'Other')}</td></tr>`) : '';
+      return head + `<tr${off ? ' style="opacity:.55"' : ''}>
+      <td><b>${esc(p.name)}</b></td>
+      <td class="n" style="white-space:nowrap">${canBill ? `GH₵ <input data-pi="${esc(p.price_id)}" type="number" min="0" step="0.01" value="${has ? esc(p.price) : ''}" placeholder="no price" style="width:110px;padding:6px 8px;border:1.5px solid ${has ? '#D5DED1' : '#F9B800'};border-radius:8px;font:inherit"><span class="vit" data-pistat="${esc(p.price_id)}"></span>` : (has ? money(p.price) : '<span class="st f-abnormal">No price</span>')}</td>
       <td>${off ? '<span class="st wait">Not in use</span>' : '<span class="st rel">In use</span>'}</td>
       <td style="white-space:nowrap">${canBill ? `<a class="lnk" data-bgact="pedit|${esc(p.price_id)}|">Edit</a> · <a class="lnk" data-bgact="ptoggle|${esc(p.price_id)}|">${off ? 'Use again' : 'Stop using'}</a>` : ''}</td></tr>`; }).join('');
-    el.innerHTML = `<table class="data-table"><thead><tr><th>Service</th><th>Category</th><th class="n">Price</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="5">No services yet.</td></tr>'}</tbody></table>`;
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Service</th><th class="n">Price</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="4">No services yet.</td></tr>'}</tbody></table>`;
+  }
+  // Save a price straight from the list
+  async function bgInlinePrice(inp) {
+    const id = inp.dataset.pi, p = bgPrices.find(x => x.price_id === id); if (!p || !canBill) return;
+    const st = document.querySelector(`[data-pistat="${id}"]`), had = p.price !== undefined && p.price !== null && p.price !== '', raw = inp.value.trim(), v = parseFloat(raw);
+    if (raw === '' && !had) return;
+    if (raw === '' || isNaN(v) || v < 0) { inp.value = had ? p.price : ''; if (st) { st.style.color = '#C62828'; st.textContent = ' enter a price of 0 or more'; } return; }
+    const price = to2(v); if (had && Number(p.price) === price) return;
+    try {
+      await ddbUpdate({ table: PRICE_TABLE, key: { price_id: { S: id } }, set: { price, updated_at: new Date().toISOString(), updated_by: staffName() } });
+      p.price = price; inp.value = price; inp.style.borderColor = '#D5DED1'; if (st) { st.style.color = '#2E7D32'; st.textContent = ' ✓ saved'; }
+      const nNo = bgPrices.filter(x => x.active !== 'no' && (x.price === undefined || x.price === null || x.price === '')).length;
+      document.getElementById('bgPCount').textContent = `${bgPrices.length} service${bgPrices.length === 1 ? '' : 's'}${nNo ? ` · ${nNo} still without a price` : ' · all priced'}`;
+      const note = document.getElementById('bgPriceNote'); if (note && !nNo) note.innerHTML = '';
+    } catch (err) { if (st) { st.style.color = '#C62828'; st.textContent = ' not saved: ' + err.message; } }
   }
   function bgRenderAll() { renderBgTabs(); renderBgPay(); renderBgPaid(); renderBgAccts(); renderBgPrices(); }
 
@@ -3150,21 +3182,36 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   const tBlank = bal => ({ m: '', net: '', ref: '', amt: bal > 0 ? String(bal) : '', recv: '' });
   function tenderRows() {
     return bgTenders.map((t, i) => {
-      const extra = t.m === 'Cash' ? `<div class="f"><label>Cash handed over <span class="unit">optional, for change</span></label><input data-bt="${i}|recv" type="number" min="0" step="0.01" value="${esc(t.recv)}"></div><div class="f"><label>Change</label><div data-bchg="${i}" style="padding:10px 0;font-weight:700;color:#1B5E20"></div></div>`
+      const extra = t.m === 'Cash' ? `<div class="f"><label>Change to give back</label><div data-bchg="${i}" style="padding:10px 0;font-size:17px;font-weight:700;color:#1B5E20">—</div></div>`
         : t.m === 'Mobile money (MoMo)' ? `<div class="f"><label>Network <span class="req">*</span></label><select data-bt="${i}|net"><option value="">Select…</option>${MOMO_NETS.map(o => `<option ${t.net === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div><div class="f"><label>Transaction ID <span class="req">*</span></label><input data-bt="${i}|ref" value="${esc(t.ref)}" autocomplete="off"></div>`
         : t.m === 'Card / POS' ? `<div class="f"><label>Approval code or last 4 digits <span class="req">*</span></label><input data-bt="${i}|ref" value="${esc(t.ref)}" autocomplete="off"></div>`
         : t.m === 'NHIS / insurance' ? `<div class="f"><label>Type <span class="req">*</span></label><select data-bt="${i}|net"><option value="">Select…</option>${INS_TYPES.map(o => `<option ${t.net === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div><div class="f"><label>Member or claim number <span class="req">*</span></label><input data-bt="${i}|ref" value="${esc(t.ref)}" autocomplete="off"></div>` : '';
       return `<div class="rx-row" style="grid-template-columns:1.6fr 1fr 2.4fr auto;border-bottom:1px dashed #D5DED1;padding-bottom:10px"><div class="f"><label>Paid by <span class="req">*</span></label><select data-bt="${i}|m"><option value="">Select…</option>${PAY_METHODS.map(o => `<option ${t.m === o ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>
-        <div class="f"><label>Amount (GH₵) <span class="req">*</span></label><input data-bt="${i}|amt" type="number" min="0" step="0.01" value="${esc(t.amt)}"></div>
+        <div class="f"><label>${t.m === 'Cash' ? 'Cash received from the client (GH₵)' : 'Amount (GH₵)'} <span class="req">*</span></label><input data-bt="${i}|amt" type="number" min="0" step="0.01" value="${esc(t.amt)}"></div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">${extra}</div>
         <div class="f"><label>&nbsp;</label>${bgTenders.length > 1 ? `<button class="btn-sm ghost" type="button" data-btrm="${i}">×</button>` : ''}</div></div>`;
     }).join('');
   }
+  // Works out how much of each payment counts toward the bill. MoMo, card and insurance count in full;
+  // cash counts only up to what is still owed, and the rest is change to give back.
+  function bgApply(bal) {
+    const num = t => { const a = parseFloat(t.amt); return isNaN(a) ? 0 : to2(a); };
+    const nonCash = to2(bgTenders.filter(t => t.m !== 'Cash').reduce((s, t) => s + num(t), 0));
+    let rem = to2(bal - nonCash); const applied = [], change = [];
+    bgTenders.forEach((t, i) => {
+      if (t.m === 'Cash') { const a = num(t), ap = Math.max(0, Math.min(a, rem)); applied[i] = ap; change[i] = to2(a - ap); rem = to2(rem - ap); }
+      else { applied[i] = num(t); change[i] = 0; }
+    });
+    const total = to2(applied.reduce((s, x) => s + x, 0));
+    return { applied, change, total, left: to2(bal - total), over: nonCash > bal + 0.005, giveBack: to2(change.reduce((s, x) => s + x, 0)) };
+  }
   function tenderSummary(inv) {
-    const bal = bgBal(inv), sum = to2(bgTenders.reduce((s, t) => s + (parseFloat(t.amt) || 0), 0)), left = to2(bal - sum), el = document.getElementById('bgTenderSum'); if (!el) return;
-    el.innerHTML = `<span>Balance to pay <b>${money(bal)}</b></span> · <span>Entered <b>${money(sum)}</b></span> · ` + (left > 0.005 ? `<span style="color:#B8860B">Still unpaid after this <b>${money(left)}</b></span>` : left < -0.005 ? `<span style="color:#C62828">Too much by <b>${money(-left)}</b></span>` : '<span style="color:#2E7D32"><b>Fully covered</b></span>');
-    const pr = document.getElementById('bgPartBox'); if (pr) pr.style.display = left > 0.005 && sum > 0 ? '' : 'none';
-    bgTenders.forEach((t, i) => { const c = document.querySelector(`[data-bchg="${i}"]`); if (!c) return; const r = parseFloat(t.recv), a = parseFloat(t.amt); c.textContent = isNaN(r) || isNaN(a) ? '—' : (r >= a ? money(r - a) : 'Short by ' + money(a - r)); c.style.color = r >= a ? '#1B5E20' : '#C62828'; });
+    const bal = bgBal(inv), r = bgApply(bal), el = document.getElementById('bgTenderSum'); if (!el) return;
+    el.innerHTML = `<span>Balance to pay <b>${money(bal)}</b></span> · <span>Counted <b>${money(r.total)}</b></span> · ` +
+      (r.over ? `<span style="color:#C62828">More than the balance. Reduce the non-cash amounts.</span>` : r.left > 0.005 ? `<span style="color:#B8860B">Still unpaid after this <b>${money(r.left)}</b></span>` : '<span style="color:#2E7D32"><b>Fully covered</b></span>') +
+      (r.giveBack > 0.005 ? `<div style="margin-top:6px;background:#FFF4D6;border:2px solid #F9B800;border-radius:10px;padding:10px 14px;color:#3B2A00;font-size:18px">Give back change: <b>${money(r.giveBack)}</b></div>` : '');
+    const pr = document.getElementById('bgPartBox'); if (pr) pr.style.display = r.left > 0.005 && r.total > 0 && !r.over ? '' : 'none';
+    bgTenders.forEach((t, i) => { const c = document.querySelector(`[data-bchg="${i}"]`); if (c) c.textContent = r.change[i] > 0.005 ? money(r.change[i]) : '—'; });
   }
   async function bgPayForm(pid, id) {
     const inv = bgFind(pid, id); if (!inv || !canBill) return;
@@ -3195,26 +3242,24 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     const inv = bgFind(pid, id); if (!inv) return;
     const bal = bgBal(inv), note = val('b_note');
     clearErrs(document.getElementById('bgForm')); document.getElementById('bgMsg').innerHTML = '';
-    const errs = [], q = (i, f) => document.querySelector(`[data-bt="${i}|${f}"]`);
-    let sum = 0;
+    const errs = [], q = (i, f) => document.querySelector(`[data-bt="${i}|${f}"]`), ap = bgApply(bal);
     bgTenders.forEach((t, i) => {
       const a = parseFloat(t.amt);
       if (!t.m) errs.push([q(i, 'm'), 'Choose how this part was paid.']);
-      if (isNaN(a) || !(a > 0)) errs.push([q(i, 'amt'), 'Enter the amount paid this way (more than 0).']); else sum += a;
-      if (t.m === 'Cash' && t.recv !== '') { const r = parseFloat(t.recv); if (isNaN(r) || r < a) errs.push([q(i, 'recv'), 'The cash handed over is less than the amount.']); }
+      if (isNaN(a) || !(a > 0)) errs.push([q(i, 'amt'), t.m === 'Cash' ? 'Enter the cash received (more than 0).' : 'Enter the amount paid this way (more than 0).']);
+      else if (t.m === 'Cash' && ap.applied[i] <= 0 && !ap.over) errs.push([q(i, 'amt'), 'Nothing is left to pay, so this cash is not needed. Remove this row.']);
       if (t.m === 'Mobile money (MoMo)') { if (!t.net) errs.push([q(i, 'net'), 'Choose the mobile money network.']); if (!t.ref.trim()) errs.push([q(i, 'ref'), 'Enter the transaction ID.']); }
       if (t.m === 'Card / POS' && !t.ref.trim()) errs.push([q(i, 'ref'), 'Enter the approval code or the last 4 digits of the card.']);
       if (t.m === 'NHIS / insurance') { if (!t.net) errs.push([q(i, 'net'), 'Choose the type of cover.']); if (!t.ref.trim()) errs.push([q(i, 'ref'), 'Enter the member or claim number.']); }
     });
-    sum = to2(sum);
-    if (!errs.length && sum > bal + 0.005) errs.push([q(0, 'amt'), `The amounts add up to ${money(sum)}, which is more than the balance of ${money(bal)}.`]);
-    if (!errs.length && sum < bal - 0.005 && !document.getElementById('b_part')?.checked) errs.push([document.getElementById('b_part'), `The amounts add up to ${money(sum)}, but ${money(bal)} is due. Tick this box if it is a part payment, or add the rest above.`]);
+    if (!errs.length && ap.over) errs.push([q(bgTenders.findIndex(t => t.m !== 'Cash'), 'amt'), `The non-cash amounts are more than the balance of ${money(bal)}. Only cash can be more than the balance (the rest is change).`]);
+    if (!errs.length && ap.left > 0.005 && !document.getElementById('b_part')?.checked) errs.push([document.getElementById('b_part'), `Only ${money(ap.total)} of the ${money(bal)} due is covered. Tick this box if it is a part payment, or add the rest above.`]);
     if (errs.length) { showErrs(errs.filter(e => e[0])); return; }
-    const btn = document.getElementById('bgConfirm'); btn.disabled = true; btn.textContent = 'Saving…';
+    const sum = ap.total, btn = document.getElementById('bgConfirm'); btn.disabled = true; btn.textContent = 'Saving…';
     try {
       const now = new Date().toISOString(), no = 'RC-' + now.slice(2, 10).replace(/-/g, '') + '-' + uuid().replace(/-/g, '').slice(0, 6).toUpperCase(), prof = await bgProfile(pid);
-      const tenders = bgTenders.map(t => { const a = to2(parseFloat(t.amt)), o = { m: t.m, amt: a }; if (t.net) o.net = t.net; if (t.ref.trim()) o.ref = t.ref.trim();
-        if (t.m === 'Cash') { const r = t.recv === '' ? a : to2(parseFloat(t.recv)); o.recv = r; o.chg = to2(r - a); } return o; });
+      const tenders = bgTenders.map((t, i) => { const o = { m: t.m, amt: ap.applied[i] }; if (t.net) o.net = t.net; if (t.ref.trim()) o.ref = t.ref.trim();
+        if (t.m === 'Cash') { o.recv = to2(parseFloat(t.amt)); o.chg = ap.change[i]; } return o; });
       const ev = { no, at: now, by: staffName(), u: staffUser(), tenders, amt: sum, bal: to2(bal - sum) };
       if (note) ev.note = note; if (prof && prof.id_type && prof.id_number) { ev.idt = prof.id_type; ev.idn = prof.id_number; } if (prof && prof.nhis_number) ev.nhis = prof.nhis_number;
       const all = bgPays(inv).concat([ev]), paidNow = to2(bgPaidTotal(inv) + sum), full = paidNow >= bgAmt(inv) - 0.005;
@@ -3222,7 +3267,8 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
         : { cond: '#pj = :old', condNames: { '#pj': 'payments_json' }, condVals: { ':old': { S: inv.payments_json } } };
       await ddbUpdate({ table: BILL_TABLE, key: bgKey(inv), ...cond, set: { status: full ? 'paid' : 'part', payments_json: JSON.stringify(all), paid_total: paidNow, last_paid_at: now } });
       await bgRefresh(); bgRenderAll(); bgClose();
-      bgOk(`${money(sum)} received from ${esc(inv.patient_name)}. Receipt ${esc(no)}.${full ? '' : ` ${money(bal - sum)} is still to pay.`}`);
+      const gb = ap.giveBack;
+      bgOk(`${money(sum)} received from ${esc(inv.patient_name)}. Receipt ${esc(no)}.${full ? '' : ` ${money(bal - sum)} is still to pay.`}${gb > 0.005 ? ` <b>Give the client ${money(gb)} change.</b>` : ''}`);
       bgReceiptView(bgFind(pid, id), no);
     } catch (err) {
       bgErr(/Conditional/i.test(err.message) ? 'Another cashier already took a payment on this invoice, or it was cancelled. The list has been refreshed. Please check it and try again.' : `Could not save the payment: ${esc(err.message)}`);
@@ -3250,9 +3296,9 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   }
 
   // ---- New charge ----
-  function bgPricedList() { return bgPrices.filter(p => p.active !== 'no' && p.price !== undefined && p.price !== null && p.price !== '').sort((a, b) => (a.category || '').localeCompare(b.category || '') || (a.name || '').localeCompare(b.name || '')); }
+  function bgPricedList() { return bgPrices.filter(p => p.active !== 'no' && p.price !== undefined && p.price !== null && p.price !== '').sort((a, b) => catCmp(a.category || 'Other', b.category || 'Other') || (a.name || '').localeCompare(b.name || '')); }
   function bgLineRows() {
-    const priced = bgPricedList(), cats = [...new Set(priced.map(p => p.category || 'Other'))];
+    const priced = bgPricedList(), cats = [...new Set(priced.map(p => p.category || 'Other'))].sort(catCmp);
     const opts = l => `<option value="">Choose a service…</option>` + cats.map(c => `<optgroup label="${esc(c)}">${priced.filter(p => (p.category || 'Other') === c).map(p => `<option value="${esc(p.price_id)}" ${l.pid === p.price_id ? 'selected' : ''}>${esc(p.name)} — ${money(p.price)}</option>`).join('')}</optgroup>`).join('') + `<option value="custom" ${l.pid === 'custom' ? 'selected' : ''}>Other (type it)</option>`;
     return bgLines.map((l, i) => `<div class="rx-row" style="grid-template-columns:3fr 2fr 1fr 1fr auto">
       <div class="f"><label>Service</label><select data-bl="${i}|pid">${opts(l)}</select></div>
@@ -3340,22 +3386,25 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     bgShow(`<div class="fd-form"><h5>${p ? 'Edit service' : 'Add a service'}</h5>
       <div class="grid3">
         <div class="f"><label>Service name <span class="req">*</span></label><input id="p_name" value="${esc(p ? p.name : '')}" autocomplete="off"></div>
-        <div class="f"><label>Category <span class="req">*</span></label><select id="p_cat"><option value="">Select…</option>${PRICE_CATS.map(c => `<option ${p && p.category === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+        <div class="f"><label>Category <span class="req">*</span></label><select id="p_cat"><option value="">Select…</option>${allCats().map(c => `<option value="${esc(c)}" ${p && p.category === c ? 'selected' : ''}>${esc(c === 'Other' ? 'Other (not sure where it belongs yet)' : c)}</option>`).join('')}<option value="__new__">+ New category…</option></select><input id="p_newcat" placeholder="Type the new category name" style="display:none;margin-top:8px" maxlength="30"></div>
         <div class="f"><label>Price (GH₵) ${p && (p.price === undefined || p.price === '') ? '<span class="unit">no price yet</span>' : '<span class="req">*</span>'}</label><input id="p_price" type="number" min="0" step="0.01" value="${p && p.price !== undefined && p.price !== '' ? esc(p.price) : ''}"></div>
       </div>
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="bgPSave">Save</button><button class="btn-sm ghost" id="bgCancel">Cancel</button></div>
       <div class="stamp">Every change is recorded with your name and the time.</div></div>`);
     document.getElementById('bgCancel').onclick = bgClose;
+    document.getElementById('p_cat').onchange = e => { const n = document.getElementById('p_newcat'); n.style.display = e.target.value === '__new__' ? '' : 'none'; if (e.target.value === '__new__') n.focus(); };
     document.getElementById('bgPSave').onclick = () => bgSavePrice(id);
   }
   async function bgSavePrice(id) {
     const p = id ? bgPrices.find(x => x.price_id === id) : null;
-    const name = val('p_name'), cat = val('p_cat'), raw = val('p_price'), price = parseFloat(raw);
+    const name = val('p_name'), catSel = val('p_cat'), raw = val('p_price'), price = parseFloat(raw), cat = catSel === '__new__' ? val('p_newcat').replace(/\s+/g, ' ') : catSel;
     clearErrs(document.getElementById('bgForm')); document.getElementById('bgMsg').innerHTML = '';
     const errs = [];
     if (!name) errs.push(['p_name', 'Type the service name.']);
     else if (bgPrices.some(x => x.price_id !== id && String(x.name).toLowerCase() === name.toLowerCase())) errs.push(['p_name', 'A service with this name already exists. Edit that one instead.']);
-    if (!cat) errs.push(['p_cat', 'Choose a category.']);
+    if (!catSel) errs.push(['p_cat', 'Choose a category, or "Other" if you are not sure yet.']);
+    else if (catSel === '__new__' && !cat) errs.push(['p_newcat', 'Type the name of the new category.']);
+    else if (catSel === '__new__' && allCats().some(c => c.toLowerCase() === cat.toLowerCase())) errs.push(['p_newcat', 'That category already exists. Pick it from the list.']);
     if (raw === '' ? (!p || (p.price !== undefined && p.price !== '')) : !(price >= 0)) errs.push(['p_price', 'Enter the price as a number, 0 or more.']);
     if (errs.length) { showErrs(errs); return; }
     const btn = document.getElementById('bgPSave'); btn.disabled = true;
@@ -3372,17 +3421,22 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     try { await ddbUpdate({ table: PRICE_TABLE, key: { price_id: { S: id } }, set: { active: p.active === 'no' ? 'yes' : 'no', updated_at: new Date().toISOString(), updated_by: staffName() } });
       await bgRefresh(); bgRenderAll(); bgOk(`${esc(p.name)} ${p.active === 'no' ? 'is in use again' : 'is no longer offered'}.`); } catch (err) { bgErr(`Could not change it: ${esc(err.message)}`); }
   }
-  async function bgStarter() {
-    if (!canBill) return;
+  const spId = n => 'sp#' + String(n).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48);
+  // Adds any common service that is not in the list yet (names only, no price). Safe to run twice: the id comes from the name.
+  async function bgSeed() {
     const have = new Set(bgPrices.map(p => String(p.name).toLowerCase())), now = new Date().toISOString();
     const todo = [...SERVICE_STARTER, ...LAB_TESTS.map(t => [t, 'Lab test'])].filter(([n]) => !have.has(n.toLowerCase()));
-    if (!todo.length) { bgOk('All the common services are already in your list.'); return; }
-    try {
-      const client = await getClient();
-      for (const [n, c] of todo) await client.send(new PutItemCommand({ TableName: PRICE_TABLE, ConditionExpression: 'attribute_not_exists(price_id)', Item: g({ price_id: S('sp#' + uuid().replace(/-/g, '').slice(0, 10)), name: S(n), category: S(c), active: S('yes'), created_at: S(now), created_by: S(staffName()), updated_at: S(now), updated_by: S(staffName()) }) }));
-      await bgRefresh(); bgRenderAll(); document.getElementById('bgStarterNote')?.remove(); document.querySelector('[data-bgact^="pstarter"]')?.remove();
-      bgOk(`${todo.length} services added with no price. Press Edit on each one to type its price.`);
-    } catch (err) { bgErr(`Could not add them: ${esc(err.message)}`); }
+    const client = await getClient(); let added = 0;
+    for (let i = 0; i < todo.length; i += 10) {
+      await Promise.all(todo.slice(i, i + 10).map(([n, c]) => client.send(new PutItemCommand({ TableName: PRICE_TABLE, ConditionExpression: 'attribute_not_exists(price_id)',
+        Item: g({ price_id: S(spId(n)), name: S(n), category: S(c), active: S('yes'), created_at: S(now), created_by: S(staffName()), updated_at: S(now), updated_by: S(staffName()) }) })).then(() => { added++; }, e => { if (!/Conditional/i.test(e.message)) throw e; })));
+    }
+    return added;
+  }
+  async function bgStarter() {
+    if (!canBill) return;
+    try { const n = await bgSeed(); await bgRefresh(); bgRenderAll(); bgOk(n ? `${n} service${n > 1 ? 's' : ''} added with no price. Type each price in the list.` : 'All the common services are already in your list.'); }
+    catch (err) { bgErr(`Could not add them: ${esc(err.message)}`); }
   }
 
   // ---- Receipt (print and PDF): one per payment ----
@@ -3398,7 +3452,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   function receiptModel() {
     const { inv: r, p } = lastReceipt, dOnly = iso => new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
     const idTxt = p.idn ? `${p.idt}: ${p.idn}` : '';
-    const how = p.tenders.map(t => `${METHOD_SHORT[t.m] || t.m}  GHS ${Number(t.amt).toFixed(2)}${t.net || t.ref ? '  (' + [t.net, t.ref].filter(Boolean).join(' · ') + ')' : ''}${t.recv !== undefined && t.chg > 0 ? `  cash handed over GHS ${Number(t.recv).toFixed(2)}, change GHS ${Number(t.chg).toFixed(2)}` : ''}`);
+    const how = p.tenders.map(t => `${METHOD_SHORT[t.m] || t.m}  GHS ${Number(t.amt).toFixed(2)}${t.net || t.ref ? '  (' + [t.net, t.ref].filter(Boolean).join(' · ') + ')' : ''}`);
     const paidToDate = to2(bgPays(r).filter(x => (x.at || '') <= p.at).reduce((s, x) => s + Number(x.amt), 0));
     return { r, p, by: p.by, no: p.no, ident: [['Name', r.patient_name || '—'], ['Client ID', r.client_id || '—'], ['ID card', idTxt || '—'], ['Receipt no', p.no], ['Date', dOnly(p.at)]],
       meta: [['For', r.source === 'pharmacy' ? 'Pharmacy' + (r.rx_no ? ' · prescription ' + r.rx_no : '') : 'Clinic services'], ['NHIS number', p.nhis || ''], ['Paid by', how.join('\n')],
@@ -3503,6 +3557,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
     try {
       await bgRefresh(); bgPeople = null;
+      if (canBill && !bgPrices.length && !bgPriceErr) { try { await bgSeed(); await bgRefresh(); } catch (e) { /* the Price list tab has the button to try again */ } }
       liveEl.innerHTML = bgShellHtml();
       if (!liveEl.dataset.boundB) {
         liveEl.addEventListener('click', e => {
@@ -3515,6 +3570,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       const run = () => { bgQ = document.getElementById('bgSearch').value; renderBgPay(); renderBgPaid(); };
       bgQ = ''; document.getElementById('bgSearch').addEventListener('input', run); document.getElementById('bgSearchBtn').addEventListener('click', run);
       document.getElementById('bgClearBtn').addEventListener('click', () => { document.getElementById('bgSearch').value = ''; run(); });
+      document.getElementById('bgPriceList').addEventListener('change', e => { const i = e.target.closest('[data-pi]'); if (i) bgInlinePrice(i); });
       document.getElementById('bgPSearch').addEventListener('input', renderBgPrices); document.getElementById('bgPClear').addEventListener('click', () => { document.getElementById('bgPSearch').value = ''; renderBgPrices(); });
       bgTab = 'pay'; bgRenderAll();
       clearInterval(bgTimer); bgTimer = setInterval(bgAutoRefresh, 45000);
