@@ -1026,15 +1026,21 @@
     return tags.length ? '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' + tags.join('') + '</div>' : '';
   }
 
+  const hasDraft = pid => fdDrafts.some(d => d.patient_id === pid && d.record_type === myDraftKey() && !d.cleared_at);
   function renderQueue() {
     const today = new Date().toDateString();
     const rows = fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today)
       .sort((a, b) => a.entered_at.localeCompare(b.entered_at))
       .map(v => `<tr><td>${new Date(v.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
         <td><a class="lnk" data-copen="${esc(v.patient_id)}">${esc(v.patient_name || '—')}</a><br><span class="cid">${esc(v.client_id || '—')}</span>${queueTags(v.patient_id)}</td>
-        <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td><td class="vit">${vitalsSummary(v)}</td></tr>`).join('');
-    document.getElementById('clQueue').innerHTML = `<table class="data-table"><thead><tr><th>Arrived</th><th>Client</th><th>Service</th><th>Vitals</th></tr></thead>
-      <tbody>${rows || '<tr class="empty-row"><td colspan="4">No one is waiting. Clients checked in at the front desk today will appear here.</td></tr>'}</tbody></table>`;
+        <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td><td class="vit">${vitalsSummary(v)}</td>
+        <td>${canClin ? `<button class="btn-sm ${hasDraft(v.patient_id) ? 'b-recv' : ''}" data-copen="${esc(v.patient_id)}">${hasDraft(v.patient_id) ? 'Resume consultation' : 'Start consultation'}</button>` : `<a class="lnk" data-copen="${esc(v.patient_id)}">View</a>`}</td></tr>`).join('');
+    const waitingIds = new Set(fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today).map(v => v.patient_id));
+    const drows = canClin ? fdDrafts.filter(d => d.record_type === myDraftKey() && !d.cleared_at && !waitingIds.has(d.patient_id)).map(d => `<tr><td>—</td>
+        <td><a class="lnk" data-copen="${esc(d.patient_id)}">${esc(d.patient_name || '—')}</a><br><span class="cid">${esc(d.client_id || '')}</span><div style="margin-top:4px"><span class="st wait">Draft notes</span></div></td>
+        <td class="vit">Saved draft, ${fmtDate(d.saved_at)}</td><td></td><td><button class="btn-sm b-recv" data-copen="${esc(d.patient_id)}">Resume consultation</button></td></tr>`).join('') : '';
+    document.getElementById('clQueue').innerHTML = `<table class="data-table"><thead><tr><th>Arrived</th><th>Client</th><th>Service</th><th>Vitals</th><th></th></tr></thead>
+      <tbody>${rows + drows || '<tr class="empty-row"><td colspan="5">No one is waiting. Clients checked in at the front desk today will appear here.</td></tr>'}</tbody></table>`;
     renderClTabs();
   }
 
@@ -1151,7 +1157,7 @@
 
     const forms = !canClin ? '<div class="notice">You have read-only access here, so you can view this client but not record consultations, lab requests or referrals.</div>' : `
       <div class="fd-form">
-        <h5>New consultation</h5>
+        <h5>${myDraft() ? 'Resume consultation' : 'New consultation'}</h5>
         <div id="clDraftNote"></div>
         <div class="grid2">
           <div class="f"><label>Complaints / history <span class="req">*</span></label><textarea id="c_complaints" rows="3"></textarea></div>
@@ -1188,7 +1194,8 @@
       <div class="client-banner">
         <div><strong style="font-size:17px">${esc(p.full_name)}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span>
           <div style="font-size:12.5px;color:#555">${esc(p.sex || '')}${p.date_of_birth ? ' · ' + esc(ageOf(p.date_of_birth)) : ''} · ${esc(p.phone_number || '')}${p.allergies ? ' · <b>Allergies:</b> ' + esc(p.allergies) : ''}</div>
-          ${serviceLine}</div>
+          ${serviceLine}
+          ${canClin && myDraft() ? `<div style="margin-top:6px"><span class="st wait">Resuming your saved draft from ${esc(fmtDate(myDraft().saved_at))}</span></div>` : ''}</div>
         <button class="btn-sm ghost" id="clClose">Close</button>
       </div>
       <div class="vit" style="margin-bottom:6px"><b>Latest vitals</b> ${lastVit ? `(${fmtDate(lastVit.entered_at)}): ${vitalsSummary(lastVit)}` : '— none recorded yet'}</div>
@@ -2464,7 +2471,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <td>${Number(it.unit_price) > 0 ? money(it.unit_price) : '<span class="st f-abnormal">No price</span>'}</td>
       <td>${it.expiry_date ? esc(new Date(it.expiry_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })) : '—'}${it.batch_no ? `<div class="vit">Batch ${esc(it.batch_no)}</div>` : ''}</td>
       <td>${stockBadge(it)}</td>
-      <td style="white-space:nowrap">${canPharm ? `<a class="lnk" data-phact="receive|${esc(it.item_id)}">Receive</a> · <a class="lnk" data-phact="adjust|${esc(it.item_id)}">Adjust</a> · <a class="lnk" data-phact="edit|${esc(it.item_id)}">Edit</a>` : ''}</td></tr>`).join('');
+      <td style="white-space:nowrap">${canPharm ? `<a class="lnk" data-phact="receive|${esc(it.item_id)}">Receive</a> · ${stockState(it) === 'expired' ? `<a class="lnk" style="color:#C62828;font-weight:700" data-phact="writeoff|${esc(it.item_id)}">Write off expired</a> · ` : ''}<a class="lnk" data-phact="adjust|${esc(it.item_id)}">Adjust</a> · <a class="lnk" data-phact="edit|${esc(it.item_id)}">Edit</a>` : ''}</td></tr>`).join('');
     const cnt = document.getElementById('phCount'); if (cnt) cnt.textContent = q ? `${list.length} match${list.length === 1 ? '' : 'es'}` : `${phStock.length} drugs, A to Z`;
     document.getElementById('phStock').innerHTML = `<table class="data-table"><thead><tr><th>Drug</th><th>On hand</th><th>Price</th><th>Expiry</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows || `<tr class="empty-row"><td colspan="6">${phStock.length ? 'No drug matches your search.' : 'The drug list is empty. ' + (canPharm ? 'Add a drug, or load the starter list.' : '')}</td></tr>`}</tbody></table>`;
@@ -2516,6 +2523,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     if (mode === 'add' || mode === 'edit') return phDrugForm(mode, id);
     if (mode === 'receive') return phReceiveForm(id);
     if (mode === 'adjust') return phAdjustForm(id);
+    if (mode === 'writeoff') return phAdjustForm(id, true);
     if (mode === 'view') return phViewForm(id);
     if (mode === 'dispense') return phDispenseForm(id);
   }
@@ -2636,10 +2644,10 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   }
 
   // ---- Adjust stock (count correction, damage, expiry) ----
-  function phAdjustForm(id) {
+  function phAdjustForm(id, writeoff) {
     const it = phStock.find(x => x.item_id === id); if (!it) return;
     phShow(`<div class="fd-form"><h5>Adjust stock: ${esc(drugLabel(it))}</h5>
-      <div class="vit" style="margin-bottom:10px">The system says: <b>${Number(it.qty_on_hand) || 0}</b> ${esc(it.sale_unit || '')}</div>
+      <div class="vit" style="margin-bottom:10px">The system says: <b>${Number(it.qty_on_hand) || 0}</b> ${esc(it.sale_unit || '')}${writeoff ? ` · batch ${esc(it.batch_no || '—')} expired ${esc(it.expiry_date || '')}. Writing it off sets the quantity to 0 and logs it as discarded. If you have a fresh batch, use <b>Receive</b> afterwards.` : ''}</div>
       <div class="grid3">
         <div class="f"><label>Actual quantity counted <span class="req">*</span></label><input id="a_qty" type="number" min="0" step="1"></div>
         <div class="f"><label>Reason <span class="req">*</span></label><select id="a_why"><option value="">Select…</option>${ADJ_WHY.map(o => `<option>${esc(o)}</option>`).join('')}</select></div>
@@ -2648,6 +2656,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="phSave">Save adjustment</button><button class="btn-sm ghost" id="phCancel">Cancel</button></div>
       <div class="stamp">Every adjustment is logged with your name, the reason and the change.</div></div>`);
     document.getElementById('phSave').onclick = phSaveAdjust; document.getElementById('phCancel').onclick = phClose;
+    if (writeoff) { document.getElementById('a_qty').value = 0; document.getElementById('a_why').value = 'Expired, discarded'; }
   }
   async function phSaveAdjust() {
     const it = phStock.find(x => x.item_id === phSel); if (!it) return;
