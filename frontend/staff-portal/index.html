@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VidaCare Staff Portal</title>
@@ -224,7 +225,7 @@
   @media (max-width:480px){ .chk-grid{ grid-template-columns:1fr; } }
   .recent-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
   /* long lists use most of the screen height (v24) */
-  .recent-scroll { max-height:70vh; overflow:auto; }
+  .recent-scroll { min-height:55vh; max-height:80vh; overflow:auto; }
   .recent-scroll table th { position:sticky; top:0; }
   @media (max-width:760px){ .grid2,.grid3,.grid4,.recent-grid{ grid-template-columns:1fr 1fr; } .recent-grid{grid-template-columns:1fr;} }
   @media (max-width:480px){ .grid2,.grid3,.grid4{ grid-template-columns:1fr; } }
@@ -740,7 +741,7 @@
         ${kv('Registered by', `${p.entered_by || 'Online booking'} · ${fmtDate(p.entered_at || p.created_at)}`)}
       </div>
       <h4 style="margin-top:24px">Visit history (${visits.length})</h4>
-      <div class="recent-scroll" style="max-height:none">
+      <div class="recent-scroll" style="max-height:none;min-height:0">
       <table class="data-table"><thead><tr><th>Date</th><th>Service</th><th>Vitals</th><th>Entered by</th></tr></thead>
       <tbody>${vrows || '<tr class="empty-row"><td colspan="4">No visits recorded by the front desk yet.</td></tr>'}</tbody></table></div>`;
     card.style.display = 'block';
@@ -1202,7 +1203,7 @@
       <div class="vit" style="margin-bottom:6px"><b>Latest vitals</b> ${lastVit ? `(${fmtDate(lastVit.entered_at)}): ${vitalsSummary(lastVit)}` : '— none recorded yet'}</div>
       ${forms}
       <h4 style="margin-top:26px">History (${events.length})</h4>
-      <div class="recent-scroll" style="max-height:none"><table class="data-table"><thead><tr><th>When</th><th>Type</th><th>Details</th><th>Entered by</th></tr></thead>
+      <div class="recent-scroll" style="max-height:none;min-height:0"><table class="data-table"><thead><tr><th>When</th><th>Type</th><th>Details</th><th>Entered by</th></tr></thead>
       <tbody>${hist || '<tr class="empty-row"><td colspan="4">Nothing recorded for this client yet.</td></tr>'}</tbody></table></div>`;
     card.style.display = 'block';
     document.getElementById('clClose').onclick = () => { card.style.display = 'none'; clSel = null; };
@@ -1955,7 +1956,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <div class="fd-search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input id="lbSearch" type="search" placeholder="Search by client name, client ID, test or sample ID" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="lbSearchBtn">Search</button><button class="btn-sm ghost" id="lbClearBtn">Clear</button></div>
       <div id="lbPaneWait">
         <div id="lbSummary" style="display:flex;gap:8px;flex-wrap:wrap;margin:4px 0"></div>
-        <div class="data-card"><h4>Waiting for results</h4><div class="recent-scroll" id="lbQueue" style="max-height:60vh"></div></div>
+        <div class="data-card"><h4>Waiting for results</h4><div class="recent-scroll" id="lbQueue" style="max-height:80vh"></div></div>
       </div>
       <div id="lbPaneDone" style="display:none">
         <div class="data-card"><h4>Released results</h4><div class="recent-scroll" id="lbDone"></div></div>
@@ -2425,7 +2426,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <div class="ph-tabs"><button class="ph-tab on" data-phtab="rx">Prescriptions <span class="n" id="phTabRx" style="display:none"></span></button><button class="ph-tab" data-phtab="stock">Drug stock <span class="n amber" id="phTabStock" style="display:none"></span></button></div>
       <div id="phPaneRx">
       <div class="fd-search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input id="phRxSearch" type="search" placeholder="Search prescriptions by client name, client ID, Rx number, drug or doctor" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="phRxSearchBtn">Search</button><button class="btn-sm ghost" id="phRxClearBtn">Clear</button></div>
-      <div class="data-card"><h4>Prescriptions to serve</h4><div class="recent-scroll" id="phQueue" style="max-height:60vh"></div></div>
+      <div class="data-card"><h4>Prescriptions to serve</h4><div class="recent-scroll" id="phQueue" style="max-height:80vh"></div></div>
       <div class="data-card"><h4>Served and closed</h4><div class="recent-scroll" id="phDone"></div></div>
       </div>
       <div id="phPaneStock" style="display:none">
@@ -3005,14 +3006,14 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
       <div id="bgSearchRow" class="fd-search" style="display:flex;gap:10px;flex-wrap:wrap;align-items:center"><input id="bgSearch" type="search" placeholder="Search by client name, client ID, receipt number, Rx number, item or payment method" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="bgSearchBtn">Search</button><button class="btn-sm ghost" id="bgClearBtn">Clear</button></div>
       <div id="bgPanePay">
         <div class="data-card"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><h4 style="margin:0">Waiting for payment</h4>${canBill ? '<button class="btn-sm" data-bgact="new|||">+ New charge</button>' : ''}</div>
-          <div class="recent-scroll" id="bgPay" style="max-height:60vh;margin-top:10px"></div></div>
+          <div class="recent-scroll" id="bgPay" style="max-height:80vh;margin-top:10px"></div></div>
       </div>
       <div id="bgPanePaid" style="display:none">
         <div class="data-card"><h4>Today's takings</h4><div id="bgToday"></div></div>
-        <div class="data-card"><h4>Payments received</h4><div class="recent-scroll" id="bgPaid" style="max-height:60vh"></div></div>
+        <div class="data-card"><h4>Payments received</h4><div class="recent-scroll" id="bgPaid" style="max-height:80vh"></div></div>
       </div>
       <div id="bgPaneAccts" style="display:none">
-        <div class="data-card"><h4>Client accounts</h4><div class="vit" style="margin-bottom:8px">Everything billed to and paid by each client. Press a name to see the payment history.</div><div class="recent-scroll" id="bgAccts" style="max-height:65vh"></div></div>
+        <div class="data-card"><h4>Client accounts</h4><div class="vit" style="margin-bottom:8px">Everything billed to and paid by each client. Press a name to see the payment history.</div><div class="recent-scroll" id="bgAccts" style="max-height:80vh"></div></div>
       </div>
       <div id="bgPanePrices" style="display:none">
         <div class="data-card"><h4>Service price list</h4>
@@ -3021,7 +3022,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
           <div id="bgPriceNote"></div>
           ${bgPriceErr ? `<div class="error-inline" style="margin-top:10px">The price list could not be loaded (${esc(bgPriceErr)}). If this is new, ask the administrator to finish the Billing setup.</div>` : ''}
           <div class="vit" id="bgPCount" style="margin-top:8px"></div>
-          <div class="recent-scroll" id="bgPriceList" style="margin-top:6px;max-height:75vh"></div></div>
+          <div class="recent-scroll" id="bgPriceList" style="margin-top:6px;max-height:80vh"></div></div>
       </div>
     </div>`;
   }
