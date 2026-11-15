@@ -330,6 +330,7 @@ module "iam_antenatal" {
     { sid = "PatientRecordsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.patient_records.arn] },
     { sid = "AntenatalRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.antenatal_records.arn}", "${aws_dynamodb_table.antenatal_records.arn}/index/*"] },
     { sid = "LabRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
+    { sid = "LabRequestsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] },
     { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
     { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] }
   ]

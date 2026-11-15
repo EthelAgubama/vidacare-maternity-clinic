@@ -462,8 +462,8 @@
   // ================= FRONT DESK =================
   const TABLE = 'vidacare-patient-records';
   const SERVICES = [
-    ['antenatal', 'Antenatal care'], ['postnatal', 'Postnatal care'], ['family-planning', 'Family planning'],
-    ['child-welfare', 'Child welfare clinic'], ['labour-delivery', 'Labour & delivery'], ['opd', 'General OPD / consultation']
+    ['antenatal', 'Antenatal care (midwife)'], ['postnatal', 'Postnatal care'], ['family-planning', 'Family planning'],
+    ['child-welfare', 'Child welfare clinic'], ['labour-delivery', 'Labour & delivery'], ['opd', 'General OPD / consultation (clinician)']
   ];
   const SERVICE_LABEL = Object.fromEntries(SERVICES);
   const REL = ['Spouse', 'Parent', 'Sibling', 'Child', 'Guardian', 'Friend', 'Other'];
@@ -651,6 +651,7 @@
       <h5>Service today</h5>
       <div class="grid2"><div class="f"><label>Service <span class="req">*</span></label><select id="v_service">${opt(SERVICES, 'Select service')}</select></div>
       <div class="f"><label>Reason / notes</label><input id="v_notes" placeholder="Optional"></div></div>
+      <div class="vit" style="margin-top:6px">Routine antenatal visits go to the midwives: choose <b>Antenatal care</b>. Choose <b>General OPD / consultation</b> when she is ill, for example with malaria, even if she is pregnant. If she needs both, check her in twice.</div>
       <h5>Vitals</h5>
       <div class="grid4">
         <div class="f"><label>Weight <span class="unit">kg</span></label><input id="v_weight" type="number" step="0.1" min="0"></div>
@@ -906,7 +907,7 @@
   const LAB_TABLE = 'vidacare-lab-requests';
   const RESULTS_TABLE = 'vidacare-lab-results';
   const LAB_TESTS = [
-    'Malaria parasite (RDT / film)', 'Full blood count', 'Haemoglobin', 'Blood group & Rh', 'Sickling test', 'Genotype',
+    'Malaria parasite (RDT / film)', 'Full blood count', 'Haemoglobin', 'Blood group & Rh', 'Sickling test', 'Genotype', 'G6PD',
     'Packed cell volume (PCV)', 'Blood glucose (random)', 'Fasting blood glucose', 'Oral glucose tolerance test (OGTT)',
     'Urinalysis', 'Urine pregnancy test', 'Blood pregnancy test (serum β-hCG)', 'HIV screening', 'Hepatitis B (HBsAg)', 'VDRL / syphilis', 'Widal test',
     'Stool microscopy', 'Urine culture'
@@ -984,7 +985,7 @@
   }
   function renderClTabs() {
     const today = new Date().toDateString();
-    const nWait = fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today).length;
+    const nWait = fdVisits.filter(v => v.status === 'checked-in' && v.service !== 'antenatal' && v.entered_at && new Date(v.entered_at).toDateString() === today).length;
     const nLab = clLab.filter(r => r.status === 'released' && !r.seen_at && r.requested_by_username === staffUser()).length;
     const nRx = clRx.filter(r => ['pending', 'partial', 'query'].includes(r.status)).length;
     [['clTabWait', nWait], ['clTabLabs', nLab], ['clTabRx', nRx]].forEach(([id, n]) => { const e = document.getElementById(id); if (e) { e.textContent = n; e.style.display = n ? '' : 'none'; } });
@@ -1031,13 +1032,13 @@
   const hasDraft = pid => fdDrafts.some(d => d.patient_id === pid && d.record_type === myDraftKey() && !d.cleared_at);
   function renderQueue() {
     const today = new Date().toDateString();
-    const rows = fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today)
+    const rows = fdVisits.filter(v => v.status === 'checked-in' && v.service !== 'antenatal' && v.entered_at && new Date(v.entered_at).toDateString() === today)
       .sort((a, b) => a.entered_at.localeCompare(b.entered_at))
       .map(v => `<tr><td>${new Date(v.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
         <td><a class="lnk" data-copen="${esc(v.patient_id)}">${esc(v.patient_name || '—')}</a><br><span class="cid">${esc(v.client_id || '—')}</span>${queueTags(v.patient_id)}</td>
         <td>${esc(SERVICE_LABEL[v.service] || v.service)}</td><td class="vit">${vitalsSummary(v)}</td>
         <td>${canClin ? `<button class="btn-sm ${hasDraft(v.patient_id) ? 'b-recv' : ''}" data-copen="${esc(v.patient_id)}">${hasDraft(v.patient_id) ? 'Resume consultation' : 'Start consultation'}</button>` : `<a class="lnk" data-copen="${esc(v.patient_id)}">View</a>`}</td></tr>`).join('');
-    const waitingIds = new Set(fdVisits.filter(v => v.status === 'checked-in' && v.entered_at && new Date(v.entered_at).toDateString() === today).map(v => v.patient_id));
+    const waitingIds = new Set(fdVisits.filter(v => v.status === 'checked-in' && v.service !== 'antenatal' && v.entered_at && new Date(v.entered_at).toDateString() === today).map(v => v.patient_id));
     const drows = canClin ? fdDrafts.filter(d => d.record_type === myDraftKey() && !d.cleared_at && !waitingIds.has(d.patient_id)).map(d => `<tr><td>—</td>
         <td><a class="lnk" data-copen="${esc(d.patient_id)}">${esc(d.patient_name || '—')}</a><br><span class="cid">${esc(d.client_id || '')}</span><div style="margin-top:4px"><span class="st wait">Draft notes</span></div></td>
         <td class="vit">Saved draft, ${fmtDate(d.saved_at)}</td><td></td><td><button class="btn-sm b-recv" data-copen="${esc(d.patient_id)}">Resume consultation</button></td></tr>`).join('') : '';
@@ -1689,6 +1690,10 @@
     'Packed cell volume (PCV)': { sample: 'Blood (EDTA)', p: [num('pcv', 'Packed cell volume', '%', PCV_REF, { req: 1, clo: 21 })] },
     'Blood group & Rh': { sample: 'Blood (EDTA)', p: [sel('res', 'Blood group & Rh', ['A Positive', 'A Negative', 'B Positive', 'B Negative', 'AB Positive', 'AB Negative', 'O Positive', 'O Negative'], null, { req: 1, rt: 'A, B, AB or O; Rh positive or negative' })] },
     'Sickling test': { sample: 'Blood (EDTA)', p: [sel('res', 'Sickling test', ['Negative', 'Positive'], ['Negative'], { req: 1 })] },
+    'G6PD': { sample: 'Blood (EDTA)', p: [
+      sel('res', 'G6PD status', ['Normal', 'Intermediate (partial deficiency)', 'Deficient'], ['Normal'], { req: 1, rt: 'Normal enzyme activity' }),
+      num('q', 'G6PD activity (if measured)', 'U/g Hb', { any: [4.6, 13.5] }, { rt: '4.6 - 13.5' })
+    ] },
     'Genotype': { sample: 'Blood (EDTA)', p: [sel('res', 'Genotype', ['AA', 'AS', 'SS', 'AC', 'SC', 'CC'], null, { req: 1, rt: 'AA is the usual result' })] },
     'Blood glucose (random)': { sample: 'Blood (fluoride)', p: [num('glu', 'Random blood glucose', 'mmol/L', { any: [3.9, 7.8] }, { req: 1, clo: 2.5, chi: 25 })] },
     'Fasting blood glucose': { sample: 'Blood (fluoride)', p: [num('glu', 'Fasting blood glucose', 'mmol/L', { any: [3.9, 5.6] }, { req: 1, clo: 2.5, chi: 25 })] },
@@ -1939,7 +1944,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   const toItem = o => g(Object.fromEntries(Object.entries(o).map(([k, v]) => [k, S(v)])));
   const TEST_CODE = {
     'Malaria parasite (RDT / film)': 'MAL', 'Full blood count': 'FBC', 'Haemoglobin': 'HB', 'Packed cell volume (PCV)': 'PCV',
-    'Blood group & Rh': 'BGR', 'Sickling test': 'SKL', 'Genotype': 'GEN', 'Blood glucose (random)': 'RBS', 'Fasting blood glucose': 'FBS',
+    'Blood group & Rh': 'BGR', 'Sickling test': 'SKL', 'Genotype': 'GEN', 'G6PD': 'G6P', 'Blood glucose (random)': 'RBS', 'Fasting blood glucose': 'FBS',
     'Oral glucose tolerance test (OGTT)': 'OGT', 'Urinalysis': 'URI', 'Urine culture': 'UCS', 'Urine pregnancy test': 'UPT',
     'Blood pregnancy test (serum β-hCG)': 'BPT', 'HIV screening': 'HIV', 'Hepatitis B (HBsAg)': 'HBS', 'VDRL / syphilis': 'VDR',
     'Widal test': 'WID', 'Stool microscopy': 'STL'
@@ -3582,13 +3587,13 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   // ================= ANTENATAL =================
   const ANC_TABLE = 'vidacare-antenatal-records';
-  let canAnc = false, anRecs = [], anPregs = [], anTab = 'today', anQ = '', anTimer = null;
+  let canAnc = false, anRecs = [], anPregs = [], anTab = 'today', anQ = '', anTimer = null, anLab = [], anLabOk = true;
   const DAYMS = 86400000;
   const anD0 = s => { const [y, m, d] = String(s).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
   const anAdd = (s, n) => new Date(anD0(s) + n * DAYMS).toISOString().slice(0, 10);
-  const anGaDays = (edd, at) => 280 - Math.round((anD0(edd) - anD0(at || today10())) / DAYMS);
-  const anGaTxt = n => (n < 0 || n > 320) ? '—' : `${Math.floor(n / 7)}w ${n % 7}d`;
-  const anTri = n => n < 98 ? '1st trimester' : n < 196 ? '2nd trimester' : '3rd trimester';
+  const anGaDays = (edd, at) => edd ? 280 - Math.round((anD0(edd) - anD0(at || today10())) / DAYMS) : NaN;
+  const anGaTxt = n => (!Number.isFinite(n) || n < 0 || n > 320) ? '—' : `${Math.floor(n / 7)}w ${n % 7}d`;
+  const anTri = n => !Number.isFinite(n) ? 'Dating scan needed' : n < 98 ? '1st trimester' : n < 196 ? '2nd trimester' : '3rd trimester';
   const anDate = s => s ? new Date(anD0(s)).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—';
   const anNum = id => { const v = parseFloat(val(id)); return isNaN(v) ? null : v; };
   const anN = v => (v === '' || v === null || v === undefined || isNaN(Number(v))) ? undefined : { N: String(v) };
@@ -3597,6 +3602,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   const AN_DANGER = ['Vaginal bleeding', 'Severe headache', 'Blurred vision', 'Convulsions or fits', 'Severe belly pain', 'Fever', 'Fluid leaking from the vagina', 'Swollen face or hands', 'Difficulty breathing', 'Baby not moving'];
   const AN_COUNSEL = ['Birth preparedness', 'Danger signs', 'Nutrition', 'Breastfeeding', 'Family planning after birth', 'HIV and mother-to-child prevention', 'Malaria prevention', 'Rest and hygiene'];
   const AN_TEST = ['Not done', 'Negative', 'Positive', 'Declined'];
+  const AN_REACT = ['Not done', 'Non-reactive', 'Reactive', 'Declined'];
   const AN_URINE = ['Not done', 'Negative', 'Trace', '+', '++', '+++'];
   const AN_BG = ['Not known', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
   const AN_OUT = ['Delivered at this clinic', 'Delivered elsewhere', 'Miscarriage or pregnancy loss', 'Referred out, care continues elsewhere', 'Moved away or stopped coming'];
@@ -3612,6 +3618,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   const anActive = pid => anPregs.find(x => x.patient_id === pid && x.status === 'active');
   const anVisitsOf = pg => anRecs.filter(r => r.patient_id === pg.patient_id && String(r.record_id).startsWith('anc#' + anKey(pg) + '#'))
     .sort((a, b) => (b.visit_date || '').localeCompare(a.visit_date || '') || (b.entered_at || '').localeCompare(a.entered_at || ''));
+  const anEddCond = pg => pg.edd ? { cond: '#st = :act AND edd = :old', condVals: { ':act': { S: 'active' }, ':old': { S: pg.edd } } } : { cond: '#st = :act AND attribute_not_exists(edd)', condVals: { ':act': { S: 'active' } } };
+  const anDueTxt = pg => pg.edd ? anDate(pg.edd) : 'Due date pending';
   const anNext = pg => (pg.next_appt && pg.next_appt !== 'none') ? pg.next_appt : '';
   const anShow = html => { const f = document.getElementById('anForm'); f.innerHTML = html; f.style.display = 'block'; f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
   const anClose = () => { const f = document.getElementById('anForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } anPick = null; };
@@ -3620,6 +3628,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   // Suggested next contact, using the 8-contact schedule (12, 20, 26, 30, 34, 36, 38, 40 weeks)
   function anSuggest(edd, atDate) {
+    if (!edd) return { date: anAdd(atDate || today10(), 14), weeks: null };
     const ga = anGaDays(edd, atDate);
     const w = AN_WEEKS.find(x => x * 7 > ga + 3);
     let d = w ? anAdd(edd, w * 7 - 280) : anAdd(atDate || today10(), 7);
@@ -3634,7 +3643,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     if (age !== null && age < 18) hi.push('Under 18 years');
     if (age !== null && age >= 35) chk.push('35 years or older');
     String(pg.risk_hx || '').split('|').filter(Boolean).forEach(h => { const e = AN_HIST.find(x => x[0] === h); (e && e[1] ? hi : chk).push(h); });
-    if (Number(pg.para) >= 5) hi.push('Five or more earlier births');
+    if (Number(pg.para) >= 5) hi.push('Grand multipara (para 5 or more)');
     const sys = v ? Number(v.bp_sys) : Number(pg.bp_sys), dia = v ? Number(v.bp_dia) : Number(pg.bp_dia);
     const highBp = (sys >= 140 || dia >= 90);
     if (highBp) hi.push(`High blood pressure ${sys}/${dia}`);
@@ -3664,6 +3673,129 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     await refreshData();
     anRecs = await scanTable(ANC_TABLE);
     anPregs = anRecs.filter(r => String(r.record_id).startsWith('preg#'));
+    try { anLab = (await scanTable(LAB_TABLE)).sort((a, b) => (b.requested_at || '').localeCompare(a.requested_at || '')); anLabOk = true; } catch (e) { anLab = []; anLabOk = false; }
+  }
+  // ---- Lab requests and drafts ----
+  const AN_LAB_COMMON = ['Haemoglobin', 'Full blood count', 'Blood group & Rh', 'Sickling test', 'Genotype', 'G6PD', 'HIV screening', 'Hepatitis B (HBsAg)', 'VDRL / syphilis', 'Urinalysis', 'Blood glucose (random)', 'Fasting blood glucose', 'Oral glucose tolerance test (OGTT)', 'Malaria parasite (RDT / film)', 'Urine culture'];
+  const anLabOf = pid => anLab.filter(r => r.patient_id === pid);
+  const anCanLab = () => canAnc && anLabOk;
+  function anLabChip(r) {
+    if (r.status === 'released') return `<span class="st rel">Result ready</span>${r.result_flag === 'critical' ? ' <span class="st f-critical">critical</span>' : r.result_flag && r.result_flag !== 'normal' ? ` <span class="st f-${esc(r.result_flag)}">${esc(r.result_flag)}</span>` : ''}`;
+    if (r.status === 'rejected') return '<span class="st rej">Sample rejected</span>';
+    if (r.status === 'received') return '<span class="st wait">Sample received</span>';
+    if (r.status === 'in-progress') return '<span class="st wait">Being processed</span>';
+    if (r.status === 'entered') return '<span class="st f-abnormal">Being checked</span>';
+    return '<span class="st wait">Waiting for sample</span>';
+  }
+  const anLabNew = r => (r.status === 'released' || r.status === 'rejected') && !r.seen_at && r.requested_by_username === staffUser();
+  function anLabTags(pid) {
+    const mine = anLabOf(pid), tags = [];
+    if (mine.some(anLabNew)) tags.push('<span class="st done">Labs ready</span>');
+    else if (mine.some(r => !['released', 'rejected'].includes(r.status) && r.requested_by_username === staffUser())) tags.push('<span class="st f-abnormal">Waiting for labs</span>');
+    return tags.length ? '<div style="margin-top:4px;display:flex;gap:4px;flex-wrap:wrap">' + tags.join('') + '</div>' : '';
+  }
+  function anLabTableHtml(pid) {
+    const l = anLabOf(pid);
+    return l.length ? `<table class="data-table"><thead><tr><th>Requested</th><th>Test</th><th>Status</th><th></th></tr></thead><tbody>${l.map(r => `<tr><td>${fmtDate(r.requested_at)}<div class="vit">${esc(r.requested_by || '')}${r.urgency === 'urgent' ? ' · urgent' : ''}</div></td><td>${esc(r.test)}</td>
+      <td>${anLabChip(r)}${r.sample_id ? `<div class="vit">${esc(r.sample_id)}</div>` : ''}${r.status === 'rejected' ? `<div class="vit">${esc(r.reject_reason || '')}</div>` : ''}</td>
+      <td>${(r.status === 'released' || r.status === 'rejected') ? `<a class="lnk" data-anact="labview|${esc(r.request_id)}">${r.status === 'released' ? 'View result' : 'Details'}</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="vit">No lab tests requested yet.</div>';
+  }
+  async function anLabView(reqId) {
+    const r = anLab.find(x => x.request_id === reqId); if (!r) return;
+    let box = document.getElementById('avLabView'), standalone = false;
+    if (!box) { anShow('<div class="fd-form"><div id="avLabView"></div></div>'); box = document.getElementById('avLabView'); standalone = true; }
+    box.innerHTML = '<div class="loading-inline">Loading result…</div>';
+    const head = `<div class="client-banner"><div><strong>${esc(r.test)}</strong> · ${esc(r.patient_name || '')} <span class="cid">${esc(r.client_id || '')}</span></div><button class="btn-sm ghost" id="anLabViewClose">Close</button></div>`;
+    try {
+      if (r.status === 'rejected') box.innerHTML = `<div class="data-card result-card">${head}<div class="notice"><b>Sample rejected</b> by ${esc(r.rejected_by || 'the lab')}.<br>Reason: ${esc(r.reject_reason || '—')}${r.reject_note ? ' · ' + esc(r.reject_note) : ''}<br>Request the test again so a new sample can be taken.</div></div>`;
+      else {
+        const res = await (await getClient()).send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: r.patient_id }, record_id: { S: r.request_id } } }));
+        const x = res.Item ? unmarshal(res.Item) : null, plist = parseParams(x), kv = (k, v) => v ? `<div><span style="color:#777">${k}</span> ${esc(v)}</div>` : '';
+        box.innerHTML = `<div class="data-card result-card">${head}${x ? `${plist.length ? paramsTableHtml(plist, []) : `<div style="font-size:15px"><b>${esc([x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text || '')}</b> <span class="vit">${esc(x.reference_range || '')}</span></div>`}
+          <div style="font-size:13px;line-height:1.7;margin-top:8px">${kv('Comment', x.comment)}${kv('Sample', [r.sample_id, r.sample_type].filter(Boolean).join(' · '))}${kv('Entered by', x.entered_by)}${kv('Released by', r.released_by ? r.released_by + ' · ' + fmtDate(r.released_at) : '')}</div>` : '<div class="notice">The result record could not be found. Ask the lab to check this request.</div>'}</div>`;
+      }
+      document.getElementById('anLabViewClose').onclick = () => { if (standalone) anClose(); else box.innerHTML = ''; };
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      if (anLabNew(r)) {
+        const now = new Date().toISOString();
+        await (await getClient()).send(new UpdateItemCommand({ TableName: LAB_TABLE, Key: { request_id: { S: r.request_id } }, UpdateExpression: 'SET seen_at = :t, seen_by = :b', ExpressionAttributeValues: { ':t': { S: now }, ':b': { S: staffName() } } }));
+        r.seen_at = now; r.seen_by = staffName(); anRenderAll();
+      }
+    } catch (err) { box.innerHTML = `<div class="error-inline">Could not load the result: ${esc(err.message)}</div>`; }
+  }
+  function anLabReqForm(rid, fromVisit) {
+    const pg = anPregs.find(x => x.record_id === rid); if (!pg || !anCanLab()) return;
+    if (pg.status !== 'active') return anNote('This pregnancy is closed.');
+    const waiting = anLabOf(pg.patient_id).filter(r => !['released', 'rejected'].includes(r.status));
+    const rest = LAB_TESTS.filter(t => !AN_LAB_COMMON.includes(t));
+    const box = t => `<label class="chk"><input type="checkbox" name="an_lt" value="${esc(t)}"> ${esc(t)}</label>`;
+    anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Request lab tests</h5>
+      ${waiting.length ? `<div class="notice">Already waiting for this mother: ${esc(waiting.map(r => r.test).join(', '))}. Tick them again only if a new sample is needed.</div>` : ''}
+      <label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Usual antenatal tests</label><div class="grid3" style="margin:6px 0 12px">${AN_LAB_COMMON.map(box).join('')}</div>
+      <label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Other tests</label><div class="grid3" style="margin:6px 0 12px">${rest.map(box).join('')}</div>
+      <div class="grid3"><div class="f"><label>How soon</label><select id="lr_urg"><option value="routine">Routine</option><option value="urgent">Urgent</option></select></div></div>
+      <div class="f" style="margin-top:10px"><label>Notes for the lab</label><textarea id="lr_notes" rows="2" placeholder="Optional"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="lrSave">Send lab request</button><button class="btn-sm ghost" id="anCancel">Cancel</button></div>
+      <div class="stamp">${fromVisit ? 'Your visit notes are saved as a draft. ' : ''}Recorded with your name and the time. Ask billing to add the charges from the price list.</div></div>`);
+    document.getElementById('anCancel').onclick = anClose;
+    document.getElementById('lrSave').onclick = async () => {
+      const tests = [...document.querySelectorAll('input[name="an_lt"]:checked')].map(c => c.value);
+      clearErrs(document.getElementById('anForm'));
+      if (!tests.length) return showErrs([[document.querySelector('input[name="an_lt"]'), 'Tick at least one test.']]);
+      const b = document.getElementById('lrSave'); b.disabled = true; b.textContent = 'Sending…';
+      try {
+        const p = anPat(pg.patient_id) || {}, now = new Date().toISOString(), group = uuid(), ga = anGaDays(pg.edd), note = ['Antenatal' + (Number.isFinite(ga) ? ' ' + anGaTxt(ga) : ', early pregnancy'), val('lr_notes')].filter(Boolean).join('. ');
+        const items = tests.map(t => g2({ request_id: S(uuid()), group_id: S(group), patient_id: S(pg.patient_id), client_id: S(pg.client_id), patient_name: S(pg.patient_name), date_of_birth: S(p.date_of_birth), sex: S(p.sex || 'female'),
+          test: S(t), urgency: S(val('lr_urg') || 'routine'), clinical_notes: S(note), requested_from: S('antenatal'), status: S('requested'), requested_at: S(now), requested_by: S(staffName()), requested_by_username: S(staffUser()) }));
+        const client = await getClient();
+        await Promise.all(items.map(Item => client.send(new PutItemCommand({ TableName: LAB_TABLE, Item }))));
+        items.forEach(i => anLab.unshift(unmarshal(i)));
+        anClose(); anRenderAll();
+        anNote(`${tests.length} lab test${tests.length > 1 ? 's' : ''} requested for <b>${esc(pg.patient_name)}</b>. ${fromVisit ? 'Your visit notes are saved as a draft: press Resume visit when the results are back.' : 'The results show on the Labs tab when the lab releases them.'}`, 'ok');
+      } catch (err) { b.disabled = false; b.textContent = 'Send lab request'; anNote(/AccessDenied|not authorized/i.test(err.message) ? 'Lab requests are not switched on for this login yet. Ask the administrator.' : `Could not send: ${esc(err.message)}`); }
+    };
+  }
+  // Drafts of antenatal visits, so a visit can be paused (for example while labs are done) and resumed
+  const AN_DRAFT_TEXT = ['av_date', 'av_wt', 'av_sys', 'av_dia', 'av_fund', 'av_fhr', 'av_hb', 'av_ifa', 'av_comp', 'av_plan', 'av_refto', 'av_refwhy', 'av_next'];
+  const AN_DRAFT_SEL = ['av_pres', 'av_move', 'av_oed', 'av_uprot', 'av_ugluc', 'av_mal', 'av_sp', 'av_td', 'av_ref'];
+  const anDraftRid = pg => `draft#${anKey(pg)}#${staffUser()}`;
+  const anMyDraft = pg => anRecs.find(r => r.record_id === anDraftRid(pg) && r.patient_id === pg.patient_id && !r.cleared_at);
+  const anDrafts = () => anRecs.filter(r => String(r.record_id).startsWith('draft#') && String(r.record_id).endsWith('#' + staffUser()) && !r.cleared_at);
+  function anCaptureVisit() {
+    const o = { t: {}, s: {}, dg: [...document.querySelectorAll('input[name="av_dg"]:checked')].map(c => c.value), cn: [...document.querySelectorAll('input[name="av_cn"]:checked')].map(c => c.value), itn: !!document.getElementById('av_itn')?.checked };
+    AN_DRAFT_TEXT.forEach(id => { const el = document.getElementById(id); if (el) o.t[id] = el.value; });
+    AN_DRAFT_SEL.forEach(id => { const el = document.getElementById(id); if (el) o.s[id] = el.value; });
+    return o;
+  }
+  function anApplyVisit(o) {
+    Object.entries(o.t || {}).forEach(([id, v]) => { const el = document.getElementById(id); if (el && v !== '') el.value = v; });
+    Object.entries(o.s || {}).forEach(([id, v]) => { const el = document.getElementById(id); if (el) el.value = v; });
+    document.querySelectorAll('input[name="av_dg"]').forEach(c => { c.checked = (o.dg || []).includes(c.value); });
+    document.querySelectorAll('input[name="av_cn"]').forEach(c => { c.checked = (o.cn || []).includes(c.value); });
+    const itn = document.getElementById('av_itn'); if (itn) itn.checked = !!o.itn;
+    document.getElementById('av_ref')?.dispatchEvent(new Event('change'));
+  }
+  async function anSaveDraft(rid, silent) {
+    const pg = anPregs.find(x => x.record_id === rid); if (!pg || !document.getElementById('av_wt')) return false;
+    const o = anCaptureVisit();
+    const has = ['av_wt', 'av_sys', 'av_dia', 'av_fund', 'av_fhr', 'av_hb', 'av_ifa', 'av_comp', 'av_plan', 'av_refto', 'av_refwhy'].some(id => (o.t[id] || '').trim()) || o.dg.length || o.cn.length || o.itn || AN_DRAFT_SEL.some(id => { const el = document.getElementById(id); return el && el.selectedIndex > 0; });
+    if (!has) { if (!silent) anNote('Type something in the visit first, then save the draft.'); return false; }
+    const btn = document.getElementById('avDraft'); if (btn && !silent) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      const now = new Date().toISOString();
+      const item = g2({ patient_id: S(pg.patient_id), record_id: S(anDraftRid(pg)), record_type: S('draft'), preg_id: S(pg.record_id), client_id: S(pg.client_id), patient_name: S(pg.patient_name), data_json: S(JSON.stringify(o)), saved_at: S(now), saved_by: S(staffName()), saved_by_username: S(staffUser()) });
+      await (await getClient()).send(new PutItemCommand({ TableName: ANC_TABLE, Item: item }));
+      anRecs = anRecs.filter(r => !(r.patient_id === pg.patient_id && r.record_id === anDraftRid(pg))); anRecs.push(unmarshal(item));
+      anRenderAll();
+      if (!silent) { clearErrs(); anClose(); anNote(`Draft saved for <b>${esc(pg.patient_name)}</b> at ${fmtDate(now)}. It is not part of her record until you save the visit. Press <b>Resume visit</b> to continue.`, 'ok'); }
+      return true;
+    } catch (err) { if (!silent) anNote(`Could not save the draft: ${esc(err.message)}`); return false; }
+    finally { if (btn && !silent) { btn.disabled = false; btn.textContent = 'Save draft'; } }
+  }
+  async function anClearDraft(pg) {
+    const d = anMyDraft(pg); if (!d) return;
+    try { await ddbUpdate({ table: ANC_TABLE, key: { patient_id: { S: pg.patient_id }, record_id: { S: anDraftRid(pg) } }, set: { cleared_at: new Date().toISOString() } }); } catch (e) { /* the visit itself is saved */ }
+    d.cleared_at = new Date().toISOString();
   }
 
   function anShellHtml() {
@@ -3675,6 +3807,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <button class="ph-tab on" data-antab="today">Today <span class="n" id="anTabToday" style="display:none"></span></button>
         <button class="ph-tab" data-antab="mothers">Mothers <span class="n green" id="anTabMothers" style="display:none"></span></button>
         <button class="ph-tab" data-antab="due">Due and missed <span class="n amber" id="anTabDue" style="display:none"></span></button>
+        <button class="ph-tab" data-antab="labs">Labs <span class="n amber" id="anTabLabs" style="display:none"></span></button>
         <button class="ph-tab" data-antab="scans">Scans <span class="n amber" id="anTabScans" style="display:none"></span></button>
         <button class="ph-tab" data-antab="find">Find a client</button>
       </div>
@@ -3685,6 +3818,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       </div>
       <div id="anPaneMothers" style="display:none"><div class="data-card"><h4>Mothers in antenatal care</h4><div class="vit" style="margin-bottom:8px">Everyone with a pregnancy that is still open. Red means there is something to check or an appointment was missed.</div><div class="recent-scroll" id="anMothers"></div></div></div>
       <div id="anPaneDue" style="display:none"><div class="data-card"><h4>Due and missed</h4><div class="vit" style="margin-bottom:8px">Mothers who missed an appointment, are due within a week, have no next appointment, or are at or past their due date. Phone numbers are shown so they can be called.</div><div class="recent-scroll" id="anDue"></div></div></div>
+      <div id="anPaneLabs" style="display:none"><div class="data-card"><h4>Lab tests</h4><div class="vit" style="margin-bottom:8px" id="anLabNote">Tests asked for mothers in antenatal care. Press View result when the lab has released it. To ask for tests, use Request labs in a mother's file or on the Mothers tab.</div><div class="recent-scroll" id="anLabList"></div></div></div>
       <div id="anPaneScans" style="display:none"><div class="data-card"><h4>Scan requests</h4><div class="vit" style="margin-bottom:8px">Scans asked for and waiting to be done are in red. Record the result when the scan is done. To ask for a scan, open a mother's file or use Request scan on the Mothers tab.</div><div class="recent-scroll" id="anScanList"></div></div></div>
       <div id="anPaneFind" style="display:none"><div class="data-card"><h4>Find a client</h4>
         <div class="fd-search"><input id="anFind" type="search" placeholder="Search by name, phone or client ID (VMH-00001)" autocomplete="off"></div>
@@ -3694,9 +3828,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   function setAnTab(t) {
     anTab = t;
-    ['today', 'mothers', 'due', 'scans', 'find'].forEach(k => { const p = document.getElementById('anPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
+    ['today', 'mothers', 'due', 'labs', 'scans', 'find'].forEach(k => { const p = document.getElementById('anPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
     document.querySelectorAll('[data-antab]').forEach(b => b.classList.toggle('on', b.dataset.antab === t));
-    const sr = document.getElementById('anSearchRow'); if (sr) sr.style.display = (t === 'mothers' || t === 'due') ? 'flex' : 'none';
+    const sr = document.getElementById('anSearchRow'); if (sr) sr.style.display = (t === 'mothers' || t === 'due' || t === 'labs') ? 'flex' : 'none';
   }
 
   const anMatch = pg => {
@@ -3721,6 +3855,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       if (!na) { why.push('<span class="st f-abnormal">No next appointment</span>'); rank = Math.min(rank, 4); }
       if (ga >= 287) { why.push('<span class="st rej">41 weeks or more</span>'); rank = Math.min(rank, 2); }
       else if (ga >= 273) { why.push('<span class="st f-abnormal">Due date within 1 week</span>'); rank = Math.min(rank, 5); }
+      if (!pg.edd) { why.push('<span class="st f-abnormal">Dating scan needed</span>'); rank = Math.min(rank, 4); }
       if (why.length) out.push({ pg, why, rank, sortKey });
     });
     return out.sort((a, b) => a.rank - b.rank || a.sortKey.localeCompare(b.sortKey));
@@ -3728,18 +3863,23 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   function renderAnTabs() {
     const set = (id, n) => { const el = document.getElementById(id); if (!el) return; el.textContent = n; el.style.display = n ? '' : 'none'; };
-    set('anTabToday', anWaiting().length); set('anTabMothers', anPregs.filter(x => x.status === 'active').length); set('anTabDue', anDueRows().length); set('anTabScans', anScans().filter(x => x.status === 'requested').length);
+    set('anTabToday', anWaiting().length + anDrafts().filter(d => !anWaiting().some(v => v.patient_id === d.patient_id)).length); set('anTabLabs', anLab.filter(anLabNew).length); set('anTabMothers', anPregs.filter(x => x.status === 'active').length); set('anTabDue', anDueRows().length); set('anTabScans', anScans().filter(x => x.status === 'requested').length);
   }
   function renderAnToday() {
     const wr = anWaiting().map(v => {
       const pg = anActive(v.patient_id);
       return `<tr class="rowbar red"><td>${new Date(v.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td>
-        <td>${anNameCell(v.patient_id, v.patient_name, v.client_id, pg && pg.record_id)}</td>
-        <td>${pg ? `<span class="st done">Booked</span> <span class="vit">${anGaTxt(anGaDays(pg.edd))}, due ${anDate(pg.edd)}</span>` : '<span class="st wait">Not booked yet</span>'}</td>
+        <td>${anNameCell(v.patient_id, v.patient_name, v.client_id, pg && pg.record_id)}${anLabTags(v.patient_id)}</td>
+        <td>${pg ? `<span class="st done">Booked</span> <span class="vit">${pg.edd ? anGaTxt(anGaDays(pg.edd)) + ', due ' + anDate(pg.edd) : 'due date pending'}</span>` : '<span class="st wait">Not booked yet</span>'}</td>
         <td class="vit">${vitalsSummary(v)}</td>
-        <td style="white-space:nowrap">${canAnc ? (pg ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button>` : `<button class="btn-sm" data-anact="book|${esc(v.patient_id)}">Book pregnancy</button>`) : `<a class="lnk" data-anact="${pg ? 'file|' + esc(pg.record_id) : 'person|' + esc(v.patient_id)}">View</a>`}</td></tr>`;
+        <td style="white-space:nowrap">${canAnc ? (pg ? `<button class="btn-sm ${anMyDraft(pg) ? 'b-recv' : 'b-rel'}" data-anact="visit|${esc(pg.record_id)}">${anMyDraft(pg) ? 'Resume visit' : 'Record visit'}</button>` : `<button class="btn-sm" data-anact="book|${esc(v.patient_id)}">Book pregnancy</button>`) : `<a class="lnk" data-anact="${pg ? 'file|' + esc(pg.record_id) : 'person|' + esc(v.patient_id)}">View</a>`}</td></tr>`;
     }).join('');
-    document.getElementById('anWait').innerHTML = `<table class="data-table"><thead><tr><th>Arrived</th><th>Mother</th><th>Pregnancy</th><th>Front desk vitals</th><th></th></tr></thead><tbody>${wr || '<tr class="empty-row"><td colspan="5">No one is waiting. Clients checked in at the front desk for antenatal care today appear here.</td></tr>'}</tbody></table>`;
+    const waitIds = new Set(anWaiting().map(v => v.patient_id));
+    const dr = canAnc ? anDrafts().filter(d => !waitIds.has(d.patient_id)).map(d => { const pg = anPregs.find(x => x.record_id === d.preg_id && x.status === 'active'); if (!pg) return '';
+      return `<tr class="rowbar red"><td>—</td><td>${anNameCell(d.patient_id, d.patient_name, d.client_id, pg.record_id)}<div style="margin-top:4px"><span class="st wait">Draft visit</span></div>${anLabTags(d.patient_id)}</td>
+        <td><span class="st done">Booked</span> <span class="vit">${pg.edd ? anGaTxt(anGaDays(pg.edd)) + ', due ' + anDate(pg.edd) : 'due date pending'}</span></td><td class="vit">Saved ${fmtDate(d.saved_at)}</td>
+        <td><button class="btn-sm b-recv" data-anact="visit|${esc(pg.record_id)}">Resume visit</button></td></tr>`; }).join('') : '';
+    document.getElementById('anWait').innerHTML = `<table class="data-table"><thead><tr><th>Arrived</th><th>Mother</th><th>Pregnancy</th><th>Front desk vitals</th><th></th></tr></thead><tbody>${wr + dr || '<tr class="empty-row"><td colspan="5">No one is waiting. Clients checked in at the front desk for antenatal care today appear here.</td></tr>'}</tbody></table>`;
     const sr = anSeenToday().map(r => { const pg = anPregs.find(x => x.patient_id === r.patient_id && anKey(x) === String(r.record_id).split('#')[1]);
       return `<tr class="rowbar green"><td>${new Date(r.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</td><td>${anNameCell(r.patient_id, r.patient_name, r.client_id, pg && pg.record_id)}</td>
         <td>${esc(anGaTxt(Number(r.ga_days)))}</td><td class="vit">${r.bp_sys ? `BP ${esc(r.bp_sys)}/${esc(r.bp_dia)}` : ''}${r.weight ? ` · ${esc(r.weight)} kg` : ''}</td><td>${esc(r.entered_by || '')}</td></tr>`; }).join('');
@@ -3747,19 +3887,19 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   function renderAnMothers() {
     const t = today10();
-    const rows = anPregs.filter(x => x.status === 'active' && anMatch(x)).sort((a, b) => (a.edd || '').localeCompare(b.edd || '')).map(pg => {
+    const rows = anPregs.filter(x => x.status === 'active' && anMatch(x)).sort((a, b) => (a.edd || '9999').localeCompare(b.edd || '9999')).map(pg => {
       const p = anPat(pg.patient_id) || {}, r = anRisk(pg), na = anNext(pg), ga = anGaDays(pg.edd), missed = na && anD0(na) < anD0(t);
       const age = anAgeNum(p.date_of_birth);
-      return `<tr class="rowbar ${r.hi.length || missed ? 'red' : ''}"><td>${anNameCell(pg.patient_id, pg.patient_name, pg.client_id, pg.record_id)}<div class="vit">${age !== null ? age + ' years' : ''}</div></td>
-        <td><b>${anGaTxt(ga)}</b><div class="vit">${anTri(ga)}</div></td><td>${anDate(pg.edd)}</td><td class="vit">G${esc(pg.gravida || '?')} P${esc(pg.para || '0')}</td>
+      return `<tr class="rowbar ${r.hi.length || missed ? 'red' : ''}"><td>${anNameCell(pg.patient_id, pg.patient_name, pg.client_id, pg.record_id)}<div class="vit">${age !== null ? age + ' years' : ''}</div>${anLabTags(pg.patient_id)}</td>
+        <td><b>${anGaTxt(ga)}</b><div class="vit">${anTri(ga)}</div></td><td>${anDueTxt(pg)}</td><td class="vit">G${esc(pg.gravida || '?')} P${esc(pg.para || '0')}${pg.abortions && pg.abortions !== '0' ? ' A' + esc(pg.abortions) : ''}</td>
         <td class="vit">${pg.last_visit_date ? anDate(pg.last_visit_date) : 'Booking only'}</td>
         <td>${na ? (missed ? `<span class="st rej">Missed ${anDate(na)}</span>` : anDate(na)) : '<span class="vit">None set</span>'}</td><td>${anRiskBadge(r)}</td>
-        <td style="white-space:nowrap">${canAnc ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button> · <a class="lnk" data-anact="scanreq|${esc(pg.record_id)}">Request scan</a> · ` : ''}<a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a></td></tr>`; }).join('');
-    document.getElementById('anMothers').innerHTML = `<table class="data-table"><thead><tr><th>Mother</th><th>Gestation</th><th>Due date</th><th>Births</th><th>Last visit</th><th>Next appointment</th><th>Flags</th><th></th></tr></thead><tbody>${rows || `<tr class="empty-row"><td colspan="8">${anQ ? 'No mother matches your search.' : 'No pregnancies booked yet. Use Today or Find a client to book one.'}</td></tr>`}</tbody></table>`;
+        <td style="white-space:nowrap">${canAnc ? `<button class="btn-sm ${anMyDraft(pg) ? 'b-recv' : 'b-rel'}" data-anact="visit|${esc(pg.record_id)}">${anMyDraft(pg) ? 'Resume visit' : 'Record visit'}</button> · ${anCanLab() ? `<a class="lnk" data-anact="labreq|${esc(pg.record_id)}">Request labs</a> · ` : ''}<a class="lnk" data-anact="scanreq|${esc(pg.record_id)}">Request scan</a> · ` : ''}<a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a></td></tr>`; }).join('');
+    document.getElementById('anMothers').innerHTML = `<table class="data-table"><thead><tr><th>Mother</th><th>Gestation</th><th>Due date</th><th>G / P / A</th><th>Last visit</th><th>Next appointment</th><th>Flags</th><th></th></tr></thead><tbody>${rows || `<tr class="empty-row"><td colspan="8">${anQ ? 'No mother matches your search.' : 'No pregnancies booked yet. Use Today or Find a client to book one.'}</td></tr>`}</tbody></table>`;
   }
   function renderAnDue() {
     const rows = anDueRows().filter(x => anMatch(x.pg)).map(({ pg, why, rank }) => { const p = anPat(pg.patient_id) || {};
-      return `<tr class="rowbar ${rank <= 2 ? 'red' : ''}"><td>${anNameCell(pg.patient_id, pg.patient_name, pg.client_id, pg.record_id)}</td><td>${why.join(' ')}</td><td>${anGaTxt(anGaDays(pg.edd))}<div class="vit">due ${anDate(pg.edd)}</div></td>
+      return `<tr class="rowbar ${rank <= 2 ? 'red' : ''}"><td>${anNameCell(pg.patient_id, pg.patient_name, pg.client_id, pg.record_id)}</td><td>${why.join(' ')}</td><td>${anGaTxt(anGaDays(pg.edd))}<div class="vit">${pg.edd ? 'due ' + anDate(pg.edd) : 'due date pending'}</div></td>
         <td>${esc(p.phone_number || '—')}<div class="vit">${esc(p.emergency_contact_name ? p.emergency_contact_name + (p.emergency_contact_phone ? ' ' + p.emergency_contact_phone : '') : '')}</div></td>
         <td><a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a></td></tr>`; }).join('');
     document.getElementById('anDue').innerHTML = `<table class="data-table"><thead><tr><th>Mother</th><th>Why</th><th>Gestation</th><th>Phone</th><th></th></tr></thead><tbody>${rows || `<tr class="empty-row"><td colspan="5">${anQ ? 'No one matches your search.' : 'Nobody is overdue or due this week.'}</td></tr>`}</tbody></table>`;
@@ -3777,7 +3917,21 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <td style="white-space:nowrap">${x.status === 'requested' && canAnc ? `<button class="btn-sm b-rel" data-anact="scanres|${esc(x.record_id)}">Record result</button> · <a class="lnk" data-anact="scancancel|${esc(x.record_id)}">Cancel</a>` : ''}${x.status === 'done' ? `<a class="lnk" data-anact="scanview|${esc(x.record_id)}">View result</a>` : ''}</td></tr>`; }).join('');
     el.innerHTML = `<table class="data-table"><thead><tr><th>Requested</th><th>Mother</th><th>Scan</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="5">No scans requested yet.</td></tr>'}</tbody></table>`;
   }
-  function anRenderAll() { renderAnTabs(); renderAnToday(); renderAnMothers(); renderAnDue(); renderAnScans(); }
+  function renderAnLabs() {
+    const el = document.getElementById('anFind') && document.getElementById('anLabList'); if (!el) return;
+    const note = document.getElementById('anLabNote');
+    if (!anLabOk) { el.innerHTML = ''; if (note) note.innerHTML = '<b style="color:#C62828">Lab tests are not switched on for this login yet.</b> Ask the administrator to give the antenatal group access to lab requests.'; return; }
+    const q = anQ.trim().toLowerCase(), active = new Set(anPregs.filter(x => x.status === 'active').map(x => x.patient_id));
+    const rows = anLab.filter(r => (active.has(r.patient_id) || r.requested_by_username === staffUser()) && (!q || [r.patient_name, r.client_id, r.test].join(' ').toLowerCase().includes(q)))
+      .sort((a, b) => (anLabNew(b) ? 1 : 0) - (anLabNew(a) ? 1 : 0) || (b.requested_at || '').localeCompare(a.requested_at || '')).slice(0, 150).map(r => {
+        const pg = anActive(r.patient_id);
+        return `<tr class="rowbar ${r.status === 'released' ? (anLabNew(r) ? 'green' : '') : (r.status === 'rejected' ? 'red' : '')}"><td>${fmtDate(r.requested_at)}<div class="vit">${esc(r.requested_by || '')}</div></td><td>${anNameCell(r.patient_id, r.patient_name, r.client_id, pg && pg.record_id)}</td>
+          <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st f-critical">Urgent</span>' : ''}</td><td>${anLabChip(r)}${anLabNew(r) ? ' <span class="st done">New</span>' : ''}</td>
+          <td>${(r.status === 'released' || r.status === 'rejected') ? `<a class="lnk" data-anact="labview|${esc(r.request_id)}">${r.status === 'released' ? 'View result' : 'Details'}</a>` : ''}</td></tr>`; }).join('');
+    if (note) note.textContent = "Tests asked for mothers in antenatal care. Press View result when the lab has released it. To ask for tests, use Request labs in a mother's file or on the Mothers tab.";
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Requested</th><th>Mother</th><th>Test</th><th>Status</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="5">No lab tests requested yet.</td></tr>'}</tbody></table>`;
+  }
+  function anRenderAll() { renderAnTabs(); renderAnToday(); renderAnMothers(); renderAnDue(); renderAnScans(); renderAnLabs(); }
 
   function anFindRender() {
     const q = val('anFind').toLowerCase(), res = document.getElementById('anFindRes'); if (!res) return;
@@ -3786,14 +3940,14 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const hits = fdPatients.filter(p => p.sex !== 'male' && ((p.full_name || '').toLowerCase().includes(q) || (p.client_id || '').toLowerCase().includes(q) || (digits.length >= 4 && canonPhone(p.phone_number).includes(canonPhone(digits))))).slice(0, 12);
     res.innerHTML = hits.map(p => { const pg = anActive(p.patient_id), old = anPregs.filter(x => x.patient_id === p.patient_id && x.status !== 'active').length;
       return `<div class="result-row" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border-bottom:1px solid #EFF3EC"><div><b>${esc(p.full_name)}</b> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID')}</span><div class="vit">${esc(ageOf(p.date_of_birth))}${p.phone_number ? ' · ' + esc(p.phone_number) : ''}${old ? ` · ${old} earlier pregnanc${old > 1 ? 'ies' : 'y'} here` : ''}</div></div>
-        <div>${pg ? `<span class="st done">${anGaTxt(anGaDays(pg.edd))}</span> <a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a>` : (canAnc ? `<button class="btn-sm" data-anact="book|${esc(p.patient_id)}">Book pregnancy</button>` : '<span class="vit">No open pregnancy</span>')}</div></div>`; }).join('') || '<div class="vit" style="padding:10px">No match. Clients are registered at the front desk first.</div>';
+        <div>${pg ? `<span class="st done">${pg.edd ? anGaTxt(anGaDays(pg.edd)) : 'Dating pending'}</span> <a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a>` : (canAnc ? `<button class="btn-sm" data-anact="book|${esc(p.patient_id)}">Book pregnancy</button>` : '<span class="vit">No open pregnancy</span>')}</div></div>`; }).join('') || '<div class="vit" style="padding:10px">No match. Clients are registered at the front desk first.</div>';
   }
 
   function anBanner(pid, pg) {
     const p = anPat(pid) || {}, age = anAgeNum(p.date_of_birth), ga = pg ? anGaDays(pg.edd) : null;
     return `<div class="client-banner"><div><strong style="font-size:16px">${esc(p.full_name || (pg && pg.patient_name) || '')}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID')}</span>
       <div style="font-size:12.5px;color:#555">${age !== null ? age + ' years' : ''}${p.phone_number ? ' · ' + esc(p.phone_number) : ''}${p.allergies ? ` · <b style="color:#C62828">Allergies: ${esc(p.allergies)}</b>` : ''}</div></div>
-      ${pg ? `<div style="text-align:right"><b style="font-size:16px">${anGaTxt(ga)}</b> <span class="vit">${anTri(ga)}</span><div class="vit">Due ${anDate(pg.edd)}</div></div>` : ''}</div>`;
+      ${pg ? `<div style="text-align:right"><b style="font-size:16px">${anGaTxt(ga)}</b> <span class="vit">${anTri(ga)}</span><div class="vit">${pg.edd ? 'Due ' + anDate(pg.edd) : 'Due date pending'}</div></div>` : ''}</div>`;
   }
 
   // ---- Book a pregnancy ----
@@ -3805,6 +3959,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     if (mode === 'close') return anCloseForm(a);
     if (mode === 'edd') return anEddForm(a);
     if (mode === 'scanreq') return anScanReqForm(a);
+    if (mode === 'labreq') return anLabReqForm(a, false);
+    if (mode === 'labview') return anLabView(a);
     if (mode === 'scanres') return anScanResForm(a);
     if (mode === 'scancancel') return anScanCancelForm(a);
     if (mode === 'scanview') return anScanView(a);
@@ -3816,16 +3972,17 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const age = anAgeNum(p.date_of_birth), t = today10();
     anShow(`<div class="fd-form">${anBanner(pid, null)}
       ${age !== null && age < 18 ? '<div class="notice">She is under 18. This is a high-risk booking; plan hospital delivery and involve a senior midwife.</div>' : ''}
-      <h5>Dates</h5><div class="grid3">
+      <h5>Dates</h5><label class="chk" style="margin-bottom:10px"><input type="checkbox" id="an_unk"> Early pregnancy: her last period and due date are not known yet</label><div class="grid3">
         <div class="f"><label>Booking date <span class="req">*</span></label><input id="an_bdate" type="date" max="${t}" value="${t}"></div>
-        <div class="f"><label>First day of last period</label><input id="an_lmp" type="date" max="${t}"></div>
-        <div class="f"><label>Expected due date <span class="req">*</span></label><input id="an_edd" type="date"></div>
-        <div class="f"><label>Due date worked out from <span class="req">*</span></label><select id="an_meth"><option value="">Select…</option><option>Last period</option><option>Ultrasound scan</option></select></div>
+        <div class="f" id="an_f_lmp"><label>First day of last period</label><input id="an_lmp" type="date" max="${t}"></div>
+        <div class="f" id="an_f_edd"><label>Expected due date (EDD) <span class="req">*</span></label><input id="an_edd" type="date"></div>
+        <div class="f" id="an_f_meth"><label>Due date worked out from <span class="req">*</span></label><select id="an_meth"><option value="">Select…</option><option>Last period</option><option>Ultrasound scan</option></select></div>
       </div><div class="vit" id="an_eddnote" style="margin-top:6px">Enter the last period and the due date fills in (280 days). If a scan gives a different date, type it and choose Ultrasound scan.</div>
+      <label class="chk" id="an_dating_wrap" style="display:none;margin-top:8px"><input type="checkbox" id="an_dating" checked> Request a dating scan now (she will show as "Due date pending" until the scan gives a due date)</label>
       <h5>Pregnancy history</h5><div class="grid3">
-        <div class="f"><label>Pregnancies including this one <span class="req">*</span></label><input id="an_g" type="number" min="1" max="20" step="1"></div>
-        <div class="f"><label>Births before this one <span class="req">*</span></label><input id="an_p" type="number" min="0" max="19" step="1"></div>
-        <div class="f"><label>Miscarriages or abortions</label><input id="an_a" type="number" min="0" max="19" step="1"></div>
+        <div class="f"><label>Gravida <span class="unit">pregnancies, including this one</span> <span class="req">*</span></label><input id="an_g" type="number" min="1" max="20" step="1"></div>
+        <div class="f"><label>Para <span class="unit">births at 28 weeks or later, before this one</span> <span class="req">*</span></label><input id="an_p" type="number" min="0" max="19" step="1"></div>
+        <div class="f"><label>Abortus <span class="unit">miscarriages or abortions</span></label><input id="an_a" type="number" min="0" max="19" step="1"></div>
       </div>
       <div style="margin-top:12px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Tick anything that applies</label><div class="grid2" style="margin-top:6px">${AN_HIST.map((h, i) => `<label class="chk"><input type="checkbox" name="an_hx" value="${esc(h[0])}"> ${esc(h[0])}</label>`).join('')}</div></div>
       <div class="f" style="margin-top:10px"><label>Other history or notes</label><textarea id="an_hother" rows="2"></textarea></div>
@@ -3837,9 +3994,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       <h5>Booking tests</h5><div class="grid3">
         <div class="f"><label>Blood group</label><select id="an_bg">${anOpts(AN_BG, 'Not known')}</select></div>
         <div class="f"><label>Haemoglobin <span class="unit">g/dL</span></label><input id="an_hb" type="number" step="0.1" min="2" max="25"></div>
-        <div class="f"><label>HIV test</label><select id="an_hiv">${anOpts(AN_TEST, 'Not done')}</select></div>
-        <div class="f"><label>Hepatitis B</label><select id="an_hbv">${anOpts(AN_TEST, 'Not done')}</select></div>
-        <div class="f"><label>Syphilis</label><select id="an_syph">${anOpts(AN_TEST, 'Not done')}</select></div>
+        <div class="f"><label>HIV screening</label><select id="an_hiv">${anOpts(AN_REACT, 'Not done')}</select></div>
+        <div class="f"><label>Hepatitis B (HBsAg)</label><select id="an_hbv">${anOpts(AN_REACT, 'Not done')}</select></div>
+        <div class="f"><label>Syphilis (VDRL/RPR)</label><select id="an_syph">${anOpts(AN_REACT, 'Not done')}</select></div>
         <div class="f"><label>Urine protein</label><select id="an_uprot">${anOpts(AN_URINE, 'Not done')}</select></div>
       </div>
       <div class="vit" style="margin-top:6px">To send blood tests to the lab, ask a clinician to request them. Results then show in the mother's file.</div>
@@ -3854,20 +4011,28 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const lmp = document.getElementById('an_lmp'), edd = document.getElementById('an_edd'), meth = document.getElementById('an_meth'), next = document.getElementById('an_next');
     lmp.onchange = () => { if (lmp.value) { edd.value = anAdd(lmp.value, 280); meth.value = 'Last period'; edd.dispatchEvent(new Event('change')); } };
     edd.onchange = () => { if (edd.value) { const s = anSuggest(edd.value, val('an_bdate') || today10()); if (!next.value) next.value = s.date; document.getElementById('an_eddnote').textContent = `Gestation today: ${anGaTxt(anGaDays(edd.value))}. Suggested next appointment ${anDate(s.date)}${s.weeks ? ` (${s.weeks} weeks)` : ''}; change it if needed.`; } };
+    const unk = document.getElementById('an_unk');
+    unk.onchange = () => {
+      const u = unk.checked;
+      ['an_f_lmp', 'an_f_edd', 'an_f_meth'].forEach(i => { document.getElementById(i).style.display = u ? 'none' : ''; });
+      document.getElementById('an_dating_wrap').style.display = u ? '' : 'none';
+      document.getElementById('an_eddnote').textContent = u ? 'She can still be booked and seen. A dating scan (or her dates, once known) will give the due date. Use Change due date in her file when it is known.' : 'Enter the last period and the due date fills in (280 days). If a scan gives a different date, type it and choose Ultrasound scan.';
+      if (u && !next.value) next.value = anAdd(val('an_bdate') || today10(), 14);
+    };
     document.getElementById('anBookSave').onclick = () => anSaveBook(pid);
   }
   async function anSaveBook(pid) {
     const p = anPat(pid), t = today10(), form = document.getElementById('anForm'); clearErrs(form);
-    const errs = [], edd = val('an_edd'), bdate = val('an_bdate'), g = anNum('an_g'), pa = anNum('an_p'), wt = anNum('an_wt'), sys = anNum('an_sys'), dia = anNum('an_dia'), hb = anNum('an_hb'), ht = anNum('an_ht');
+    const unk = document.getElementById('an_unk').checked, errs = [], edd = unk ? '' : val('an_edd'), bdate = val('an_bdate'), g = anNum('an_g'), pa = anNum('an_p'), ab = anNum('an_a'), wt = anNum('an_wt'), sys = anNum('an_sys'), dia = anNum('an_dia'), hb = anNum('an_hb'), ht = anNum('an_ht');
     if (!bdate) errs.push(['an_bdate', 'Choose the booking date.']); else if (bdate > t) errs.push(['an_bdate', 'The booking date cannot be in the future.']);
-    if (val('an_lmp') && val('an_lmp') > t) errs.push(['an_lmp', 'The last period cannot be in the future.']);
-    if (!edd) errs.push(['an_edd', 'Enter the last period, or type the due date.']);
-    else if (anD0(edd) < anD0(t) - 14 * DAYMS) errs.push(['an_edd', 'This due date is more than 2 weeks ago. Check the date.']);
-    else if (anD0(edd) > anD0(t) + 285 * DAYMS) errs.push(['an_edd', 'This due date is too far ahead. Check the date.']);
-    if (!val('an_meth')) errs.push(['an_meth', 'Say how the due date was worked out.']);
-    if (g === null || g < 1) errs.push(['an_g', 'Enter the number of pregnancies, including this one.']);
-    if (pa === null || pa < 0) errs.push(['an_p', 'Enter the number of births before this pregnancy (0 if none).']);
-    else if (g !== null && pa > g - 1) errs.push(['an_p', 'Births before this one cannot be more than the pregnancies minus 1.']);
+    if (!unk && val('an_lmp') && val('an_lmp') > t) errs.push(['an_lmp', 'The last period cannot be in the future.']);
+    if (!unk && !edd) errs.push(['an_edd', 'Enter the last period, or type the due date. If she does not know it yet, tick the box above.']);
+    else if (edd && anD0(edd) < anD0(t) - 14 * DAYMS) errs.push(['an_edd', 'This due date is more than 2 weeks ago. Check the date.']);
+    else if (edd && anD0(edd) > anD0(t) + 285 * DAYMS) errs.push(['an_edd', 'This due date is too far ahead. Check the date.']);
+    if (!unk && !val('an_meth')) errs.push(['an_meth', 'Say how the due date was worked out.']);
+    if (g === null || g < 1) errs.push(['an_g', 'Enter the gravida: the number of pregnancies, including this one.']);
+    if (pa === null || pa < 0) errs.push(['an_p', 'Enter the para: births before this pregnancy (0 if none).']);
+    else if (g !== null && pa + (ab || 0) > g - 1) errs.push(['an_p', 'Para plus abortus cannot be more than gravida minus 1.']);
     if (wt === null || wt < 30 || wt > 200) errs.push(['an_wt', 'Enter the weight in kg (30 to 200).']);
     if (ht !== null && (ht < 120 || ht > 210)) errs.push(['an_ht', 'Height should be between 120 and 210 cm.']);
     if (sys === null || dia === null || sys < 50 || sys > 260 || dia < 30 || dia > 160 || sys <= dia) errs.push([sys === null || sys < 50 || sys > 260 ? 'an_sys' : 'an_dia', 'Enter a blood pressure that makes sense, for example 120 and 80.']);
@@ -3880,14 +4045,20 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       const now = new Date().toISOString(), rid = 'preg#' + uuid().replace(/-/g, '').slice(0, 10);
       const hx = [...document.querySelectorAll('input[name="an_hx"]:checked')].map(c => c.value).join('|');
       const item = g2({ patient_id: S(pid), record_id: S(rid), record_type: S('pregnancy'), status: S('active'), client_id: S(p.client_id), patient_name: S(p.full_name),
-        booked_date: S(bdate), lmp: S(val('an_lmp')), edd: S(edd), edd_method: S(val('an_meth')), gravida: anN(g), para: anN(pa), abortions: anN(anNum('an_a')),
+        booked_date: S(bdate), lmp: S(unk ? '' : val('an_lmp')), edd: S(edd), edd_method: S(unk ? '' : val('an_meth')), edd_pending: S(unk ? 'yes' : ''), gravida: anN(g), para: anN(pa), abortions: anN(anNum('an_a')),
         risk_hx: S(hx), hx_other: S(val('an_hother')), weight: anN(wt), height: anN(ht), bp_sys: anN(sys), bp_dia: anN(dia),
         blood_group: S(val('an_bg') === 'Not known' ? '' : val('an_bg')), hb: anN(hb), hiv: S(val('an_hiv')), hepb: S(val('an_hbv')), syphilis: S(val('an_syph')), urine_protein: S(val('an_uprot')),
         plan_place: S(val('an_place')), plan_notes: S(val('an_plan')), next_appt: S(val('an_next')), visits_n: { N: '0' },
         entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser()) });
       await (await getClient()).send(new PutItemCommand({ TableName: ANC_TABLE, Item: item, ConditionExpression: 'attribute_not_exists(record_id)' }));
+      let extra = '';
+      if (unk && document.getElementById('an_dating').checked) {
+        try { await anPutScan({ patient_id: pid, record_id: rid, client_id: p.client_id, patient_name: p.full_name, edd: '' }, 'Dating and viability (early scan)', 'Early pregnancy, last period and due date not known. Please date the pregnancy.', 'Routine', ''); extra = ' A dating scan was requested.'; }
+        catch (er) { extra = ' The pregnancy was booked but the dating scan request could not be sent; request it from her file.'; }
+      }
+      const nxt = item.next_appt.S;
       await anRefresh(); anClose(); anRenderAll();
-      anNote(`Pregnancy booked for <b>${esc(p.full_name)}</b>: due ${anDate(edd)}, next appointment ${anDate(val('an_next') || item.next_appt.S)}.`, 'ok');
+      anNote(`Pregnancy booked for <b>${esc(p.full_name)}</b>: ${edd ? 'due ' + anDate(edd) : 'due date pending'}, next appointment ${anDate(nxt)}.${extra}`, 'ok');
     } catch (err) { btn.disabled = false; btn.textContent = 'Save booking'; anNote(`Could not save the booking: ${esc(err.message)}`); }
   }
   const g2 = o => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
@@ -3897,7 +4068,10 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return;
     if (pg.status !== 'active') return anNote('This pregnancy is closed.');
     const t = today10(), sug = anSuggest(pg.edd, t), n = Number(pg.visits_n || 0) + 2;
+    const draft = anMyDraft(pg);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}
+      <div id="avDraftNote">${draft ? `<div class="notice">You have a saved draft from ${fmtDate(draft.saved_at)}. It is not part of her record until you press <b>Save visit</b>. <a class="lnk" id="avDiscard">Discard the draft</a></div>` : ''}</div>
+      ${anLabOk ? `<div id="avLabBox" style="margin:4px 0 8px"><div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap"><b style="color:var(--forest)">Lab tests for this mother</b><button class="btn-sm ghost" id="avLabRefresh" type="button">Check for new results</button></div><div id="avLabTable">${anLabTableHtml(pg.patient_id)}</div><div id="avLabView"></div></div>` : ''}
       <h5>Antenatal visit ${n}</h5><div class="grid3">
         <div class="f"><label>Visit date <span class="req">*</span></label><input id="av_date" type="date" max="${t}" value="${t}"></div>
         <div class="f"><label>Weight <span class="unit">kg</span> <span class="req">*</span></label><input id="av_wt" type="number" step="0.1" min="30" max="200"></div>
@@ -3932,11 +4106,16 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <div class="f" id="av_refwrap2" style="display:none"><label>Reason <span class="req">*</span></label><input id="av_refwhy"></div>
         <div class="f"><label>Next appointment</label><input id="av_next" type="date" min="${t}" value="${sug.date}"><div class="vit" style="margin-top:3px">Suggested ${anDate(sug.date)}${sug.weeks ? ` (${sug.weeks} weeks)` : ''}. Clear it if she is being referred and will not return here.</div></div>
       </div>
-      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="avSave">Save visit</button><button class="btn-sm ghost" id="anCancel">Cancel</button></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="avSave">Save visit</button><button class="btn-sm ghost" id="avDraft" type="button">Save draft</button>${anCanLab() ? '<button class="btn-sm ghost" id="avLabs" type="button">Save draft and request labs</button>' : ''}<button class="btn-sm ghost" id="anCancel">Cancel</button></div>
       <div class="stamp">Recorded with your name and the time. A saved visit cannot be edited; add a new visit to correct it.</div></div>`);
     document.getElementById('anCancel').onclick = anClose;
     document.getElementById('av_ref').onchange = e => { const y = e.target.value === 'Yes'; document.getElementById('av_refwrap').style.display = y ? '' : 'none'; document.getElementById('av_refwrap2').style.display = y ? '' : 'none'; };
     document.getElementById('avSave').onclick = () => anSaveVisit(rid);
+    document.getElementById('avDraft').onclick = () => anSaveDraft(rid, false);
+    const lb = document.getElementById('avLabs'); if (lb) lb.onclick = async () => { const ok = await anSaveDraft(rid, true); if (!ok) { clearErrs(); } anLabReqForm(rid, ok); };
+    const rf = document.getElementById('avLabRefresh'); if (rf) rf.onclick = async () => { rf.disabled = true; rf.textContent = 'Checking…'; try { await anRefresh(); anRenderAll(); document.getElementById('avLabTable').innerHTML = anLabTableHtml(pg.patient_id); } catch (e) { /* keep what is shown */ } rf.disabled = false; rf.textContent = 'Check for new results'; };
+    const dc = document.getElementById('avDiscard'); if (dc) dc.onclick = async () => { await anClearDraft(pg); document.getElementById('avDraftNote').innerHTML = ''; anRenderAll(); };
+    if (draft) { try { anApplyVisit(JSON.parse(draft.data_json || '{}')); } catch (e) { /* ignore a damaged draft */ } }
   }
   async function anSaveVisit(rid) {
     const pg = anPregs.find(x => x.record_id === rid), t = today10(), form = document.getElementById('anForm'); clearErrs(form);
@@ -3959,6 +4138,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const btn = document.getElementById('avSave'); btn.disabled = true; btn.textContent = 'Saving…';
     try {
       const now = new Date().toISOString(), client = await getClient(), ga = anGaDays(pg.edd, vd);
+      const nextAppt = val('av_next');
       const sel = (id, none) => (val(id) && val(id) !== none) ? val(id) : '';
       const item = g2({ patient_id: S(pg.patient_id), record_id: S(`anc#${anKey(pg)}#${now}`), record_type: S('anc-visit'), preg_id: S(pg.record_id), client_id: S(pg.client_id), patient_name: S(pg.patient_name),
         visit_date: S(vd), ga_days: anN(ga), weight: anN(wt), bp_sys: anN(sys), bp_dia: anN(dia), fundal: anN(fund), fhr: anN(fhr),
@@ -3974,9 +4154,10 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         await ddbUpdate({ table: ANC_TABLE, key: { patient_id: { S: pg.patient_id }, record_id: { S: pg.record_id } },
           set: { last_visit_date: vd, last_visit_at: now, last_visit_by: staffName(), next_appt: val('av_next') || 'none' }, add: { visits_n: 1 } });
       } catch (e) { await anRefresh(); anClose(); anRenderAll(); return anNote(`The visit was saved, but the mother's summary line could not be updated: ${esc(e.message)}. Open her file to check.`); }
+      await anClearDraft(pg);
       await anRefresh(); anClose(); anRenderAll();
       const r = anRisk(anPregs.find(x => x.record_id === rid));
-      anNote(`Visit saved for <b>${esc(pg.patient_name)}</b> at ${anGaTxt(ga)}. ${val('av_next') ? 'Next appointment ' + anDate(val('av_next')) + '.' : 'No next appointment set.'}${r.hi.length ? ` <b>Check: ${esc(r.hi.join('; '))}</b>` : ''}`, r.hi.length ? '' : 'ok');
+      anNote(`Visit saved for <b>${esc(pg.patient_name)}</b>${Number.isFinite(ga) ? ' at ' + anGaTxt(ga) : ''}. ${nextAppt ? 'Next appointment ' + anDate(nextAppt) + '.' : 'No next appointment set.'}${r.hi.length ? ` <b>Check: ${esc(r.hi.join('; '))}</b>` : ''}`, r.hi.length ? '' : 'ok');
     } catch (err) { btn.disabled = false; btn.textContent = 'Save visit'; anNote(`Could not save the visit: ${esc(err.message)}`); }
   }
 
@@ -3996,19 +4177,20 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       <td>${v.complaints ? `<div class="vit">${esc(v.complaints)}</div>` : ''}${esc(v.plan || '')}</td><td>${v.next_appt ? anDate(v.next_appt) : '—'}</td><td>${esc(v.entered_by || '')}<div class="vit">${fmtDate(v.entered_at)}</div></td></tr>`).join('');
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${anRiskBadge(r)} ${active ? '<span class="st done">Open pregnancy</span>' : `<span class="st wait">Closed: ${esc(pg.outcome || '')}</span>`}
-        ${active && canAnc ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button><button class="btn-sm ghost" data-anact="scanreq|${esc(pg.record_id)}">Request scan</button><button class="btn-sm ghost" data-anact="edd|${esc(pg.record_id)}">Change due date</button><button class="btn-sm ghost" data-anact="close|${esc(pg.record_id)}">Close pregnancy</button>` : ''}
+        ${active && canAnc ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button>${anCanLab() ? `<button class="btn-sm ghost" data-anact="labreq|${esc(pg.record_id)}">Request labs</button>` : ''}<button class="btn-sm ghost" data-anact="scanreq|${esc(pg.record_id)}">Request scan</button><button class="btn-sm ghost" data-anact="edd|${esc(pg.record_id)}">${pg.edd ? 'Change due date' : 'Set due date'}</button><button class="btn-sm ghost" data-anact="close|${esc(pg.record_id)}">Close pregnancy</button>` : ''}
         <button class="btn-sm ghost" id="anCancel" style="margin-left:auto">Close file</button></div>
       <div class="vit">Flags are reminders to check from what was recorded. They do not replace your judgement.</div>${anRiskList(r)}
       <h5>Summary</h5><div class="grid3" style="font-size:13.5px;line-height:1.7">
-        <div>${kv('Due date', anDate(pg.edd) + ' (' + (pg.edd_method || '') + ')')}${kv('Last period', pg.lmp ? anDate(pg.lmp) : '')}${kv('Booked', anDate(pg.booked_date))}${kv('Next appointment', na ? anDate(na) : 'None set')}</div>
-        <div>${kv('Pregnancies', 'G' + (pg.gravida || '?') + ' · births before P' + (pg.para || 0) + (pg.abortions ? ' · losses ' + pg.abortions : ''))}${kv('Blood group', pg.blood_group)}${kv('Height', pg.height ? pg.height + ' cm' : '')}${kv('Delivery planned', pg.plan_place)}</div>
-        <div>${kv('HIV', pg.hiv && pg.hiv !== 'Not done' ? pg.hiv : '')}${kv('Hepatitis B', pg.hepb && pg.hepb !== 'Not done' ? pg.hepb : '')}${kv('Syphilis', pg.syphilis && pg.syphilis !== 'Not done' ? pg.syphilis : '')}${kv('History', String(pg.risk_hx || '').split('|').filter(Boolean).join(', '))}${kv('Other history', pg.hx_other)}</div></div>
+        <div>${kv('Due date', pg.edd ? anDate(pg.edd) + ' (' + (pg.edd_method || '') + ')' : 'Not yet known: a dating scan is needed')}${kv('Last period', pg.lmp ? anDate(pg.lmp) : '')}${kv('Booked', anDate(pg.booked_date))}${kv('Next appointment', na ? anDate(na) : 'None set')}</div>
+        <div>${kv('Obstetric history', 'Gravida ' + (pg.gravida || '?') + ' · Para ' + (pg.para || 0) + ' · Abortus ' + (pg.abortions || 0))}${kv('Blood group', pg.blood_group)}${kv('Height', pg.height ? pg.height + ' cm' : '')}${kv('Delivery planned', pg.plan_place)}</div>
+        <div>${kv('HIV screening', pg.hiv && pg.hiv !== 'Not done' ? pg.hiv : '')}${kv('Hepatitis B (HBsAg)', pg.hepb && pg.hepb !== 'Not done' ? pg.hepb : '')}${kv('Syphilis (VDRL/RPR)', pg.syphilis && pg.syphilis !== 'Not done' ? pg.syphilis : '')}${kv('History', String(pg.risk_hx || '').split('|').filter(Boolean).join(', '))}${kv('Other history', pg.hx_other)}</div></div>
       <h5>Visits</h5><div class="recent-scroll" style="min-height:0"><table class="data-table"><thead><tr><th>Date</th><th>Weeks</th><th>BP</th><th>Weight</th><th>Findings</th><th>Plan</th><th>Next</th><th>Recorded by</th></tr></thead><tbody>${visRows}${bookRow}</tbody></table></div>
       <h5>Scans</h5>${anScansOf(pg).length ? `<table class="data-table"><thead><tr><th>Requested</th><th>Scan</th><th>Status</th><th>Result</th></tr></thead><tbody>${anScansOf(pg).map(x => `<tr><td>${anDate((x.requested_at || '').slice(0, 10))}</td><td>${esc(x.scan_type)}</td><td>${esc(x.status === 'requested' ? 'Waiting' : x.status === 'done' ? 'Done ' + anDate(x.scan_date) : 'Cancelled')}</td><td class="vit">${x.status === 'done' ? `<a class="lnk" data-anact="scanview|${esc(x.record_id)}">${esc((x.findings || '').slice(0, 90))}${(x.findings || '').length > 90 ? '…' : ''}</a>` : ''}</td></tr>`).join('')}</tbody></table>` : '<div class="vit">No scans requested for this pregnancy.</div>'}
-      <h5>Lab results</h5><div id="anLabBox" class="vit">Loading…</div>
-      ${earlier.length ? `<h5>Earlier pregnancies at this clinic</h5>${earlier.map(x => `<div class="vit"><a class="lnk" data-anact="file|${esc(x.record_id)}">Booked ${anDate(x.booked_date)}</a> · due ${anDate(x.edd)} · ${esc(x.status === 'active' ? 'open' : (x.outcome || 'closed'))}</div>`).join('')}` : ''}
+      <h5>Lab tests and results</h5><div id="anLabBox" class="vit">Loading…</div><div id="avLabView"></div>
+      ${earlier.length ? `<h5>Earlier pregnancies at this clinic</h5>${earlier.map(x => `<div class="vit"><a class="lnk" data-anact="file|${esc(x.record_id)}">Booked ${anDate(x.booked_date)}</a> · ${x.edd ? 'due ' + anDate(x.edd) : 'due date pending'} · ${esc(x.status === 'active' ? 'open' : (x.outcome || 'closed'))}</div>`).join('')}` : ''}
       </div>`);
     document.getElementById('anCancel').onclick = anClose;
+    if (anLabOk) { const bx = document.getElementById('anLabBox'); bx.className = ''; bx.innerHTML = anLabTableHtml(pg.patient_id); return; }
     try {
       const res = await (await getClient()).send(new QueryCommand({ TableName: RESULTS_TABLE, KeyConditionExpression: 'patient_id = :p', ExpressionAttributeValues: { ':p': { S: pg.patient_id } } }));
       const labs = (res.Items || []).map(unmarshal).filter(x => !String(x.record_id).includes('#v') && x.test).sort((a, b) => (b.entered_at || '').localeCompare(a.entered_at || ''));
@@ -4018,6 +4200,12 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
 
   // ---- Scans ----
+  async function anPutScan(pg, type, reason, urgency, wantedBy) {
+    const now = new Date().toISOString(), ga = anGaDays(pg.edd);
+    await (await getClient()).send(new PutItemCommand({ TableName: ANC_TABLE, ConditionExpression: 'attribute_not_exists(record_id)', Item: g2({ patient_id: S(pg.patient_id), record_id: S(`scan#${String(pg.record_id).slice(5)}#${now}`), record_type: S('scan'), preg_id: S(pg.record_id),
+      client_id: S(pg.client_id), patient_name: S(pg.patient_name), status: S('requested'), scan_type: S(type), reason: S(reason), urgency: S(urgency), wanted_by: S(wantedBy), ga_at_request: anN(ga),
+      requested_at: S(now), requested_by: S(staffName()), requested_by_username: S(staffUser()) }) }));
+  }
   function anScanReqForm(rid) {
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return;
     if (pg.status !== 'active') return anNote('This pregnancy is closed.');
@@ -4029,7 +4217,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       <div class="f"><label>How soon</label><select id="sr_urg">${anOpts(['Routine', 'Urgent'], 'Routine')}</select></div>
       <div class="f"><label>Wanted by</label><input id="sr_by" type="date" min="${t}"></div></div>
       <div class="f" style="margin-top:10px"><label>Reason or question for the scan <span class="req">*</span></label><textarea id="sr_why" rows="3" placeholder="For example: fundal height small for dates at 30 weeks"></textarea></div>
-      <div class="vit" style="margin-top:6px">She is ${anGaTxt(ga)} today. Ask billing to add the scan charge from the price list so she can pay before the scan.</div>
+      <div class="vit" style="margin-top:6px">${Number.isFinite(ga) ? 'She is ' + anGaTxt(ga) + ' today.' : 'Her due date is not known yet.'} Ask billing to add the scan charge from the price list so she can pay before the scan.</div>
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="srSave">Send scan request</button><button class="btn-sm ghost" id="anCancel">Cancel</button></div>
       <div class="stamp">Recorded with your name and the time.</div></div>`);
     document.getElementById('anCancel').onclick = anClose;
@@ -4042,10 +4230,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       const b = document.getElementById('srSave'); b.disabled = true; b.textContent = 'Sending…';
       const typeSel = val('sr_type');
       try {
-        const now = new Date().toISOString();
-        await (await getClient()).send(new PutItemCommand({ TableName: ANC_TABLE, ConditionExpression: 'attribute_not_exists(record_id)', Item: g2({ patient_id: S(pg.patient_id), record_id: S(`scan#${anKey(pg)}#${now}`), record_type: S('scan'), preg_id: S(pg.record_id),
-          client_id: S(pg.client_id), patient_name: S(pg.patient_name), status: S('requested'), scan_type: S(val('sr_type')), reason: S(val('sr_why')), urgency: S(val('sr_urg')), wanted_by: S(val('sr_by')), ga_at_request: anN(ga),
-          requested_at: S(now), requested_by: S(staffName()), requested_by_username: S(staffUser()) }) }));
+        await anPutScan(pg, val('sr_type'), val('sr_why'), val('sr_urg'), val('sr_by'));
         await anRefresh(); anClose(); anRenderAll(); setAnTab('scans');
         anNote(`Scan requested for <b>${esc(pg.patient_name)}</b>: ${esc(typeSel)}. It is waiting on the Scans tab.`, 'ok');
       } catch (err) { b.disabled = false; b.textContent = 'Send scan request'; anNote(`Could not send the request: ${esc(err.message)}`); }
@@ -4073,7 +4258,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <div class="f"><label>Fluid around baby</label><select id="sx_liq">${anOpts(AN_LIQUOR, 'Not stated')}</select></div>
         <div class="f"><label>Estimated baby weight <span class="unit">grams</span></label><input id="sx_efw" type="number" min="50" max="6500" step="1"></div>
       </div>
-      <label class="chk" style="margin-top:10px" id="sx_useedd_wrap"><input type="checkbox" id="sx_useedd"> Use the scan due date as her due date</label>
+      <label class="chk" style="margin-top:10px" id="sx_useedd_wrap"><input type="checkbox" id="sx_useedd" ${pg.edd ? '' : 'checked'}> Use the scan due date as her due date${pg.edd ? '' : ' (she has no due date yet)'}</label>
       <div class="f" style="margin-top:10px"><label>Findings in words <span class="req">*</span></label><textarea id="sx_find" rows="3"></textarea></div>
       <label class="chk" style="margin-top:10px"><input type="checkbox" id="sx_abn"> Something abnormal was found (this raises a high-risk flag)</label>
       <div class="f" style="margin-top:10px"><label>Advice or next step</label><textarea id="sx_adv" rows="2"></textarea></div>
@@ -4105,8 +4290,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
           cond: '#st = :req', condNames: { '#st': 'status' }, condVals: { ':req': { S: 'requested' } } });
         let extra = '';
         if (useEdd && pg.status === 'active') {
-          try { await ddbUpdate({ table: ANC_TABLE, key: { patient_id: { S: pg.patient_id }, record_id: { S: pg.record_id } }, set: { edd: val('sx_edd'), edd_method: 'Ultrasound scan', edd_changed_from: pg.edd, edd_changed_reason: 'Scan on ' + val('sx_date'), edd_changed_at: now, edd_changed_by: staffName() },
-            cond: '#st = :act AND edd = :old', condNames: { '#st': 'status' }, condVals: { ':act': { S: 'active' }, ':old': { S: pg.edd } } }); extra = ` Due date changed to ${anDate(val('sx_edd'))}.`; }
+          try { await ddbUpdate({ table: ANC_TABLE, key: { patient_id: { S: pg.patient_id }, record_id: { S: pg.record_id } }, set: { edd: val('sx_edd'), edd_method: 'Ultrasound scan', edd_pending: '', edd_changed_from: pg.edd, edd_changed_reason: 'Scan on ' + val('sx_date'), edd_changed_at: now, edd_changed_by: staffName() },
+            cond: anEddCond(pg).cond, condNames: { '#st': 'status' }, condVals: anEddCond(pg).condVals }); extra = ` Due date changed to ${anDate(val('sx_edd'))}.`; }
           catch (er) { extra = ' The due date could not be changed; use Change due date in her file.'; }
         }
         await anRefresh(); anClose(); anRenderAll();
@@ -4148,8 +4333,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   // ---- Change due date / close pregnancy ----
   function anEddForm(rid) {
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return; const t = today10();
-    anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Change the due date</h5>
-      <div class="grid3"><div class="f"><label>New due date <span class="req">*</span></label><input id="ae_edd" type="date" value="${esc(pg.edd)}"></div>
+    anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>${pg.edd ? 'Change the due date' : 'Set the due date'}</h5>
+      <div class="grid3"><div class="f"><label>New due date <span class="req">*</span></label><input id="ae_edd" type="date" value="${esc(pg.edd || '')}"></div>
       <div class="f"><label>Worked out from <span class="req">*</span></label><select id="ae_meth">${anOpts(['Last period', 'Ultrasound scan'], pg.edd_method)}</select></div></div>
       <div class="f" style="margin-top:10px"><label>Reason <span class="req">*</span></label><input id="ae_why" placeholder="For example: scan at 20 weeks gives a different date"></div>
       <div style="margin-top:14px;display:flex;gap:10px"><button class="btn-sm" id="aeSave">Save</button><button class="btn-sm ghost" id="anCancel">Cancel</button></div>
@@ -4157,13 +4342,13 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     document.getElementById('anCancel').onclick = anClose;
     document.getElementById('aeSave').onclick = async () => {
       clearErrs(document.getElementById('anForm')); const e = [], nd = val('ae_edd');
-      if (!nd) e.push(['ae_edd', 'Enter the new due date.']); else if (nd === pg.edd) e.push(['ae_edd', 'This is the same date as now.']); else if (anD0(nd) < anD0(t) - 14 * DAYMS || anD0(nd) > anD0(t) + 285 * DAYMS) e.push(['ae_edd', 'This due date does not look right. Check it.']);
+      if (!nd) e.push(['ae_edd', 'Enter the due date.']); else if (nd === pg.edd) e.push(['ae_edd', 'This is the same date as now.']); else if (anD0(nd) < anD0(t) - 14 * DAYMS || anD0(nd) > anD0(t) + 285 * DAYMS) e.push(['ae_edd', 'This due date does not look right. Check it.']);
       if (!val('ae_why')) e.push(['ae_why', 'Give the reason for the change.']);
       if (e.length) return showErrs(e);
       const b = document.getElementById('aeSave'); b.disabled = true; b.textContent = 'Saving…';
       try {
-        await ddbUpdate({ table: ANC_TABLE, key: { patient_id: { S: pg.patient_id }, record_id: { S: pg.record_id } }, set: { edd: nd, edd_method: val('ae_meth'), edd_changed_from: pg.edd, edd_changed_reason: val('ae_why'), edd_changed_at: new Date().toISOString(), edd_changed_by: staffName() },
-          cond: '#st = :act AND edd = :old', condNames: { '#st': 'status' }, condVals: { ':act': { S: 'active' }, ':old': { S: pg.edd } } });
+        await ddbUpdate({ table: ANC_TABLE, key: { patient_id: { S: pg.patient_id }, record_id: { S: pg.record_id } }, set: { edd: nd, edd_method: val('ae_meth'), edd_pending: '', edd_changed_from: pg.edd || '', edd_changed_reason: val('ae_why'), edd_changed_at: new Date().toISOString(), edd_changed_by: staffName() },
+          cond: anEddCond(pg).cond, condNames: { '#st': 'status' }, condVals: anEddCond(pg).condVals });
         await anRefresh(); anRenderAll(); anFile(rid); anNote(`Due date changed to ${anDate(nd)}.`, 'ok');
       } catch (err) { b.disabled = false; b.textContent = 'Save'; anNote(/Conditional/i.test(err.message) ? 'Someone changed this pregnancy a moment ago. Open the file again to see the latest.' : `Could not save: ${esc(err.message)}`); }
     };
@@ -4213,7 +4398,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         });
         liveEl.dataset.boundA = '1';
       }
-      const run = () => { anQ = document.getElementById('anSearch').value; renderAnMothers(); renderAnDue(); };
+      const run = () => { anQ = document.getElementById('anSearch').value; renderAnMothers(); renderAnDue(); renderAnLabs(); };
       anQ = ''; document.getElementById('anSearch').addEventListener('input', run); document.getElementById('anSearchBtn').addEventListener('click', run);
       document.getElementById('anClearBtn').addEventListener('click', () => { document.getElementById('anSearch').value = ''; run(); });
       document.getElementById('anFind').addEventListener('input', anFindRender);
