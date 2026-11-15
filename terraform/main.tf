@@ -404,7 +404,9 @@ module "iam_billing" {
   source          = "./modules/iam"
   department_name = "billing"
   policy_statements = [
-    { sid = "BillingRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.billing.arn] }
+    { sid = "BillingRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.billing.arn] },
+    { sid = "ServicePricesRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.service_prices.arn] },
+    { sid = "PatientRecordsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.patient_records.arn] }
   ]
 }
 
@@ -463,7 +465,8 @@ module "iam_admin" {
       aws_dynamodb_table.procurement.arn,
       aws_dynamodb_table.visits.arn,
       aws_dynamodb_table.lab_requests.arn,
-      aws_dynamodb_table.prescriptions.arn
+      aws_dynamodb_table.prescriptions.arn,
+      aws_dynamodb_table.service_prices.arn
     ] }
   ]
 }
