@@ -5212,7 +5212,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   // ---- Labour Care Guide: alerts ----
   const LD_PROG_LIMIT = { 5: 6, 6: 5, 7: 3, 8: 2.5, 9: 2 };
-  function ldObsAlerts(o) {
+  function ldObsAlerts(o, cxCtx) {
     const red = [], amb = [], n = k => (o[k] === undefined || o[k] === '' ? NaN : Number(o[k]));
     const fhr = n('fhr'); if (fhr < 110 || fhr >= 160) red.push(`Baby's heart rate ${fhr}`);
     if (['Late', 'Variable'].includes(o.decel)) red.push(`${o.decel} decelerations`);
@@ -5220,7 +5220,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const sys = n('bp_sys'), dia = n('bp_dia'); if (sys >= 160 || dia >= 110) red.push(`Severe high blood pressure ${sys}/${dia}`); else if (sys >= 140 || dia >= 90) amb.push(`High blood pressure ${sys}/${dia}`); if (sys < 80) red.push(`Low blood pressure ${sys}/${dia}`);
     const pul = n('pulse'); if (pul > 120 || pul < 60) amb.push(`Pulse ${pul}`);
     const tmp = n('temp'); if (tmp >= 38) red.push(`Temperature ${tmp}`); else if (tmp >= 37.5 || tmp < 35) amb.push(`Temperature ${tmp}`);
-    const ct = n('contr'), cd = n('contr_sec'); if (Number(o.cervix) >= 5) { if (ct <= 2 || ct > 5) amb.push(`${ct} contractions in 10 minutes`); if (cd < 20 || cd > 60) amb.push(`Contractions last ${cd} seconds`); }
+    const ct = n('contr'), cd = n('contr_sec'); if ((o.cervix !== undefined && o.cervix !== '' ? Number(o.cervix) : (cxCtx || 0)) >= 5) { if (ct <= 2 || ct > 5) amb.push(`${ct} contractions in 10 minutes`); if (cd < 20 || cd > 60) amb.push(`Contractions last ${cd} seconds`); }
     if (o.caput === '+++') amb.push('Caput +++'); if (o.moulding === '+++') amb.push('Moulding +++'); if (o.caput === '+++' && o.moulding === '+++') red.push('Caput and moulding +++: possible obstruction');
     if (/Posterior|Transverse/.test(o.position || '')) amb.push('Baby position ' + o.position.split(' ')[0].toLowerCase());
     if (['++', '+++'].includes(o.urine_protein)) amb.push('Urine protein ' + o.urine_protein); if (['++', '+++'].includes(o.urine_ketones)) amb.push('Urine ketones ' + o.urine_ketones);
@@ -5231,20 +5231,21 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const obs = ldObs(a), last = obs[obs.length - 1], nowT = now || new Date(), red = [], amb = [];
     const mother = ldPat(a.patient_id) || {};
     const multip = Number(a.para) > 0;
-    let stage = 'Not yet assessed', cervix = last ? Number(last.cervix) : NaN;
+    const obsCx = obs.filter(o => o.cervix !== undefined && o.cervix !== ''), lastCx = obsCx[obsCx.length - 1];
+    let stage = 'Not yet assessed', cervix = lastCx ? Number(lastCx.cervix) : NaN;
     if (Number.isFinite(cervix)) stage = cervix >= 10 ? 'Second stage' : cervix >= 5 ? 'Active first stage' : 'Latent first stage';
     if (last) {
-      const al = ldObsAlerts(last); red.push(...al.red); amb.push(...al.amb);
+      const al = ldObsAlerts(last, cervix); red.push(...al.red); amb.push(...al.amb);
       const sinceLast = (nowT - new Date(last.obs_at)) / 60000, limit = cervix >= 10 ? 10 : cervix >= 5 ? 30 : 240;
-      if (sinceLast > limit) red.push(`Observation overdue: last recorded ${ldDur(sinceLast / 60)} ago`);
+      if (last.next_due_at) { if (nowT > new Date(last.next_due_at)) red.push(`Observation overdue: it was due at ${fmtDate(last.next_due_at)}`); } else if (sinceLast > limit) red.push(`Observation overdue: last recorded ${ldDur(sinceLast / 60)} ago`);
       if (cervix >= 5 && cervix < 10) {
-        let since = last.obs_at; for (let i = obs.length - 1; i >= 0 && Number(obs[i].cervix) === cervix; i--) since = obs[i].obs_at;
+        let since = lastCx.obs_at; for (let i = obsCx.length - 1; i >= 0 && Number(obsCx[i].cervix) === cervix; i--) since = obsCx[i].obs_at;
         const h = ldHrs(since, nowT), lim = LD_PROG_LIMIT[Math.floor(cervix)] || 6; if (h >= lim) red.push(`No progress at ${cervix} cm for ${ldDur(h)}: assess and consider referral`);
-        const act = obs.find(o => Number(o.cervix) >= 5); if (act && ldHrs(act.obs_at, nowT) >= (multip ? 10 : 12)) red.push(`Active first stage over ${multip ? 10 : 12} hours`);
+        const act = obsCx.find(o => Number(o.cervix) >= 5); if (act && ldHrs(act.obs_at, nowT) >= (multip ? 10 : 12)) red.push(`Active first stage over ${multip ? 10 : 12} hours`);
       }
-      if (cervix >= 10) { const full = obs.find(o => Number(o.cervix) >= 10); const h = ldHrs(full.obs_at, nowT), lim = multip ? 2 : 3; if (h >= lim) red.push(`Second stage over ${lim} hours (${ldDur(h)}): assist or refer`); }
+      if (cervix >= 10) { const full = obsCx.find(o => Number(o.cervix) >= 10); const h = ldHrs(full.obs_at, nowT), lim = multip ? 2 : 3; if (h >= lim) red.push(`Second stage over ${lim} hours (${ldDur(h)}): assist or refer`); }
     } else amb.push('No labour observations recorded yet');
-    return { stage, cervix, last, red, amb, obs };
+    return { stage, cervix, last, lastCx, red, amb, obs };
   }
   const ldFlagBadge = s => s.red.length ? `<span class="st rej" title="${esc(s.red.concat(s.amb).join('; '))}">${s.red.length} alert${s.red.length > 1 ? 's' : ''}</span>` : s.amb.length ? `<span class="st f-abnormal" title="${esc(s.amb.join('; '))}">Check</span>` : '<span class="st f-normal">No alerts</span>';
   const ldNameCell = (a, extra) => `<a class="lnk" data-ldact="file|${esc(a.record_id)}"><b>${esc(a.patient_name || '—')}</b></a><br><span class="cid ${a.client_id ? '' : 'none'}">${esc(a.client_id || 'no ID')}</span>${extra || ''}`;
@@ -5303,7 +5304,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       const age = anAgeNum((ldPat(a.patient_id) || {}).date_of_birth);
       return `<tr class="rowbar ${s.red.length ? 'red' : ''}"><td>${ldNameCell(a, `<div class="vit">${a.adm_no ? esc(a.adm_no) + ' · ' : ''}${age !== null ? age + ' years · ' : ''}G${esc(a.gravida || '?')} P${esc(a.para || 0)}</div>`)}</td>
         <td>${fmtDate(a.admitted_at)}<div class="vit">${ldDur(ldHrs(a.admitted_at, ldNow()))} ago</div></td><td><b>${esc(s.stage)}</b>${Number.isFinite(s.cervix) ? `<div class="vit">${s.cervix} cm</div>` : ''}</td>
-        <td>${s.last ? ldDur(ldHrs(s.last.obs_at, ldNow())) + ' ago' : '—'}</td><td>${ldFlagBadge(s)}${s.red.length ? `<div class="vit" style="color:#C62828">${esc(s.red[0])}</div>` : ''}</td>
+        <td>${s.last ? ldDur(ldHrs(s.last.obs_at, ldNow())) + ' ago' : '—'}${s.last && s.last.next_due_at ? `<div class="vit" ${new Date(s.last.next_due_at) < ldNow() ? 'style="color:#C62828"' : ''}>next due ${fmtDate(s.last.next_due_at)}</div>` : ''}</td><td>${ldFlagBadge(s)}${s.red.length ? `<div class="vit" style="color:#C62828">${esc(s.red[0])}</div>` : ''}</td>
         <td style="white-space:nowrap">${canLd ? `<button class="btn-sm b-rel" data-ldact="obs|${esc(a.record_id)}">Record observation</button> <button class="btn-sm ghost" data-ldact="deliver|${esc(a.record_id)}">Record birth</button> · <a class="lnk" data-ldact="refer|${esc(a.record_id)}">Refer out</a> · ` : ''}<a class="lnk" data-ldact="file|${esc(a.record_id)}">Open</a></td></tr>`; }).join('');
     el.innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Admitted</th><th>Stage</th><th>Last observation</th><th>Alerts</th><th></th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="6">Nobody is in labour.</td></tr>'}</tbody></table>`;
   }
@@ -5427,7 +5428,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       <h5>Labour observation</h5><div class="vit">Last recorded ${last ? ldDur(ldHrs(last.obs_at, ldNow())) + ' ago, cervix ' + esc(last.cervix) + ' cm' : 'never'}. Active labour (5 cm or more): baby's heart rate every 30 minutes; second stage: every 5 to 10 minutes.</div>
       <div class="grid3" style="margin-top:8px">
         <div class="f"><label>Time <span class="req">*</span></label><input id="ob_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
-        <div class="f"><label>Cervix dilatation <span class="unit">cm</span> <span class="req">*</span></label><input id="ob_cx" type="number" min="0" max="10" step="1"></div>
+        <div class="f"><label>Cervix dilatation <span class="unit">cm, only if you examined her</span></label><input id="ob_cx" type="number" min="0" max="10" step="1" placeholder="leave empty for a routine check"></div>
         <div class="f"><label>Head, fifths above the brim</label>${ldSel('ob_desc', ['Not assessed', '5', '4', '3', '2', '1', '0'])}</div>
         <div class="f"><label>Baby's heart rate <span class="unit">per minute</span> <span class="req">*</span></label><input id="ob_fhr" type="number" min="60" max="220"></div>
         <div class="f"><label>Heart rate slowing (decelerations)</label>${ldSel('ob_dec', LD_DECEL)}</div>
@@ -5447,6 +5448,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <div class="f"><label>Other medicine <span class="unit">name, dose, route</span></label><input id="ob_med"></div>
         <div class="f"><label>IV fluids</label>${ldSel('ob_iv', ['No', 'Yes'])}</div>
         <div class="f"><label>Companion with her</label>${ldSel('ob_comp', ['Yes', 'No'])}</div>
+        <div class="f"><label>Next check in <span class="req">*</span></label><select id="ob_next"><option value="30">30 minutes</option><option value="60" selected>1 hour</option><option value="120">2 hours</option><option value="240">4 hours</option></select><div class="vit" id="ob_nexthint"></div></div>
       </div>
       <div class="f" style="margin-top:10px"><label>Assessment <span class="req">*</span></label><textarea id="ob_ass" rows="2"></textarea></div>
       <div class="f" style="margin-top:10px"><label>Plan <span class="req">*</span></label><textarea id="ob_plan" rows="2"></textarea></div>
@@ -5454,14 +5456,14 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       <div class="stamp">Recorded with your name and the time. A saved observation cannot be edited; add a new one to correct it.</div></div>`);
     document.getElementById('ldCancel').onclick = ldClose;
     document.getElementById('ob_oxy').onchange = e => { document.getElementById('ob_oxyw').style.display = e.target.value === 'Yes' ? '' : 'none'; };
-    if (last) { const set = (id, v) => { const el = document.getElementById(id); if (el && v !== undefined && v !== '') el.value = v; }; set('ob_cx', last.cervix); }
+    const nxHint = () => { const cx = anNum('ob_cx'), c = cx !== null ? cx : s.cervix, m = Number(val('ob_next')), std = c >= 10 ? 10 : c >= 5 ? 30 : 240; document.getElementById('ob_nexthint').textContent = m > std ? `WHO: every ${std} minutes at this stage. The alert will use your chosen time.` : ''; }; document.getElementById('ob_next').onchange = nxHint; document.getElementById('ob_cx').oninput = nxHint; nxHint();
     document.getElementById('obSave').onclick = () => ldSaveObs(rid);
   }
   async function ldSaveObs(rid) {
     const a = ldAdms().find(x => x.record_id === rid), form = document.getElementById('ldForm'); clearErrs(form);
-    const errs = [], at = ldIso('ob_at'), cx = anNum('ob_cx'), fhr = anNum('ob_fhr'), ct = anNum('ob_ct'), sys = anNum('ob_sys'), dia = anNum('ob_dia'), pul = anNum('ob_pul'), tmp = anNum('ob_tmp'), obs = ldObs(a), last = obs[obs.length - 1];
+    const errs = [], at = ldIso('ob_at'), cx = anNum('ob_cx'), lastCxO = ldObs(a).filter(o => o.cervix !== undefined && o.cervix !== '').pop(), fhr = anNum('ob_fhr'), ct = anNum('ob_ct'), sys = anNum('ob_sys'), dia = anNum('ob_dia'), pul = anNum('ob_pul'), tmp = anNum('ob_tmp'), obs = ldObs(a), last = obs[obs.length - 1];
     if (!at) errs.push(['ob_at', 'Enter the time.']); else if (new Date(at) > new Date(Date.now() + 5 * 60000)) errs.push(['ob_at', 'The time cannot be in the future.']); else if (last && new Date(at) <= new Date(last.obs_at)) errs.push(['ob_at', 'This is not after the last observation (' + fmtDate(last.obs_at) + ').']); else if (new Date(at) < new Date(a.admitted_at)) errs.push(['ob_at', 'The time is before admission.']);
-    if (cx === null || cx < 0 || cx > 10) errs.push(['ob_cx', 'Enter the dilatation, 0 to 10 cm.']); else if (last && cx < Number(last.cervix)) errs.push(['ob_cx', `Dilatation is lower than the last recording (${last.cervix} cm). Check, or write the reason in the assessment and record it as the same.`]);
+    if (cx !== null && (cx < 0 || cx > 10)) errs.push(['ob_cx', 'Dilatation must be 0 to 10 cm, or leave it empty.']); else if (cx !== null && lastCxO && cx < Number(lastCxO.cervix)) errs.push(['ob_cx', `Dilatation is lower than the last recording (${lastCxO.cervix} cm). Check, or write the reason in the assessment and record it as the same.`]);
     if (fhr === null || fhr < 60 || fhr > 220) errs.push(['ob_fhr', "Enter the baby's heart rate (60 to 220)."]);
     if (ct === null || ct < 0 || ct > 10) errs.push(['ob_ct', 'Enter the contractions in 10 minutes.']);
     if (sys === null || dia === null || sys < 50 || sys > 260 || dia < 30 || dia > 160 || sys <= dia) errs.push([sys === null || sys < 50 || sys > 260 ? 'ob_sys' : 'ob_dia', 'Enter a blood pressure that makes sense.']);
@@ -5471,12 +5473,13 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     if (!val('ob_ass')) errs.push(['ob_ass', 'Write your assessment.']); if (!val('ob_plan')) errs.push(['ob_plan', 'Write the plan.']);
     if (errs.length) return showErrs(errs);
     const btn = document.getElementById('obSave'); btn.disabled = true; btn.textContent = 'Saving…';
+    const nextDue = new Date(new Date(at).getTime() + Number(val('ob_next') || 60) * 60000).toISOString();
     try {
-      const now = ldNow(), item = { patient_id: S(a.patient_id), record_id: S(`lcg#${ldKey(a)}#${at}`), record_type: S('labour-observation'), adm_id: S(a.record_id), obs_at: S(at), cervix: anN(cx), descent: val('ob_desc') !== 'Not assessed' ? S(val('ob_desc')) : undefined, fhr: anN(fhr), decel: S(val('ob_dec')), contr: anN(ct), contr_sec: anN(anNum('ob_cs')), liquor: S(val('ob_liq')), position: val('ob_pos') !== 'Not known' ? S(val('ob_pos')) : undefined, caput: S(val('ob_caput')), moulding: S(val('ob_mould')),
+      const now = ldNow(), item = { patient_id: S(a.patient_id), record_id: S(`lcg#${ldKey(a)}#${at}`), record_type: S('labour-observation'), adm_id: S(a.record_id), obs_at: S(at), next_due_at: S(nextDue), cervix: anN(cx), descent: val('ob_desc') !== 'Not assessed' ? S(val('ob_desc')) : undefined, fhr: anN(fhr), decel: S(val('ob_dec')), contr: anN(ct), contr_sec: anN(anNum('ob_cs')), liquor: S(val('ob_liq')), position: val('ob_pos') !== 'Not known' ? S(val('ob_pos')) : undefined, caput: S(val('ob_caput')), moulding: S(val('ob_mould')),
         bp_sys: anN(sys), bp_dia: anN(dia), pulse: anN(pul), temp: anN(tmp), urine_protein: val('ob_up') !== 'Not done' ? S(val('ob_up')) : undefined, urine_ketones: val('ob_uk') !== 'Not done' ? S(val('ob_uk')) : undefined, oxytocin: S(val('ob_oxy') === 'Yes' ? 'Yes: ' + val('ob_oxyd') : 'No'), medicine: val('ob_med') ? S(val('ob_med')) : undefined, iv_fluids: S(val('ob_iv')), companion: S(val('ob_comp')), assessment: S(val('ob_ass')), plan: S(val('ob_plan')), ...ldStamp(now) };
       await ldPut(item);
-      const al = ldObsAlerts(unmarshal(Object.fromEntries(Object.entries(item).filter(e => e[1] !== undefined)))); await ldRefresh(); ldClose(); ldRenderAll();
-      ldNote(`Observation saved for <b>${esc(a.patient_name)}</b>, cervix ${cx} cm.${al.red.length ? ` <b>Alerts: ${esc(al.red.join('; '))}</b>` : al.amb.length ? ` Check: ${esc(al.amb.join('; '))}` : ''}`, al.red.length ? '' : 'ok');
+      const al = ldObsAlerts(unmarshal(Object.fromEntries(Object.entries(item).filter(e => e[1] !== undefined))), (lastCxO ? Number(lastCxO.cervix) : 0)); await ldRefresh(); ldClose(); ldRenderAll();
+      ldNote(`Observation saved for <b>${esc(a.patient_name)}</b>, ${cx !== null ? 'cervix ' + cx + ' cm' : 'routine check'}. Next check due ${fmtDate(nextDue)}.${al.red.length ? ` <b>Alerts: ${esc(al.red.join('; '))}</b>` : al.amb.length ? ` Check: ${esc(al.amb.join('; '))}` : ''}`, al.red.length ? '' : 'ok');
     } catch (err) { btn.disabled = false; btn.textContent = 'Save observation'; ldNote(`Could not save the observation: ${esc(err.message)}`); }
   }
 
@@ -5768,10 +5771,36 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const line = pts.map(o => `${x((new Date(o.obs_at) - t0) / 3600000)},${y(Number(o.cervix))}`).join(' ');
     return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;background:#fff;border:1px solid #D7E4D2;border-radius:8px">${g}<polyline points="${line}" fill="none" stroke="#1B5E20" stroke-width="2"/>${pts.map(o => `<text x="${x((new Date(o.obs_at) - t0) / 3600000) - 4}" y="${y(Number(o.cervix)) + 4}" font-size="12" font-weight="700" fill="#1B5E20">X</text>`).join('')}</svg><div class="vit">Cervix dilatation (X) against hours since the first observation. The gold line is 5 cm: the start of active labour.</div>`;
   }
+  // Observation charts over time: baby's heart rate, contractions, mother's BP and pulse
+  function ldMini(obs, o) {
+    const pts = obs.filter(x => o.get(x) !== null && Number.isFinite(o.get(x))); if (pts.length < 2) return '';
+    const t0 = new Date(obs[0].obs_at).getTime(), W = 640, H = 120, L = 34, R = 10, T = 8, B = 20, span = Math.max(6, (new Date(obs[obs.length - 1].obs_at) - t0) / 3600000 + 1);
+    const x = h => L + (W - L - R) * h / span, y = v => T + (H - T - B) * (1 - (v - o.min) / (o.max - o.min));
+    let g = (o.band ? `<rect x="${L}" width="${W - L - R}" y="${y(o.band[1])}" height="${y(o.band[0]) - y(o.band[1])}" fill="#E8F5E9"/>` : '') + o.ticks.map(v => `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="#E3EBDF"/><text x="4" y="${y(v) + 4}" font-size="10" fill="#666">${v}</text>`).join('');
+    for (let h = 0; h <= span; h += 2) g += `<text x="${x(h) - 6}" y="${H - 5}" font-size="10" fill="#666">${h}h</text>`;
+    const px = x2 => x((new Date(x2.obs_at) - t0) / 3600000), line = (f, col) => { const q = obs.filter(z => f(z) !== null && Number.isFinite(f(z))); return q.length ? `<polyline points="${q.map(z => px(z) + ',' + y(f(z))).join(' ')}" fill="none" stroke="${col}" stroke-width="2"/>${q.map(z => `<circle cx="${px(z)}" cy="${y(f(z))}" r="3" fill="${col}"/>`).join('')}` : ''; };
+    return `<div style="margin-top:10px"><b style="font-size:13px">${o.title}</b><svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;background:#fff;border:1px solid #D7E4D2;border-radius:8px;display:block">${g}${line(o.get, '#1B5E20')}${o.get2 ? line(o.get2, '#C62828') : ''}</svg><div class="vit">${o.note}</div></div>`;
+  }
+  const ldNumOrNull = v => (v === undefined || v === '' || v === null) ? null : Number(v);
+  function ldCharts(obs) {
+    if (obs.length < 2) return '';
+    return ldMini(obs, { title: "Baby's heart rate", min: 80, max: 200, ticks: [100, 120, 140, 160, 180], band: [110, 160], get: z => ldNumOrNull(z.fhr), note: 'Beats per minute. The green band is the normal range, 110 to 159.' })
+      + ldMini(obs, { title: 'Contractions in 10 minutes', min: 0, max: 8, ticks: [0, 2, 4, 6, 8], band: [3, 5], get: z => ldNumOrNull(z.contr), note: 'The green band is 3 to 5 contractions in 10 minutes, the usual range in active labour.' })
+      + ldMini(obs, { title: "Mother's blood pressure (green: top number, red: bottom number) ", min: 40, max: 180, ticks: [60, 90, 120, 150, 180], get: z => ldNumOrNull(z.bp_sys), get2: z => ldNumOrNull(z.bp_dia), note: 'mmHg.' })
+      + ldMini(obs, { title: "Mother's pulse", min: 40, max: 160, ticks: [60, 80, 100, 120, 140], band: [60, 120], get: z => ldNumOrNull(z.pulse), note: 'Beats per minute. The green band is 60 to 120.' });
+  }
+  function ldPrintChart(a) {
+    const area = document.getElementById('ldChartArea'), tbl = document.querySelector('#ldForm .recent-scroll table'); if (!area) return;
+    const f = document.createElement('iframe'); f.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0'; document.body.appendChild(f);
+    const doc = f.contentWindow.document; doc.open();
+    doc.write(`<html><head><title>Labour chart ${esc(a.patient_name || '')}</title><style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px}h2{color:#1B5E20;margin:0 0 4px}svg{max-width:100%}table{border-collapse:collapse;width:100%;margin-top:10px}th,td{border:1px solid #999;padding:3px 5px;text-align:left;vertical-align:top}.vit{color:#555;font-size:10px}</style></head><body><h2>VidaCare Maternity Home: labour chart</h2><div><b>${esc(a.patient_name || '')}</b> · ${esc(a.client_id || '')} · ${esc(a.adm_no || '')} · admitted ${fmtDate(a.admitted_at)}</div>${area.innerHTML}${tbl ? tbl.outerHTML : ''}<div class="vit" style="margin-top:8px">Printed ${fmtDate(new Date().toISOString())} by ${esc(staffName())}</div></body></html>`); doc.close();
+    setTimeout(() => { f.contentWindow.focus(); f.contentWindow.print(); setTimeout(() => f.remove(), 2000); }, 300);
+  }
   function ldFile(rid) {
     const a = ldAdms().find(x => x.record_id === rid); if (!a) return;
     const st = ldStatus(a), s = ldLabourState(a), obs = s.obs, d = ldDel(a), babies = ldBabies(a), rf = ldRef(a), dc = ldDis(a), kv = (k, v) => v !== undefined && v !== '' && v !== null ? `<div><span style="color:#777">${k}</span> ${esc(v)}</div>` : '';
-    const obsArr = obs.slice().reverse().map(o => { const al = ldObsAlerts(o); return `<tr class="rowbar ${al.red.length ? 'red' : ''}"><td>${fmtDate(o.obs_at)}</td><td><b>${esc(o.cervix)}</b> cm${o.descent ? '<div class="vit">head ' + esc(o.descent) + '/5</div>' : ''}</td><td>${esc(o.fhr)}${o.decel && o.decel !== 'None' ? '<div class="vit">' + esc(o.decel) + ' decel.</div>' : ''}</td><td>${esc(o.contr)}${o.contr_sec ? ' × ' + esc(o.contr_sec) + 's' : ''}</td><td class="vit">${esc(o.liquor || '')}</td><td>${esc(o.bp_sys)}/${esc(o.bp_dia)}<div class="vit">pulse ${esc(o.pulse)}${o.temp ? ' · ' + esc(o.temp) + '°' : ''}</div></td><td class="vit">${[o.oxytocin && o.oxytocin !== 'No' ? 'Oxytocin' : '', o.medicine || ''].filter(Boolean).map(esc).join(', ')}</td><td>${esc(o.assessment || '')}<div class="vit">${esc(o.plan || '')}</div>${al.red.length ? `<div style="color:#C62828" class="vit"><b>${esc(al.red.join('; '))}</b></div>` : ''}</td><td>${esc(o.entered_by || '')}</td></tr>`; });
+    let cxRun = 0; const cxAt = {}; obs.forEach(o => { if (o.cervix !== undefined && o.cervix !== '') cxRun = Number(o.cervix); cxAt[o.record_id] = cxRun; });
+    const obsArr = obs.slice().reverse().map(o => { const al = ldObsAlerts(o, cxAt[o.record_id]); return `<tr class="rowbar ${al.red.length ? 'red' : ''}"><td>${fmtDate(o.obs_at)}</td><td>${o.cervix !== undefined && o.cervix !== '' ? '<b>' + esc(o.cervix) + '</b> cm' : '<span class="vit">routine check</span>'}${o.descent ? '<div class="vit">head ' + esc(o.descent) + '/5</div>' : ''}</td><td>${esc(o.fhr)}${o.decel && o.decel !== 'None' ? '<div class="vit">' + esc(o.decel) + ' decel.</div>' : ''}</td><td>${esc(o.contr)}${o.contr_sec ? ' × ' + esc(o.contr_sec) + 's' : ''}</td><td class="vit">${esc(o.liquor || '')}</td><td>${esc(o.bp_sys)}/${esc(o.bp_dia)}<div class="vit">pulse ${esc(o.pulse)}${o.temp ? ' · ' + esc(o.temp) + '°' : ''}</div></td><td class="vit">${[o.oxytocin && o.oxytocin !== 'No' ? 'Oxytocin' : '', o.medicine || ''].filter(Boolean).map(esc).join(', ')}</td><td>${esc(o.assessment || '')}<div class="vit">${esc(o.plan || '')}</div>${al.red.length ? `<div style="color:#C62828" class="vit"><b>${esc(al.red.join('; '))}</b></div>` : ''}</td><td>${esc(o.entered_by || '')}</td></tr>`; });
     const rxNotesL = ldOf(a, 'rxn').slice();
     const obsRev = obs.slice().reverse();
     const rows = [...obsArr.map((h, i) => ({ t: String(obsRev[i].obs_at || ''), h })), ...rxNotesL.map(x => ({ t: String(x.entered_at || ''), h: `<tr style="background:#F3F8F0"><td>${fmtDate(x.entered_at)}</td><td colspan="7"><b>Prescription ${esc(x.rx_no || '')}</b> sent to the pharmacy: ${esc(x.meds || '')}${x.notes ? ' <span class="vit">(' + esc(x.notes) + ')</span>' : ''}</td><td>${esc(x.entered_by || '')}</td></tr>` }))].sort((p, q) => q.t.localeCompare(p.t)).map(x => x.h).join('');
@@ -5787,7 +5816,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <div>${kv('Obstetric history', 'Gravida ' + (a.gravida || '?') + ' · Para ' + (a.para || 0) + ' · Abortus ' + (a.abortions || 0))}${kv('Due date', a.edd ? anDate(a.edd) : 'Not known')}${kv('Antenatal care here', a.booked_here === 'yes' ? 'Yes, ' + (a.anc_contacts || 0) + ' contacts' : 'No (unbooked)')}${kv('Blood group', a.blood_group)}${kv('Haemoglobin', a.hb)}</div>
         <div>${kv('HIV', a.hiv)}${kv('Hepatitis B (HBsAg)', a.hepb)}${kv('Syphilis', a.syphilis)}${kv('Risk factors', String(a.risk || '').split('|').filter(Boolean).join(', '))}${kv('Companion', a.companion)}${kv('Plan', a.plan)}</div></div>
       <div class="stamp" style="margin-top:6px">Admitted by ${esc(a.entered_by || '')} · ${fmtDate(a.entered_at)}</div>
-      <h5>Labour care chart</h5>${ldChart(obs)}
+      <h5>Labour care chart <button class="btn-sm ghost" id="ldPrintChart" style="margin-left:8px">Print chart</button></h5><div id="ldChartArea">${ldChart(obs)}${ldCharts(obs)}</div>
       <div class="recent-scroll" style="min-height:0;margin-top:8px"><table class="data-table"><thead><tr><th>Time</th><th>Cervix</th><th>Baby's heart</th><th>Contractions</th><th>Liquor</th><th>BP</th><th>Medicine</th><th>Assessment and plan</th><th>By</th></tr></thead><tbody>${rows}</tbody></table></div>
       ${d ? `<h5>Birth</h5><div class="grid3" style="font-size:13.5px;line-height:1.7"><div>${kv('Born', fmtDate(d.birth_at))}${kv('Mode', d.mode)}${kv('Delivered by', d.attendant + ' (' + d.cadre + ')')}${kv('Companion', d.companion)}${kv('Fully dilated', d.full_dilated_at ? fmtDate(d.full_dilated_at) : '')}</div>
         <div>${kv('Bleeding prevention', d.uterotonic + (d.uterotonic_time ? ', ' + d.uterotonic_time.toLowerCase() : ''))}${kv('Cord clamping', d.cord_clamping)}${kv('Controlled cord traction', d.cct)}${kv('Placenta', d.placenta)}${kv('Blood loss', d.ebl ? d.ebl + ' mL' + (d.pph ? ' (postpartum haemorrhage)' : '') : '')}</div>
@@ -5801,6 +5830,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       </div>`);
     document.getElementById('ldCancel').onclick = ldClose;
     rxmHistory('ldRxBox', a.patient_id);
+    document.getElementById('ldPrintChart').onclick = () => ldPrintChart(a);
   }
   function ldOpen(mode, a) {
     document.getElementById('ldMsg').innerHTML = '';
