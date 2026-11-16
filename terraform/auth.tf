@@ -43,6 +43,7 @@ locals {
   department_policies = {
     "front-desk"      = module.iam_front_desk.policy_arn
     "antenatal"       = module.iam_antenatal.policy_arn
+    "labour-delivery" = module.iam_labour_delivery.policy_arn
     "postnatal"       = module.iam_postnatal.policy_arn
     "family-planning" = module.iam_family_planning.policy_arn
     "child-welfare"   = module.iam_child_welfare.policy_arn
@@ -191,8 +192,17 @@ resource "aws_cognito_identity_pool_roles_attachment" "staff" {
     ambiguous_role_resolution = "Deny"
     type                      = "Rules"
 
+    # "labour-delivery" must come BEFORE "lab": rules match by text and
+    # "lab" is part of "labour-delivery". First match wins.
+    mapping_rule {
+      claim      = "cognito:groups"
+      match_type = "Contains"
+      value      = "labour-delivery"
+      role_arn   = aws_iam_role.cognito_department["labour-delivery"].arn
+    }
+
     dynamic "mapping_rule" {
-      for_each = local.department_policies
+      for_each = { for k, v in local.department_policies : k => v if k != "labour-delivery" }
       content {
         claim      = "cognito:groups"
         match_type = "Contains"

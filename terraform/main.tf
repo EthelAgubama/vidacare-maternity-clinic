@@ -336,6 +336,19 @@ module "iam_antenatal" {
   ]
 }
 
+module "iam_labour_delivery" {
+  source          = "./modules/iam"
+  department_name = "labour-delivery"
+  policy_statements = [
+    { sid = "PatientRecordsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.patient_records.arn] },
+    { sid = "LabourDeliveryRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.labour_delivery_records.arn}", "${aws_dynamodb_table.labour_delivery_records.arn}/index/*"] },
+    { sid = "AntenatalRead", actions = local.read_actions, resource_arns = ["${aws_dynamodb_table.antenatal_records.arn}", "${aws_dynamodb_table.antenatal_records.arn}/index/*"] },
+    { sid = "LabRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
+    { sid = "LabRequestsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] },
+    { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] }
+  ]
+}
+
 module "iam_postnatal" {
   source          = "./modules/iam"
   department_name = "postnatal"

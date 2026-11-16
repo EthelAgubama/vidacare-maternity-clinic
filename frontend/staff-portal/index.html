@@ -3880,6 +3880,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <button class="ph-tab" data-antab="labs">Labs <span class="n amber" id="anTabLabs" style="display:none"></span></button>
         <button class="ph-tab" data-antab="scans">Scans <span class="n amber" id="anTabScans" style="display:none"></span></button>
         <button class="ph-tab" data-antab="register">Register <span class="n amber" id="anTabRegister" style="display:none"></span></button>
+        <button class="ph-tab" data-antab="rx">Prescriptions <span class="n amber" id="anTabRx" style="display:none"></span></button>
         <button class="ph-tab" data-antab="find">Find a client</button>
       </div>
       <div id="anSearchRow" class="fd-search" style="display:none;gap:10px;flex-wrap:wrap;align-items:center"><input id="anSearch" type="search" placeholder="Search clients by name, client ID or phone" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="anSearchBtn">Search</button><button class="btn-sm ghost" id="anClearBtn">Clear</button></div>
@@ -3892,6 +3893,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       <div id="anPaneLabs" style="display:none"><div class="data-card"><h4>Lab tests</h4><div class="vit" style="margin-bottom:8px" id="anLabNote">Tests asked for clients in antenatal care. Press View result when the lab has released it. To ask for tests, use Request labs in a client's file or on the Booked clients tab.</div><div class="recent-scroll" id="anLabList"></div></div></div>
       <div id="anPaneScans" style="display:none"><div class="data-card"><h4>Scan requests</h4><div class="vit" style="margin-bottom:8px">Scans asked for and waiting to be done are in red. Record the result when the scan is done. To ask for a scan, open a client's file or use Request scan on the Booked clients tab.</div><div class="recent-scroll" id="anScanList"></div></div></div>
       <div id="anPaneRegister" style="display:none"><div id="anExports"></div><div class="data-card"><h4>Antenatal register</h4><div id="anRegister"></div></div></div>
+      <div id="anPaneRx" style="display:none"></div>
       <div id="anPaneFind" style="display:none"><div class="data-card"><h4>Find a client</h4>
         <div class="fd-search"><input id="anFind" type="search" placeholder="Search by name, phone or client ID (VMH-00001)" autocomplete="off"></div>
         <div class="results" id="anFindRes"></div></div></div>
@@ -3900,8 +3902,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   function setAnTab(t) {
     anTab = t;
-    ['today', 'mothers', 'due', 'labs', 'scans', 'register', 'find'].forEach(k => { const p = document.getElementById('anPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
+    ['today', 'mothers', 'due', 'labs', 'scans', 'register', 'rx', 'find'].forEach(k => { const p = document.getElementById('anPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
     document.querySelectorAll('[data-antab]').forEach(b => b.classList.toggle('on', b.dataset.antab === t));
+    if (t === 'rx') rxmOpen('antenatal');
     const sr = document.getElementById('anSearchRow'); if (sr) sr.style.display = (t === 'mothers' || t === 'due' || t === 'labs' || (t === 'register' && anRegView === 'list')) ? 'flex' : 'none';
   }
 
@@ -4490,6 +4493,157 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     };
   }
 
+  // ---- Midwife prescribing (Antenatal and Labour & Delivery): same pharmacy queue the doctors use ----
+  const RXM_QUICK = {
+    antenatal: [
+      { t: 'Iron and folic acid', n: 'Ferrous sulphate + folic acid', r: 0, d: '1 tablet', f: 'Once daily', u: '1 month', q: 30, i: '' },
+      { t: 'SP (IPTp)', n: 'Sulfadoxine-pyrimethamine', r: 0, d: '3 tablets', f: 'Single dose', u: '1 day', q: 3, i: 'Take in the clinic. From 16 weeks, at least 4 weeks apart.' },
+      { t: 'Albendazole', n: 'Albendazole', r: 0, d: '1 tablet (400 mg)', f: 'Single dose', u: '1 day', q: 1, i: 'After the first trimester' },
+      { t: 'Paracetamol', n: 'Paracetamol', r: 0, d: '2 tablets (1 g)', f: 'Three times daily', u: '3 days', q: 18, i: 'When needed for pain or fever' },
+      { t: 'Artemether-lumefantrine', n: 'Artemether-lumefantrine', r: 0, d: '4 tablets', f: 'Twice daily', u: '3 days', q: 24, i: 'Adult dose. Only for confirmed malaria.' }],
+    'labour-delivery': [
+      { t: 'Oxytocin 10 IU', n: 'Oxytocin', r: 5, d: '10 IU', f: 'Single dose', u: '1 day', q: 1, i: 'After the birth, to prevent bleeding' },
+      { t: 'Misoprostol', n: 'Misoprostol', r: 0, d: '3 tablets (600 mcg)', f: 'Single dose', u: '1 day', q: 3, i: 'Only if oxytocin is not available' },
+      { t: 'Paracetamol', n: 'Paracetamol', r: 0, d: '2 tablets (1 g)', f: 'Three times daily', u: '3 days', q: 18, i: 'When needed for pain or fever' },
+      { t: 'Amoxicillin', n: 'Amoxicillin', r: 1, d: '1 capsule (500 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' },
+      { t: 'Metronidazole', n: 'Metronidazole', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' },
+      { t: 'Iron and folic acid', n: 'Ferrous sulphate + folic acid', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 90, i: 'After birth' }]
+  };
+  const RXM = {};
+  const rxmK = d => d === 'antenatal' ? 'an' : 'ld';
+  const rxmCan = d => d === 'antenatal' ? canAnc : canLd;
+  const rxmS = d => RXM[d] || (RXM[d] = { rows: [rxBlank()], pid: '', stock: [], rx: [], ok: false, err: '' });
+  function rxmClients(d) {
+    if (d === 'antenatal') return anPregs.filter(x => x.status === 'active').map(x => ({ pid: x.patient_id, ctx: x.record_id, name: x.patient_name, cid: x.client_id, tag: 'Antenatal ' + (x.reg_no || '') }));
+    return ldAdms().filter(a => ['labour', 'delivered'].includes(ldStatus(a))).map(a => ({ pid: a.patient_id, ctx: a.record_id, name: a.patient_name, cid: a.client_id, tag: (ldStatus(a) === 'labour' ? 'In labour ' : 'On the ward ') + (a.adm_no || '') }));
+  }
+  async function rxmRefresh(d) {
+    const s = rxmS(d);
+    try {
+      const [rx, inv] = await Promise.all([scanTable(RX_TABLE), scanTable(INV_TABLE)]);
+      s.rx = rx.filter(r => r.source_dept === d).sort((a, b) => (b.prescribed_at || '').localeCompare(a.prescribed_at || ''));
+      s.stock = inv.filter(i => !String(i.item_id).startsWith('mv#') && i.drug_name).sort(byDrug); s.ok = true; s.err = '';
+    } catch (e) { s.err = e.message; }
+  }
+  function rxmBadge(d) {
+    const el = document.getElementById(d === 'antenatal' ? 'anTabRx' : 'ldTabRx'); if (!el) return;
+    const n = rxmS(d).rx.filter(r => r.status === 'query').length; el.textContent = n; el.style.display = n ? '' : 'none';
+  }
+  function rxmShell(d) {
+    const k = rxmK(d), can = rxmCan(d), cl = rxmClients(d), s = rxmS(d);
+    return `<div id="rxm_${k}_err"></div><div id="rxm_${k}_q"></div>
+      ${can ? `<div class="data-card"><h4>Write a prescription <span class="unit" style="font-weight:400;font-size:12px">goes to the pharmacy to dispense</span></h4>
+        <div class="fd-form"><div class="grid3"><div class="f"><label>Client <span class="req">*</span></label><select id="rxm_${k}_c"><option value="">Choose…</option>${cl.map(c => `<option value="${esc(c.pid)}|${esc(c.ctx)}" ${s.pid === c.pid ? 'selected' : ''}>${esc(c.name)} · ${esc(c.cid || 'no ID')} · ${esc(c.tag)}</option>`).join('')}</select></div></div>
+        <div id="rxm_${k}_al"></div>
+        <div style="margin:8px 0 4px"><span class="vit">Usual medicines (fills in a normal dose; check it and change if needed):</span><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">${RXM_QUICK[d].map((q, i) => `<button type="button" class="btn-sm ghost" data-rxmq="${i}">${esc(q.t)}</button>`).join('')}</div></div>
+        <div id="rxm_${k}_box"></div>
+        <div style="margin:4px 0"><button type="button" class="btn-sm ghost" id="rxm_${k}_add">+ Add another drug</button></div>
+        <div class="f"><label>Note to the pharmacy <span class="unit">optional</span></label><textarea id="rxm_${k}_notes" rows="2"></textarea></div>
+        <div style="margin-top:12px"><button class="btn-sm b-rel" id="rxm_${k}_send">Send to pharmacy</button></div>
+        <div class="stamp">Recorded with your name and the time. Only prescribe within your scope and the Standard Treatment Guidelines.</div></div></div>` : ''}
+      <div class="data-card"><h4>Prescriptions from this department</h4><div class="recent-scroll" id="rxm_${k}_l"></div></div>`;
+  }
+  function rxmRows(d) {
+    const k = rxmK(d), s = rxmS(d), box = document.getElementById(`rxm_${k}_box`); if (!box) return;
+    const p = fdPatients.find(x => x.patient_id === s.pid) || {}, stock = s.stock;
+    const hintOf = r => { let h = ''; if (r.n.trim()) {
+      const al = rxAllergy(r.n, p.allergies), it = matchStock(r.n, stock, r.r);
+      if (al) h += `<div class="rx-hint bad">⚠ Client has a recorded allergy (${esc(al)}). Please check.</div>`;
+      if (it) { const q = Number(it.qty_on_hand) || 0; h += q <= 0 ? '<div class="rx-hint bad">Out of stock at the pharmacy</div>' : `<div class="rx-hint">In stock: ${q}</div>`; } else h += '<div class="rx-hint warn">Not in the pharmacy drug list. The pharmacy will see it as typed.</div>';
+      const fm = routeForms(r.r); if (it && fm && it.drug_form && !fm.includes(it.drug_form)) h += `<div class="rx-hint warn">The pharmacy stocks this as a ${esc(String(it.drug_form).toLowerCase())}, but you chose "${esc(r.r)}". Please check.</div>`; } return h; };
+    box.innerHTML = `<datalist id="rxmD_${k}">${stock.map(it => `<option value="${esc(drugLabel(it))}"></option>`).join('')}</datalist><datalist id="rxmF_${k}">${RX_FREQ.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist><datalist id="rxmU_${k}">${RX_DUR.map(x => `<option value="${esc(x)}"></option>`).join('')}</datalist>
+      ${s.rows.map((r, i) => `<div class="rx-row">
+        <div class="f"><label>Drug <span class="req">*</span></label><input list="rxmD_${k}" data-rxm="${i}|n" value="${esc(r.n)}" placeholder="Start typing…" autocomplete="off"><div data-hint="${i}">${hintOf(r)}</div></div>
+        <div class="f"><label>How it is taken <span class="req">*</span></label><select data-rxm="${i}|r"><option value="">Choose…</option>${RX_ROUTES.map(o => `<option ${o === r.r ? 'selected' : ''}>${esc(o)}</option>`).join('')}</select></div>
+        <div class="f"><label>Dose <span class="req">*</span></label><input data-rxm="${i}|d" value="${esc(r.d)}" placeholder="${doseHint(r.r)}"></div>
+        <div class="f"><label>Frequency <span class="req">*</span></label><input list="rxmF_${k}" data-rxm="${i}|f" value="${esc(r.f)}" autocomplete="off"></div>
+        <div class="f"><label>Duration <span class="req">*</span></label><input list="rxmU_${k}" data-rxm="${i}|u" value="${esc(r.u)}" autocomplete="off"></div>
+        <div class="f"><label>Qty <span class="req">*</span></label><input type="number" min="1" step="1" data-rxm="${i}|q" value="${esc(r.q)}"></div>
+        <div class="f"><label>Directions</label><input data-rxm="${i}|i" value="${esc(r.i)}" placeholder="e.g. after meals"></div>
+        <button class="x" type="button" data-rxmdel="${i}" title="Remove this drug">×</button></div>`).join('')}`;
+    box.oninput = e => { const kk = e.target.dataset.rxm; if (!kk) return; const [i, f] = kk.split('|'); if (s.rows[i]) s.rows[i][f] = e.target.value; };
+    box.onchange = e => { const kk = e.target.dataset.rxm; if (!kk) return; const [i, f] = kk.split('|'), row = s.rows[i], el = box.querySelector(`[data-hint="${i}"]`);
+      if (f === 'n') { const it = matchStock(row.n, stock, row.r); if (it && !row.r) { row.r = defaultRoute(it.drug_form); const sel = box.querySelector(`[data-rxm="${i}|r"]`); if (sel) sel.value = row.r; } }
+      if (f === 'r') { const dd = box.querySelector(`[data-rxm="${i}|d"]`); if (dd) dd.placeholder = doseHint(row.r); }
+      if (el && (f === 'n' || f === 'r')) el.innerHTML = hintOf(row); };
+    box.onclick = e => { const x = e.target.closest('[data-rxmdel]'); if (!x) return; s.rows.splice(Number(x.dataset.rxmdel), 1); if (!s.rows.length) s.rows.push(rxBlank()); rxmRows(d); };
+  }
+  function rxmAllergyBanner(d) {
+    const k = rxmK(d), s = rxmS(d), p = fdPatients.find(x => x.patient_id === s.pid), el = document.getElementById(`rxm_${k}_al`); if (!el) return;
+    el.innerHTML = p && p.allergies ? `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#8E1C14;margin-top:8px"><b>Recorded allergies:</b> ${esc(p.allergies)}</div>` : '';
+  }
+  function rxmLists(d) {
+    const k = rxmK(d), s = rxmS(d), can = rxmCan(d);
+    const er = document.getElementById(`rxm_${k}_err`); if (er) er.innerHTML = s.err ? `<div class="error-inline">Could not load prescriptions: ${esc(s.err)}</div>` : '';
+    const qs = s.rx.filter(r => r.status === 'query'), qe = document.getElementById(`rxm_${k}_q`);
+    if (qe) qe.innerHTML = qs.length ? `<div class="rx-query"><div class="rx-query-title">Pharmacy query</div><div style="font-size:13px;margin-bottom:8px;color:#8E1C14">The pharmacy will not dispense until you reply.</div>
+      ${qs.map(r => `<div class="labs-in-row" style="display:block;border-top-color:rgba(198,40,40,.3)"><b>${esc(r.patient_name)}</b> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.rx_no || '')}${rxLinesHtml(r)}${rxThreadHtml(r)}
+        ${can ? `<div class="f" style="margin-top:6px"><label>Your reply <span class="req">*</span></label><textarea data-rxmqt="${esc(r.rx_id)}" rows="2" placeholder="Confirm it as written, or say why you are withdrawing it"></textarea></div>
+        <div style="margin-top:6px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn-sm b-rel" data-rxmreply="${esc(r.rx_id)}">Confirm as written</button><button class="btn-sm ghost" data-rxmwd="${esc(r.rx_id)}">Withdraw</button></div>
+        <div class="vit">To change a drug, withdraw this one and write a new prescription.</div>` : ''}</div>`).join('')}</div>` : '';
+    const le = document.getElementById(`rxm_${k}_l`);
+    if (le) le.innerHTML = `<table class="data-table"><thead><tr><th>Sent</th><th>Client</th><th>Medicines</th><th>Status</th><th>By</th></tr></thead><tbody>${s.rx.slice(0, 150).map(r => `<tr><td>${fmtDate(r.prescribed_at)}</td><td><b>${esc(r.patient_name)}</b><div class="vit">${esc(r.client_id || '')} · ${esc(r.rx_no || '')}</div></td><td class="vit">${rxLinesHtml(r)}${r.notes ? '<div><b>Note:</b> ' + esc(r.notes) + '</div>' : ''}</td><td>${rxBadge(r, false)}</td><td>${esc(r.prescribed_by || '')}</td></tr>`).join('') || '<tr class="empty-row"><td colspan="5">No prescriptions written from here yet.</td></tr>'}</tbody></table>`;
+    rxmBadge(d);
+  }
+  async function rxmOpen(d) {
+    const k = rxmK(d), host = document.getElementById(k === 'an' ? 'anPaneRx' : 'ldPaneRx'); if (!host) return;
+    const s = rxmS(d);
+    if (!host.dataset.mounted) {
+      host.innerHTML = '<div class="loading-inline">Loading prescriptions…</div>'; await rxmRefresh(d);
+      host.innerHTML = rxmShell(d); host.dataset.mounted = '1';
+      host.addEventListener('change', e => { if (e.target.id === `rxm_${k}_c`) { s.pid = val(`rxm_${k}_c`).split('|')[0]; rxmAllergyBanner(d); rxmRows(d); } });
+      host.addEventListener('click', e => {
+        const q = e.target.closest('[data-rxmq]'); if (q) { const t = RXM_QUICK[d][Number(q.dataset.rxmq)]; const rows = s.rows.filter(rxFilled); rows.push({ n: t.n, r: RX_ROUTES[t.r], d: t.d, f: t.f, u: t.u, q: String(t.q), i: t.i }); s.rows = rows; rxmRows(d); return; }
+        if (e.target.id === `rxm_${k}_add`) { s.rows.push(rxBlank()); rxmRows(d); return; }
+        if (e.target.id === `rxm_${k}_send`) { rxmSend(d); return; }
+        const rp = e.target.closest('[data-rxmreply]'); if (rp) return rxmReply(d, rp.dataset.rxmreply, false);
+        const wd = e.target.closest('[data-rxmwd]'); if (wd) return rxmReply(d, wd.dataset.rxmwd, true);
+      });
+      rxmRows(d); rxmAllergyBanner(d); rxmLists(d);
+    } else { await rxmRefresh(d); rxmLists(d); }
+  }
+  async function rxmTick(d) { // keeps the lists fresh without touching what is being typed
+    const k = rxmK(d), host = document.getElementById(k === 'an' ? 'anPaneRx' : 'ldPaneRx'); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
+    if (host.querySelector('textarea:focus')) return; await rxmRefresh(d); rxmLists(d);
+  }
+  async function rxmSend(d) {
+    const k = rxmK(d), s = rxmS(d), msg = d === 'antenatal' ? anNote : ldNote, box = document.getElementById(`rxm_${k}_box`);
+    clearErrs(document.getElementById('rxm_' + k + '_c').closest('.data-card'));
+    const sel = val(`rxm_${k}_c`); if (!sel) return showErrs([[`rxm_${k}_c`, 'Choose the client.']]);
+    const [pid, ctx] = sel.split('|'), p = fdPatients.find(x => x.patient_id === pid) || {}, rows = s.rows.filter(rxFilled);
+    if (!rows.length) return showErrs([[box.querySelector('[data-rxm="0|n"]'), 'Type the drug you are prescribing.']]);
+    const errs = [], inp = (i, f) => box.querySelector(`[data-rxm="${i}|${f}"]`);
+    s.rows.forEach((r, i) => { if (!rxFilled(r)) return;
+      if (!r.n.trim()) errs.push([inp(i, 'n'), 'Type the drug name.']); if (!r.r.trim()) errs.push([inp(i, 'r'), 'Choose how it is taken.']); if (!r.d.trim()) errs.push([inp(i, 'd'), 'Enter the dose.']);
+      if (!r.f.trim()) errs.push([inp(i, 'f'), 'Choose or type how often.']); if (!r.u.trim()) errs.push([inp(i, 'u'), 'Choose or type for how long.']); if (!(Number(r.q) >= 1) || !Number.isInteger(Number(r.q))) errs.push([inp(i, 'q'), 'Enter a whole number of 1 or more.']); });
+    if (errs.length) return showErrs(errs);
+    const flagged = rows.map(r => [r.n, rxAllergy(r.n, p.allergies)]).filter(x => x[1]);
+    if (flagged.length && !confirm('This client has a recorded allergy (' + (p.allergies || '') + ').\n\nCheck: ' + flagged.map(x => x[0]).join(', ') + '.\n\nSend to the pharmacy anyway?')) return;
+    const btn = document.getElementById(`rxm_${k}_send`); btn.disabled = true; btn.textContent = 'Sending…';
+    try {
+      const now = new Date().toISOString(), id = uuid(), rxNo = 'RX-' + now.slice(2, 10).replace(/-/g, '') + '-' + id.replace(/-/g, '').slice(0, 6).toUpperCase();
+      const lines = rows.map(r => ({ n: r.n.trim(), r: r.r.trim(), d: r.d.trim(), f: r.f.trim(), u: r.u.trim(), q: Number(r.q), i: r.i.trim() }));
+      const raw = { rx_id: S(id), rx_no: S(rxNo), patient_id: S(pid), client_id: S(p.client_id), patient_name: S(p.full_name), date_of_birth: S(p.date_of_birth), sex: S(p.sex), allergies: S(p.allergies), items_json: S(JSON.stringify(lines)),
+        notes: S((document.getElementById(`rxm_${k}_notes`).value || '').trim()), status: S('pending'), prescribed_at: S(now), prescribed_by: S(staffName()), prescribed_by_username: S(staffUser()), source_dept: S(d), context_id: S(ctx) };
+      await (await getClient()).send(new PutItemCommand({ TableName: RX_TABLE, Item: Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined)) }));
+      s.rows = [rxBlank()]; document.getElementById(`rxm_${k}_notes`).value = '';
+      await rxmRefresh(d); rxmRows(d); rxmLists(d); btn.disabled = false; btn.textContent = 'Send to pharmacy';
+      msg(`Prescription <b>${esc(rxNo)}</b> sent to the pharmacy for ${esc(p.full_name)} (${lines.length} drug${lines.length > 1 ? 's' : ''}).`, 'ok');
+    } catch (err) { btn.disabled = false; btn.textContent = 'Send to pharmacy'; msg(`Could not send: ${esc(err.message)}`); }
+  }
+  async function rxmReply(d, id, withdraw) {
+    const s = rxmS(d), r = s.rx.find(x => x.rx_id === id), msg = d === 'antenatal' ? anNote : ldNote; if (!r || !rxmCan(d)) return;
+    const ta = document.querySelector(`[data-rxmqt="${id}"]`), text = (ta && ta.value || '').trim(); clearErrs(ta.closest('.labs-in-row'));
+    if (!text) return showErrs([[ta, withdraw ? 'Say why you are withdrawing this prescription.' : 'Write your reply to the pharmacy.']]);
+    if (withdraw && !confirm('Withdraw this prescription? The pharmacy will not dispense it.')) return;
+    try {
+      const now = new Date().toISOString(), th = rxThread(r); th.push({ k: 'reply', by: staffName(), u: staffUser(), at: now, text: withdraw ? 'Withdrawn: ' + text : text, changed: false, before: '' });
+      const set = withdraw ? { status: 'withdrawn', queries_json: JSON.stringify(th), withdrawn_at: now, withdrawn_by: staffName() } : { status: 'pending', queries_json: JSON.stringify(th), replied_at: now, replied_by: staffName() };
+      await ddbUpdate({ table: RX_TABLE, key: { rx_id: { S: r.rx_id } }, set, cond: '#st = :q', condNames: { '#st': 'status' }, condVals: { ':q': { S: 'query' } } });
+      await rxmRefresh(d); rxmLists(d); msg(withdraw ? `Prescription ${esc(r.rx_no)} withdrawn.` : `Reply sent to the pharmacy for ${esc(r.patient_name)}. It is back in their queue.`, 'ok');
+    } catch (err) { msg(/Conditional/i.test(err.message) ? 'This query was already answered. Please reload the page.' : `Could not send: ${esc(err.message)}`); }
+  }
+
   // ---- Update test results after booking ----
   function anTestsForm(rid) {
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return;
@@ -4911,7 +5065,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     anTimer = setInterval(async () => {
       if (!document.getElementById('anMothers') || !document.getElementById('detailView').classList.contains('active')) { clearInterval(anTimer); anTimer = null; return; }
       const f = document.getElementById('anForm'); if (f && f.style.display !== 'none') return;
-      try { await anRefresh(); anRenderAll(); } catch (e) { /* try again next time */ }
+      try { await anRefresh(); anRenderAll(); if (anTab === 'rx') await rxmTick('antenatal'); } catch (e) { /* try again next time */ }
     }, 45000);
   }
   async function loadAntenatalData() {
@@ -5046,6 +5200,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <button class="ph-tab on" data-ldtab="ward">In labour <span class="n" id="ldTabWard" style="display:none"></span></button>
         <button class="ph-tab" data-ldtab="post">Delivered, on the ward <span class="n green" id="ldTabPost" style="display:none"></span></button>
         <button class="ph-tab" data-ldtab="register">Register <span class="n amber" id="ldTabReg" style="display:none"></span></button>
+        <button class="ph-tab" data-ldtab="rx">Prescriptions <span class="n amber" id="ldTabRx" style="display:none"></span></button>
         <button class="ph-tab" data-ldtab="find">Find a client</button>
       </div>
       <div id="ldSearchRow" class="fd-search" style="display:none;gap:10px;flex-wrap:wrap;align-items:center"><input id="ldSearch" type="search" placeholder="Search by name, client ID, register number or phone" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="ldSearchBtn" type="button">Search</button><button class="btn-sm ghost" id="ldClearBtn" type="button">Clear</button></div>
@@ -5055,6 +5210,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       </div>
       <div id="ldPanePost" style="display:none"><div class="data-card"><h4>Delivered, on the ward</h4><div class="vit" style="margin-bottom:8px">Mother and baby stay at least 24 hours after birth unless there is a reason. Press Discharge when they leave.</div><div class="recent-scroll" id="ldPost"></div></div></div>
       <div id="ldPaneRegister" style="display:none"><div id="ldExports"></div><div class="data-card"><h4>Delivery register</h4><div id="ldRegister"></div></div></div>
+      <div id="ldPaneRx" style="display:none"></div>
       <div id="ldPaneFind" style="display:none"><div class="data-card"><h4>Find a client</h4>
         <div class="fd-search"><input id="ldFind" type="search" placeholder="Search by name, phone or client ID (VMH-00001)" autocomplete="off"></div>
         <div class="results" id="ldFindRes"></div></div></div>
@@ -5062,8 +5218,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   function setLdTab(t) {
     ldTab = t;
-    ['ward', 'post', 'register', 'find'].forEach(k => { const p = document.getElementById('ldPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
+    ['ward', 'post', 'register', 'rx', 'find'].forEach(k => { const p = document.getElementById('ldPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
     document.querySelectorAll('[data-ldtab]').forEach(b => b.classList.toggle('on', b.dataset.ldtab === t));
+    if (t === 'rx') rxmOpen('labour-delivery');
     const sr = document.getElementById('ldSearchRow'); if (sr) sr.style.display = (t === 'post' || t === 'register' && ldRegView === 'list') ? 'flex' : 'none';
   }
   const ldWaiting = () => fdVisits.filter(v => v.status === 'checked-in' && v.service === 'labour-delivery' && v.entered_at && new Date(v.entered_at).toDateString() === new Date().toDateString() && !ldAdms().some(a => a.patient_id === v.patient_id && ldStatus(a) === 'labour')).sort((a, b) => a.entered_at.localeCompare(b.entered_at));
@@ -5740,7 +5897,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     ldTimer = setInterval(async () => {
       if (!document.getElementById('ldWard') || !document.getElementById('detailView').classList.contains('active')) { clearInterval(ldTimer); ldTimer = null; return; }
       const f = document.getElementById('ldForm'); if (f && f.style.display !== 'none') return;
-      try { await ldRefresh(); ldRenderAll(); } catch (e) { /* try again next time */ }
+      try { await ldRefresh(); ldRenderAll(); if (ldTab === 'rx') await rxmTick('labour-delivery'); } catch (e) { /* try again next time */ }
     }, 45000);
   }
   async function loadLabourData() {
