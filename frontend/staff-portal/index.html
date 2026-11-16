@@ -415,6 +415,7 @@
       Logins: logins
     });
 
+    gxIdentityId = idResult.IdentityId;
     const credsResult = await cognitoIdentityRequest('GetCredentialsForIdentity', {
       IdentityId: idResult.IdentityId,
       Logins: logins
@@ -765,6 +766,7 @@
          <div class="meta" style="font-size:12.5px;color:#555">${esc(patient.phone_number || '')} · DOB ${esc(patient.date_of_birth || '—')}</div></div>
          <button class="btn-sm ghost" id="fdCancel">Cancel</button></div>`
       : `<div class="client-banner"><div><strong>New client registration</strong><div style="font-size:12.5px;color:#555">A client ID is generated when you save.</div></div><button class="btn-sm ghost" id="fdCancel">Cancel</button></div>`;
+    gxArm('fdFormCard', 'fd', patient ? patient.patient_id : '', patient ? patient.patient_id : '', patient ? patient.full_name : 'New client');
     card.innerHTML = `<h4>${patient ? 'New visit' : 'Register client &amp; start visit'}</h4>${banner}
       <div class="fd-form">${patient ? '' : demographicsHtml(prefillName || '')}${vitalsHtml()}
       <div id="fdDup"></div>
@@ -2074,7 +2076,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     document.getElementById('lbMsg').innerHTML = '';
     const card = document.getElementById('lbForm');
     const panel = panelFor(r.test);
-    const show = body => { card.innerHTML = labBanner(r) + body; card.style.display = 'block'; };
+    const show = body => { gxArm('lbForm', 'lab', requestId + '|' + mode, r.patient_id, r.patient_name); card.innerHTML = labBanner(r) + body; card.style.display = 'block'; };
     if (mode === 'receive') {
       show(`<div class="fd-form"><div class="grid2"><div class="f"><label>Sample type <span class="req">*</span></label><select id="lb_stype">${opt(SAMPLE_TYPES, 'Select')}</select></div>
         <div class="f"><label>Sample ID</label><input id="lb_sid" value="${esc(r.sample_id || makeSampleId(r))}"></div></div>
@@ -2541,6 +2543,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     if (mode === 'edit' && !it) return;
     const v = k => esc(it ? (it[k] ?? '') : '');
     const opt = (list, cur) => list.map(o => `<option ${o === cur ? 'selected' : ''}>${esc(o)}</option>`).join('');
+    gxArm('phForm', 'phdrug', mode + '|' + (id || ''), '', it ? drugLabel(it) : 'New drug');
     phShow(`<div class="fd-form"><h5>${it ? 'Edit ' + esc(drugLabel(it)) : 'Add a drug'}</h5>
       <div class="grid3">
         <div class="f"><label>Drug name <span class="req">*</span></label><input id="d_name" value="${v('drug_name')}" placeholder="e.g. Paracetamol"></div>
@@ -2615,6 +2618,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   // ---- Receive stock ----
   function phReceiveForm(id) {
     const it = phStock.find(x => x.item_id === id); if (!it) return;
+    gxArm('phForm', 'phrecv', id, '', drugLabel(it));
     phShow(`<div class="fd-form"><h5>Receive stock: ${esc(drugLabel(it))}</h5>
       <div class="vit" style="margin-bottom:10px">Now on hand: <b>${Number(it.qty_on_hand) || 0}</b> ${esc(it.sale_unit || '')}${it.expiry_date ? ' · earliest expiry ' + esc(it.expiry_date) : ''}</div>
       <div class="grid3">
@@ -2653,6 +2657,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   // ---- Adjust stock (count correction, damage, expiry) ----
   function phAdjustForm(id, writeoff) {
     const it = phStock.find(x => x.item_id === id); if (!it) return;
+    gxArm('phForm', 'phadj', id + '|' + (writeoff ? 1 : 0), '', drugLabel(it));
     phShow(`<div class="fd-form"><h5>Adjust stock: ${esc(drugLabel(it))}</h5>
       <div class="vit" style="margin-bottom:10px">The system says: <b>${Number(it.qty_on_hand) || 0}</b> ${esc(it.sale_unit || '')}${writeoff ? ` · batch ${esc(it.batch_no || '—')} expired ${esc(it.expiry_date || '')}. Writing it off sets the quantity to 0 and logs it as discarded. If you have a fresh batch, use <b>Receive</b> afterwards.` : ''}</div>
       <div class="grid3">
@@ -2719,6 +2724,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
     if (r.status === 'query') { phErr('This prescription is on hold until the doctor replies to your query.'); return; }
     const todo = lines.map((l, i) => ({ l, i })).filter(x => !x.l.s);
     if (!todo.length) { phErr('Every medicine on this prescription has already been dealt with.'); return; }
+    gxArm('phForm', 'phdisp', id, r.patient_id, r.patient_name);
     phShow(`<div class="fd-form"><h5>Dispense ${esc(r.rx_no || '')}</h5>
       <div class="client-banner" style="margin-bottom:10px"><div><strong style="font-size:17px">${esc(r.patient_name)}</strong> <span class="cid">${esc(r.client_id || '')}</span>
         <div style="font-size:12.5px;color:#555">${esc(ageLine(r))} · Prescribed by ${esc(r.prescribed_by || '—')} · ${fmtDate(r.prescribed_at)}</div></div></div>
@@ -3389,6 +3395,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   // ---- Price list ----
   function bgPriceForm(id) {
     const p = id ? bgPrices.find(x => x.price_id === id) : null; if (id && !p) return;
+    gxArm('bgForm', 'bgprice', id || '', '', p ? p.name : 'New service');
     bgShow(`<div class="fd-form"><h5>${p ? 'Edit service' : 'Add a service'}</h5>
       <div class="grid3">
         <div class="f"><label>Service name <span class="req">*</span></label><input id="p_name" value="${esc(p ? p.name : '')}" autocomplete="off"></div>
@@ -4626,6 +4633,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     if (!/Put|Update|Delete|Batch|Transact/.test(n)) return;
     if (i.Item && i.Item.record_type && ['form-draft', 'draft', 'rx-draft'].includes(i.Item.record_type.S)) return;
     if (i.UpdateExpression && /cleared_at/.test(i.UpdateExpression)) return;
+    if (i.TableName === 'vidacare-form-drafts') return;
     gdWrites++;
   }
   const gdArm = (dept, kind, ctx, pid) => { gdArmed = { dept, kind, ctx, pid }; };
@@ -4712,6 +4720,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const jobs = [];
     ['an', 'ld'].forEach(dept => { const c = gdCur && gdCur.dept === dept ? gdCur : null, form = document.getElementById(GD[dept].form); if (c && form && form.firstChild && !c.cancelled && JSON.stringify(gdCapture(form)) !== c.snap) jobs.push(gdPut(c, gdCapture(form), true)); });
     if (gdVisitRid && document.getElementById('av_wt')) jobs.push(anSaveDraft(gdVisitRid, true));
+    if (gxCur && !gxCur.cancelled) { const el = document.getElementById(gxCur.cont); if (el && el.querySelector('#gxSave')) { const dd = gdCapture(el); if (gxCur.restored || JSON.stringify(dd) !== gxCur.snap) jobs.push(gxPut(gxCur, dd, true)); } }
     ['antenatal', 'labour-delivery'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
     await Promise.race([Promise.allSettled(jobs), new Promise(r => setTimeout(r, 5000))]);
   }
@@ -4720,6 +4729,100 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     e.stopImmediatePropagation(); e.preventDefault();
     gdSignOut().finally(() => { gdOut = true; document.getElementById('logoutBtn').click(); });
   }, true);
+
+
+  // ---- Private drafts for the front desk, lab, pharmacy and billing forms (shared drafts table, one row per draft, own rows only) ----
+  const GX_TABLE = 'vidacare-form-drafts';
+  const GX_CONT = { fdFormCard: 'fdCancel', lbForm: 'lbCancel', phForm: 'phCancel',
+    bgForm: 'bgCancel'
+  };
+  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price' };
+  const GX_OPEN = {
+    fd: c => { const p = c ? fdPatients.find(x => x.patient_id === c) : null; openForm(p || null, ''); },
+    lab: c => { const [id, m] = c.split('|'); openLabForm(id, m); },
+    phdrug: c => { const [m, id] = c.split('|'); phDrugForm(m, id || undefined); },
+    phrecv: c => phReceiveForm(c),
+    phadj: c => { const [id, w] = c.split('|'); phAdjustForm(id, w === '1'); },
+    phdisp: c => phDispenseForm(c),
+    bgprice: c => bgPriceForm(c || undefined)
+  };
+  const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
+  let gxIdentityId = '', gxOk = false, gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
+  const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
+  const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
+  const gxFind = c => gxDrafts.find(d => d.draft_id === gxKey(c));
+  const gxToast = (html, ok) => { let t = document.getElementById('gxToast'); if (!t) { t = document.createElement('div'); t.id = 'gxToast'; t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:90%'; document.body.appendChild(t); } t.innerHTML = `<div class="${ok ? 'success' : 'error-inline'}" style="box-shadow:0 4px 14px rgba(0,0,0,.18)">${html}</div>`; clearTimeout(t._t); t._t = setTimeout(() => { t.innerHTML = ''; }, 6000); };
+  async function gxLoad() {
+    gxOk = false; gxDrafts = [];
+    try {
+      await getClient(); if (!gxIdentityId) return;
+      let key, items = [];
+      do { const r = await (await getClient()).send(new QueryCommand({ TableName: GX_TABLE, KeyConditionExpression: 'owner = :o', ExpressionAttributeValues: { ':o': { S: gxIdentityId } }, ExclusiveStartKey: key })); items = items.concat((r.Items || []).map(unmarshal)); key = r.LastEvaluatedKey; } while (key);
+      gxDrafts = items.filter(d => !d.cleared_at); gxOk = true;
+    } catch (e) { gxOk = false; }
+    gxStrip();
+  }
+  function gxEnter(slug) { gxDept = slug; gxCur = null; gxArmed = {}; gxOk = false; gxDrafts = []; if (!GX_NO.includes(slug)) gxLoad(); }
+  function gxStrip() {
+    let el = document.getElementById('gxStrip'); const host = document.getElementById('liveContent');
+    if (!gxOk || GX_NO.includes(gxDept) || !host) { if (el) el.innerHTML = ''; return; }
+    if (!el) { el = document.createElement('div'); el.id = 'gxStrip'; host.insertBefore(el, host.firstChild); } else if (el.parentNode === host && host.firstChild !== el) host.insertBefore(el, host.firstChild);
+    const ds = gxDrafts.filter(d => d.dept === gxDept).sort((a, b) => (b.saved_at || '').localeCompare(a.saved_at || ''));
+    const html = ds.length ? `<div class="notice" style="margin-bottom:12px"><b>Your saved drafts</b> <span class="vit">only you can see these. Nothing here has been saved to a record yet.</span>${ds.map(x => `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><span><b>${esc(x.patient_name || '')}</b>${x.client_id ? ` <span class="cid">${esc(x.client_id)}</span>` : ''} · ${esc(GX_LABEL[x.kind] || x.kind)} · saved ${fmtDate(x.saved_at)}</span><button class="btn-sm b-rel" data-gxres="${esc(x.draft_id)}">Resume</button><button class="btn-sm ghost" data-gxdis="${esc(x.draft_id)}">Discard</button></div>`).join('')}</div>` : '';
+    if (el.dataset.h !== html) { el.dataset.h = html; el.innerHTML = html; }
+  }
+  function gxShown(el, armed) {
+    const c = { ...armed, w0: gdWrites, snap: '', live: null }, rec = gxFind(c), cancel = el.querySelector('#' + GX_CONT[armed.cont]);
+    if (rec) { let o = {}; try { o = JSON.parse(rec.data_json || '{}'); } catch (e) { /* damaged */ } gdApply(el, o); c.restored = true; const fd = el.querySelector('.fd-form') || el; fd.insertAdjacentHTML('afterbegin', `<div class="notice" id="gxBanner">Draft restored from ${fmtDate(rec.saved_at)}. It is not saved to a record until you save it. <a class="lnk" id="gxDiscard">Discard the draft and start again</a></div>`); }
+    else c.snap = JSON.stringify(gdCapture(el));
+    const btn = '<button class="btn-sm ghost" id="gxSave" type="button" style="margin-right:6px">Save draft</button>';
+    if (cancel) { cancel.insertAdjacentHTML('beforebegin', btn); cancel.addEventListener('click', () => { c.cancelled = true; }, true); } else (el.querySelector('.fd-form') || el).insertAdjacentHTML('beforeend', `<div style="margin-top:10px">${btn}</div>`);
+    el.querySelector('#gxSave').onclick = () => gxPut(c, gdCapture(el), false);
+    const dc = el.querySelector('#gxDiscard'); if (dc) dc.onclick = async () => { c.cancelled = true; await gxDelete(c); GX_OPEN[c.kind](c.ctx); };
+    gxCur = c;
+  }
+  function gxLeave() {
+    const c = gxCur; if (!c) return; gxCur = null; if (c.cancelled) return;
+    if (gdWrites > c.w0) { gxDelete(c); return; }                                   // she saved something: the form was completed
+    if (c.live && JSON.stringify(c.live) !== c.snap) gxPut(c, c.live, true);          // she left it half-filled: keep it as a draft
+  }
+  function gxWatch() {
+    if (!gxOk || GX_NO.includes(gxDept)) return;
+    Object.keys(GX_CONT).forEach(cont => {
+      const el = document.getElementById(cont); if (!el) return;
+      const fields = el.style.display !== 'none' && el.querySelector('input, select, textarea');
+      if (gxCur && gxCur.cont === cont && (!fields || !el.querySelector('#gxSave'))) gxLeave();
+      const a = gxArmed[cont]; if (a && fields && !el.querySelector('#gxSave')) { delete gxArmed[cont]; if (Date.now() - a.t < 8000) gxShown(el, a); }
+    });
+    gxStrip();
+  }
+  async function gxPut(c, data, silent) {
+    if (!gxOk || !c) return false; const str = JSON.stringify(data);
+    if (!c.restored && str === c.snap) { if (!silent) gxToast('Type something in the form first, then save the draft.'); return false; }
+    const p = fdPatients.find(x => x.patient_id === c.pid) || {}, now = new Date().toISOString(), key = gxKey(c);
+    const raw = { owner: S(gxIdentityId), draft_id: S(key), dept: S(gxDept), kind: S(c.kind), ctx: S(c.ctx), pid: c.pid ? S(c.pid) : undefined, patient_name: S(p.full_name || data.r_full_name || data.d_name || c.name || ''), client_id: p.client_id ? S(p.client_id) : undefined, data_json: S(str), saved_at: S(now), saved_by: S(staffName()), expires_at: { N: String(Math.floor(Date.now() / 1000) + 30 * 86400) } };
+    const item = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
+    try {
+      await (await getClient()).send(new PutItemCommand({ TableName: GX_TABLE, Item: item }));
+      const u = unmarshal(item), i = gxDrafts.findIndex(d => d.draft_id === key); if (i >= 0) gxDrafts[i] = u; else gxDrafts.push(u); c.restored = true; gxStrip();
+      if (!silent) { c.cancelled = true; const cb = document.getElementById(GX_CONT[c.cont]); if (cb) cb.click(); else { const el = document.getElementById(c.cont); if (el) { el.style.display = 'none'; el.innerHTML = ''; } } gxToast(`Draft saved for <b>${esc(u.patient_name || GX_LABEL[c.kind])}</b> at ${fmtDate(now)}. Press <b>Resume</b> to continue.`, true); }
+      return true;
+    } catch (err) { if (!silent) gxToast(`Could not save the draft: ${esc(err.message)}`); return false; }
+  }
+  async function gxDelete(c) {
+    const key = gxKey(c), x = gxFind(c); if (!x) return; x.cleared_at = new Date().toISOString(); gxDrafts = gxDrafts.filter(d => d.draft_id !== key);
+    try { await (await getClient()).send(new UpdateItemCommand({ TableName: GX_TABLE, Key: { owner: { S: gxIdentityId }, draft_id: { S: key } }, UpdateExpression: 'SET cleared_at = :t, expires_at = :e', ExpressionAttributeValues: { ':t': { S: x.cleared_at }, ':e': { N: String(Math.floor(Date.now() / 1000) + 86400) } } })); } catch (e) { /* will expire by itself */ }
+    gxStrip();
+  }
+  document.addEventListener('input', e => { if (gxCur) { const el = document.getElementById(gxCur.cont); if (el && el.contains(e.target)) gxCur.live = gdCapture(el); } });
+  document.addEventListener('change', e => { if (gxCur) { const el = document.getElementById(gxCur.cont); if (el && el.contains(e.target)) gxCur.live = gdCapture(el); } });
+  document.addEventListener('click', e => {
+    const r = e.target.closest('[data-gxres]'), d = e.target.closest('[data-gxdis]'); if (!r && !d) return;
+    const key = (r || d).dataset[r ? 'gxres' : 'gxdis'], x = gxDrafts.find(q => q.draft_id === key); if (!x) return;
+    const c = { kind: x.kind, ctx: x.ctx || '', pid: x.pid || '' };
+    if (r) GX_OPEN[x.kind](c.ctx); else if (confirm('Discard this draft?')) gxDelete(c);
+  });
+  new MutationObserver(gxWatch).observe(document.getElementById('liveContent'), { childList: true, subtree: true });
 
   // ---- Referral letter (same look as the lab report: logo, watermark, clinic footer, signatures) ----
   const refD = iso => iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
@@ -6304,6 +6407,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   new MutationObserver(addBackBars).observe(document.getElementById('liveContent'), { childList: true, subtree: true });
 
   function openDeptDetail(dept, badgeClass, badgeText) {
+    gxEnter(dept.slug);
     document.getElementById('gridView').style.display = 'none';
     document.getElementById('detailView').classList.add('active');
     document.getElementById('detailIcon').textContent = dept.icon;
