@@ -4748,7 +4748,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v42';
+  const PORTAL_VERSION = 'v43';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -4761,7 +4761,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       if (!gxIdentityId && currentIdToken) { try { gxIdentityId = (await cognitoIdentityRequest('GetId', { IdentityPoolId: IDENTITY_POOL_ID, Logins: { [USER_POOL_PROVIDER]: currentIdToken } })).IdentityId || ''; } catch (e) { /* reported below */ } }
       if (!gxIdentityId) { gxErr = 'could not read your sign-in identity'; return; }
       let key, items = [];
-      do { const r = await (await getClient()).send(new QueryCommand({ TableName: GX_TABLE, KeyConditionExpression: 'owner = :o', ExpressionAttributeValues: { ':o': { S: gxIdentityId } }, ExclusiveStartKey: key })); items = items.concat((r.Items || []).map(unmarshal)); key = r.LastEvaluatedKey; } while (key);
+      do { const r = await (await getClient()).send(new QueryCommand({ TableName: GX_TABLE, KeyConditionExpression: '#o = :o', ExpressionAttributeNames: { '#o': 'owner' }, ExpressionAttributeValues: { ':o': { S: gxIdentityId } }, ExclusiveStartKey: key })); items = items.concat((r.Items || []).map(unmarshal)); key = r.LastEvaluatedKey; } while (key);
       gxDrafts = items.filter(d => !d.cleared_at); gxOk = true;
     } catch (e) { gxOk = false; gxErr = (e && e.message) || String(e); }
     gxStrip();
