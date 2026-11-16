@@ -4757,7 +4757,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v46';
+  const PORTAL_VERSION = 'v47';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -6511,7 +6511,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       <div class="ph-tabs">
         <button class="ph-tab on" data-pntab="due">Due and overdue <span class="n amber" id="pnTabDue" style="display:none"></span></button>
         <button class="ph-tab" data-pntab="active">Mothers and babies <span class="n green" id="pnTabAct" style="display:none"></span></button>
-        <button class="ph-tab" data-pntab="ref">Referrals <span class="n amber" id="pnTabRef" style="display:none"></span></button>
+        <button class="ph-tab" data-pntab="ref">Referrals</button>
         <button class="ph-tab" data-pntab="register">Register</button>
         <button class="ph-tab" data-pntab="rx">Prescriptions <span class="n amber" id="pnTabRx" style="display:none"></span></button>
         <button class="ph-tab" data-pntab="find">Find a client</button>
@@ -6579,7 +6579,6 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   function renderPnRefs() {
     const pk = document.getElementById('pnRefPick'); if (pk && !pk.dataset.n || (pk && Number(pk.dataset.n) !== pnActive().length)) { pk.dataset.n = pnActive().length; const cur = pk.value; pk.innerHTML = '<option value="">Choose…</option>' + pnActive().map(e => `<option value="${esc(e.record_id)}">${esc(e.patient_name)} · ${esc(e.client_id || '')} · ${esc(e.pn_no || '')}</option>`).join(''); pk.value = cur; }
     const rows = pnRecs.filter(r => String(r.record_id).startsWith('pnr#')).sort((x, y) => (y.left_at || '').localeCompare(x.left_at || '')), el = document.getElementById('pnRefList'); if (!el) return;
-    const set = document.getElementById('pnTabRef'); if (set) { const n = rows.filter(r => Date.now() - new Date(r.left_at) < 7 * PN_DAY).length; set.textContent = n; set.style.display = n ? '' : 'none'; }
     el.innerHTML = `<table class="data-table"><thead><tr><th>Left</th><th>Mother</th><th>Referred</th><th>To</th><th>Reason</th><th>Condition on leaving</th><th>By</th><th>Letter</th></tr></thead><tbody>${rows.map(r => { const e = pnEps().find(x => x.record_id === r.pn_id); if (!e) return ''; const nn = String(r.record_id).split('#').pop();
       return `<tr class="rowbar ${r.urgency === 'Emergency' ? 'red' : ''}"><td>${fmtDate(r.left_at)}</td><td>${pnNameCell(e, `<div class="vit">${esc(e.pn_no || '')}</div>`)}</td><td>${esc(r.who || '')}<div class="vit">${esc(r.urgency || '')}</div></td><td>${esc(r.referred_to)}<div class="vit">${esc(r.transport || '')}</div></td><td>${esc(r.reason)}</td><td class="vit">${esc(String(r.condition || '').slice(0, 120))}</td><td>${esc(r.entered_by || '')}</td><td style="white-space:nowrap">${refBtns('pn', e.record_id + '@' + nn)}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="8">No referrals yet.</td></tr>'}</tbody></table>`;
   }
