@@ -348,7 +348,7 @@
   const DEPARTMENTS = [
     { slug: "front-desk",       name: "Front Desk",       icon: "🛎️", live: true },
     { slug: "antenatal",        name: "Antenatal",        icon: "🤰", live: true },
-    { slug: "postnatal",        name: "Postnatal",        icon: "👶", live: false },
+    { slug: "postnatal",        name: "Postnatal",        icon: "👶", live: true },
     { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧", live: false },
     { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒", live: false },
     { slug: "labour-delivery",  name: "Labour & Delivery",icon: "🚨", live: true },
@@ -4520,12 +4520,20 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       { t: 'Metronidazole', n: 'Metronidazole', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' },
       { t: 'Iron and folic acid', n: 'Ferrous sulphate + folic acid', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 90, i: 'After birth' }]
   };
+  RXM_QUICK.postnatal = [
+      { t: 'Iron and folic acid', n: 'Ferrous sulphate + folic acid', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 90, i: 'After birth' },
+      { t: 'Paracetamol', n: 'Paracetamol', r: 0, d: '2 tablets (1 g)', f: 'Three times daily', u: '3 days', q: 18, i: 'When needed for pain or fever' },
+      { t: 'Ibuprofen', n: 'Ibuprofen', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '3 days', q: 9, i: 'After food. Avoid if blood pressure is high.' },
+      { t: 'Amoxicillin', n: 'Amoxicillin', r: 1, d: '1 capsule (500 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' },
+      { t: 'Metronidazole', n: 'Metronidazole', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' }];
   const RXM = {};
-  const rxmK = d => d === 'antenatal' ? 'an' : 'ld';
-  const rxmCan = d => d === 'antenatal' ? canAnc : canLd;
+  const rxmK = d => ({ antenatal: 'an', 'labour-delivery': 'ld', postnatal: 'pn' })[d];
+  const rxmCan = d => d === 'antenatal' ? canAnc : d === 'postnatal' ? canPn : canLd;
+  const rxmMsg = d => d === 'antenatal' ? anNote : d === 'postnatal' ? pnNote : ldNote;
   const rxmS = d => RXM[d] || (RXM[d] = { rows: [rxBlank()], pid: '', stock: [], rx: [], ok: false, err: '' });
   function rxmClients(d) {
     if (d === 'antenatal') return anPregs.filter(x => x.status === 'active').map(x => ({ pid: x.patient_id, ctx: x.record_id, name: x.patient_name, cid: x.client_id, tag: 'Antenatal ' + (x.reg_no || '') }));
+    if (d === 'postnatal') return pnActive().map(e => ({ pid: e.patient_id, ctx: e.record_id, name: e.patient_name, cid: e.client_id, tag: 'Postnatal ' + (e.pn_no || '') }));
     return ldAdms().filter(a => ['labour', 'delivered'].includes(ldStatus(a))).map(a => ({ pid: a.patient_id, ctx: a.record_id, name: a.patient_name, cid: a.client_id, tag: (ldStatus(a) === 'labour' ? 'In labour ' : 'On the ward ') + (a.adm_no || '') }));
   }
   async function rxmRefresh(d) {
@@ -4537,7 +4545,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     } catch (e) { s.err = e.message; }
   }
   function rxmBadge(d) {
-    const el = document.getElementById(d === 'antenatal' ? 'anTabRx' : 'ldTabRx'); if (!el) return;
+    const el = document.getElementById({ antenatal: 'anTabRx', 'labour-delivery': 'ldTabRx', postnatal: 'pnTabRx' }[d]); if (!el) return;
     const n = rxmS(d).rx.filter(r => r.status === 'query').length; el.textContent = n; el.style.display = n ? '' : 'none';
   }
   function rxmShell(d) {
@@ -4597,7 +4605,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     rxmDraftStrip(d); rxmBadge(d);
   }
   async function rxmOpen(d) {
-    const k = rxmK(d), host = document.getElementById(k === 'an' ? 'anPaneRx' : 'ldPaneRx'); if (!host) return;
+    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx' }[k]); if (!host) return;
     const s = rxmS(d);
     if (!host.dataset.mounted) {
       host.innerHTML = '<div class="loading-inline">Loading prescriptions…</div>'; await rxmRefresh(d);
@@ -4617,7 +4625,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     } else { await rxmRefresh(d); rxmLists(d); }
   }
   async function rxmTick(d) { // keeps the lists fresh without touching what is being typed
-    const k = rxmK(d), host = document.getElementById(k === 'an' ? 'anPaneRx' : 'ldPaneRx'); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
+    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx' }[k]); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
     if (host.querySelector('textarea:focus')) return; await rxmRefresh(d); rxmLists(d);
   }
 
@@ -4721,7 +4729,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     ['an', 'ld'].forEach(dept => { const c = gdCur && gdCur.dept === dept ? gdCur : null, form = document.getElementById(GD[dept].form); if (c && form && form.firstChild && !c.cancelled && JSON.stringify(gdCapture(form)) !== c.snap) jobs.push(gdPut(c, gdCapture(form), true)); });
     if (gdVisitRid && document.getElementById('av_wt')) jobs.push(anSaveDraft(gdVisitRid, true));
     if (gxCur && !gxCur.cancelled) { const el = document.getElementById(gxCur.cont); if (el && el.querySelector('#gxSave')) { const dd = gdCapture(el); if (gxCur.restored || JSON.stringify(dd) !== gxCur.snap) jobs.push(gxPut(gxCur, dd, true)); } }
-    ['antenatal', 'labour-delivery'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
+    ['antenatal', 'labour-delivery', 'postnatal'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
     await Promise.race([Promise.allSettled(jobs), new Promise(r => setTimeout(r, 5000))]);
   }
   document.addEventListener('click', e => {
@@ -4734,9 +4742,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   // ---- Private drafts for the front desk, lab, pharmacy and billing forms (shared drafts table, one row per draft, own rows only) ----
   const GX_TABLE = 'vidacare-form-drafts';
   const GX_CONT = { fdFormCard: 'fdCancel', lbForm: 'lbCancel', phForm: 'phCancel',
-    bgForm: 'bgCancel'
+    bgForm: 'bgCancel', pnForm: 'pnCancel'
   };
-  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price' };
+  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price', pnreg: 'Postnatal registration', pnvisit: 'Postnatal visit', pnrefer: 'Referral', pnclose: 'Close postnatal care' };
   const GX_OPEN = {
     fd: c => { const p = c ? fdPatients.find(x => x.patient_id === c) : null; openForm(p || null, ''); },
     lab: c => { const [id, m] = c.split('|'); openLabForm(id, m); },
@@ -4744,11 +4752,12 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     phrecv: c => phReceiveForm(c),
     phadj: c => { const [id, w] = c.split('|'); phAdjustForm(id, w === '1'); },
     phdisp: c => phDispenseForm(c),
-    bgprice: c => bgPriceForm(c || undefined)
+    bgprice: c => bgPriceForm(c || undefined),
+    pnreg: c => pnRegForm(c), pnvisit: c => pnVisitForm(c), pnrefer: c => pnReferForm(c), pnclose: c => pnCloseForm(c)
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v43';
+  const PORTAL_VERSION = 'v45';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -4849,7 +4858,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   // src: { pid, rf: { to, reason, at, transport, accompanied, phoned, condition, treatment, by, byAt, urgency }, adm?, obs?, visit? }
   async function refBuild(src) {
-    const { pid, rf, adm, obs, visit } = src, now = new Date().toISOString();
+    const { pid, rf, adm, obs, visit, pn, pnVisits } = src, now = new Date().toISOString();
     const p = fdPatients.find(x => x.patient_id === pid) || {};
     let anc = [], labs = [], rx = [];
     try { anc = (await scanTable(ANC_TABLE)).filter(r => r.patient_id === pid); } catch (e) { /* no access */ }
@@ -4876,6 +4885,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         if (imgs.length) sections.push({ h: 'Labour charts (cervix, baby\'s heart rate)', images: imgs });
       }
     }
+    if (pn) pnLetterSections(pn, pnVisits || [], sections);
     // antenatal history
     const pregs = anc.filter(r => String(r.record_id).startsWith('preg#')).sort((a, b) => (b.booked_date || '').localeCompare(a.booked_date || '')), pg = pregs.find(x => x.status === 'active') || pregs[0];
     if (pg) {
@@ -4956,11 +4966,15 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       const a = ldAdms().find(x => x.record_id === id), r = a && ldRef(a); if (!r) return null;
       return { pid: a.patient_id, adm: a, obs: ldObs(a), rf: { to: r.referred_to, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: r.condition, treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
     }
+    if (kind === 'pn') {
+      const at = String(id).indexOf('@'), eid = at < 0 ? id : id.slice(0, at), e = pnEps().find(x => x.record_id === eid), r = e && (at < 0 ? pnRef(e) : pnRefs(e).find(q => String(q.record_id).endsWith('#' + id.slice(at + 1)))); if (!r) return null;
+      return { pid: e.patient_id, pn: e, pnVisits: pnVisitsOf(e), adm: e.adm_id ? ldAdms().find(x => x.record_id === e.adm_id) : null, obs: [], rf: { to: r.referred_to, urgency: r.urgency, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: [r.who && 'Referred: ' + r.who, r.condition].filter(Boolean).join('\n'), treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
+    }
     const v = anRecs.find(x => x.record_id === id); if (!v || !v.referred_to) return null;
     return { pid: v.patient_id, visit: v, rf: { to: v.referred_to, reason: v.referred_reason, at: v.entered_at, condition: [v.complaints && 'Complaints: ' + v.complaints, v.plan && 'Findings and plan: ' + v.plan].filter(Boolean).join('\n'), by: v.entered_by, byAt: v.entered_at } };
   }
   async function refRun(kind, id, pdf, btn) {
-    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : anNote; if (!src) return note('The referral could not be found.');
+    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : kind === 'pn' ? pnNote : anNote; if (!src) return note('The referral could not be found.');
     const w = pdf ? null : window.open('', '_blank'); if (!pdf && !w) return alert('Please allow pop-ups for this page to print the letter.');
     const t = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = pdf ? 'Preparing PDF…' : 'Preparing…'; }
     try { const m = await refBuild(src); if (pdf) await refPdf(m); else await refPrint(m, w); }
@@ -4971,7 +4985,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   document.addEventListener('click', e => { const b = e.target.closest('[data-refpdf],[data-refprint]'); if (!b) return; e.preventDefault(); const [k, id] = (b.dataset.refpdf || b.dataset.refprint).split('|'); refRun(k, id, !!b.dataset.refpdf, b); });
 
   // ---- Prescriptions in the client's file, and saved drafts ----
-  const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery' };
+  const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery', postnatal: 'Postnatal' };
   async function rxmHistory(boxId, pid) {
     const box = document.getElementById(boxId); if (!box) return;
     try {
@@ -4979,8 +4993,8 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       box.innerHTML = rx.length ? `<table class="data-table"><thead><tr><th>Sent</th><th>Medicines</th><th>Status</th><th>By</th></tr></thead><tbody>${rx.map(r => `<tr><td>${fmtDate(r.prescribed_at)}<div class="vit">${esc(r.rx_no || '')}</div></td><td class="vit">${rxLinesHtml(r)}${r.notes ? '<div><b>Note:</b> ' + esc(r.notes) + '</div>' : ''}</td><td>${rxBadge(r, false)}</td><td>${esc(r.prescribed_by || '')}<div class="vit">${esc(RXM_DEPT[r.source_dept] || 'Clinic doctor')}</div></td></tr>`).join('')}</tbody></table>` : '<div class="vit">No prescriptions for this client yet.</div>';
     } catch (e) { box.innerHTML = `<div class="vit">Prescriptions could not be loaded: ${esc(e.message)}</div>`; }
   }
-  const rxmTable = d => d === 'antenatal' ? ANC_TABLE : LD_TABLE;
-  const rxmRecs = d => d === 'antenatal' ? anRecs : ldRecs;
+  const rxmTable = d => d === 'antenatal' ? ANC_TABLE : d === 'postnatal' ? PN_TABLE : LD_TABLE;
+  const rxmRecs = d => d === 'antenatal' ? anRecs : d === 'postnatal' ? pnRecs : ldRecs;
   const rxmDraftPrefix = () => 'rxdraft#' + staffUser() + '#';
   const rxmDrafts = d => rxmRecs(d).filter(r => String(r.record_id).startsWith(rxmDraftPrefix()) && !r.cleared_at).sort((x, y) => (y.saved_at || '').localeCompare(x.saved_at || ''));
   function rxmDraftStrip(d) {
@@ -4988,7 +5002,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     el.innerHTML = ds.length ? `<div class="notice" style="margin-bottom:10px"><b>Saved drafts</b> <span class="vit">only you can see these. They are not sent to the pharmacy.</span>${ds.map(x => { let o = {}; try { o = JSON.parse(x.data_json || '{}'); } catch (e) { /* ignore */ } const n = (o.rows || []).length; return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><span><b>${esc(x.patient_name)}</b> <span class="cid">${esc(x.client_id || '')}</span> · ${n} drug${n === 1 ? '' : 's'} · saved ${fmtDate(x.saved_at)}</span><button class="btn-sm b-rel" data-rxmres="${esc(x.patient_id)}">Resume</button><button class="btn-sm ghost" data-rxmdis="${esc(x.patient_id)}">Discard</button></div>`; }).join('')}</div>` : '';
   }
   async function rxmSaveDraft(d, silent) {
-    const k = rxmK(d), s = rxmS(d), msg = d === 'antenatal' ? anNote : ldNote, sel = val(`rxm_${k}_c`);
+    const k = rxmK(d), s = rxmS(d), msg = rxmMsg(d), sel = val(`rxm_${k}_c`);
     clearErrs(document.getElementById('rxm_' + k + '_c').closest('.data-card'));
     if (!sel) return silent ? false : showErrs([[`rxm_${k}_c`, 'Choose the client first.']]);
     const rows = s.rows.filter(rxFilled), notes = (document.getElementById(`rxm_${k}_notes`).value || '').trim();
@@ -5011,7 +5025,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     x.cleared_at = now;
   }
   function rxmResume(d, pid) {
-    const k = rxmK(d), s = rxmS(d), msg = d === 'antenatal' ? anNote : ldNote, x = rxmDrafts(d).find(r => r.patient_id === pid); if (!x) return;
+    const k = rxmK(d), s = rxmS(d), msg = rxmMsg(d), x = rxmDrafts(d).find(r => r.patient_id === pid); if (!x) return;
     let o = {}; try { o = JSON.parse(x.data_json || '{}'); } catch (e) { /* ignore */ }
     const sel = document.getElementById(`rxm_${k}_c`), opt = [...sel.options].find(op => op.value.startsWith(pid + '|'));
     if (!opt) return msg(`${esc(x.patient_name)} is no longer in the list (not admitted or not booked). Discard the draft.`);
@@ -5022,14 +5036,14 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   // a line in the client's own record (antenatal visits table or labour chart); the prescription itself lives in the prescriptions table
   async function rxmNote(d, ctx, pid, id, rxNo, lines, now, notes) {
     try {
-      const key = d === 'antenatal' ? (anPregs.find(x => x.record_id === ctx) ? anKey(anPregs.find(x => x.record_id === ctx)) : '') : (ldAdms().find(x => x.record_id === ctx) ? ldKey(ldAdms().find(x => x.record_id === ctx)) : ''); if (!key) return;
+      const key = d === 'antenatal' ? (anPregs.find(x => x.record_id === ctx) ? anKey(anPregs.find(x => x.record_id === ctx)) : '') : d === 'postnatal' ? String(ctx).replace(/^pn#/, '') : (ldAdms().find(x => x.record_id === ctx) ? ldKey(ldAdms().find(x => x.record_id === ctx)) : ''); if (!key) return;
       const raw = { patient_id: S(pid), record_id: S(`rxn#${key}#${now}#${id.replace(/-/g, '').slice(0, 6)}`), record_type: S('rx-note'), rx_id: S(id), rx_no: S(rxNo), meds: S(lines.map(l => `${l.n} ${l.d}, ${l.f.toLowerCase()}, ${l.u.toLowerCase()}`).join('; ')), notes: notes ? S(notes) : undefined, entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser()) };
       const item = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
       await (await getClient()).send(new PutItemCommand({ TableName: rxmTable(d), Item: item })); rxmRecs(d).push(unmarshal(item));
     } catch (e) { /* the prescription is already sent; the note is only a convenience line */ }
   }
   async function rxmSend(d) {
-    const k = rxmK(d), s = rxmS(d), msg = d === 'antenatal' ? anNote : ldNote, box = document.getElementById(`rxm_${k}_box`);
+    const k = rxmK(d), s = rxmS(d), msg = rxmMsg(d), box = document.getElementById(`rxm_${k}_box`);
     clearErrs(document.getElementById('rxm_' + k + '_c').closest('.data-card'));
     const sel = val(`rxm_${k}_c`); if (!sel) return showErrs([[`rxm_${k}_c`, 'Choose the client.']]);
     const [pid, ctx] = sel.split('|'), p = fdPatients.find(x => x.patient_id === pid) || {}, rows = s.rows.filter(rxFilled);
@@ -5055,7 +5069,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     } catch (err) { btn.disabled = false; btn.textContent = 'Send to pharmacy'; msg(`Could not send: ${esc(err.message)}`); }
   }
   async function rxmReply(d, id, withdraw) {
-    const s = rxmS(d), r = s.rx.find(x => x.rx_id === id), msg = d === 'antenatal' ? anNote : ldNote; if (!r || !rxmCan(d)) return;
+    const s = rxmS(d), r = s.rx.find(x => x.rx_id === id), msg = rxmMsg(d); if (!r || !rxmCan(d)) return;
     const ta = document.querySelector(`[data-rxmqt="${id}"]`), text = (ta && ta.value || '').trim(); clearErrs(ta.closest('.labs-in-row'));
     if (!text) return showErrs([[ta, withdraw ? 'Say why you are withdrawing this prescription.' : 'Write your reply to the pharmacy.']]);
     if (withdraw && !confirm('Withdraw this prescription? The pharmacy will not dispense it.')) return;
@@ -6401,6 +6415,503 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load labour and delivery data: ${esc(err.message)}</div>`; }
   }
 
+  // ================= POSTNATAL: mother and baby (Ghana Health Service schedule: within 48 hours, day 6 or 7, six weeks; WHO adds day 3 and day 7 to 14) =================
+  const PN_TABLE = 'vidacare-postnatal-records';
+  let canPn = false, pnRecs = [], pnTab = 'due', pnQ = '', pnTimer = null;
+  let pnRegView = 'list', pnRegYear = String(new Date().getFullYear()), pnRegPeriod = 'monthly';
+  const PN_PLACE = ['Home', 'On the way to a facility', 'Other health facility', 'Other'];
+  const PN_ATT = ['Skilled attendant (midwife or doctor)', 'Traditional birth attendant', 'Family member', 'Nobody'];
+  const PN_MODE = ['Vaginal birth', 'Assisted vaginal birth', 'Caesarean section'];
+  const PN_DANGER_M = ['Heavy bleeding (soaking a pad in under 30 minutes, or passing clots)', 'Foul-smelling discharge from the vagina', 'Fever or chills', 'Severe headache or blurred vision', 'Fits (convulsions)', 'Painful, red or swollen leg', 'Difficulty breathing or chest pain', 'Severe tummy pain', 'Painful, red or hard breast', 'Very sad or hopeless, or thoughts of harming herself or the baby'];
+  const PN_COUNSEL = ['Danger signs for the mother', 'Danger signs for the baby', 'Exclusive breastfeeding for 6 months', 'Cord care and hygiene', 'Keeping the baby warm (skin-to-skin)', 'Family planning', 'Healthy eating while breastfeeding (4-Star Diet)', 'Sleeping under a treated net', 'Immunisation and child welfare clinic', 'Rest, hygiene and perineal care'];
+  const PN_COUNSEL_REQ = ['Danger signs for the mother', 'Danger signs for the baby', 'Exclusive breastfeeding for 6 months', 'Family planning'];
+  const PN_FP = ['Not chosen yet', 'Lactational amenorrhoea (LAM)', 'Male condoms', 'Progestin-only pills', 'Injectable', 'Implant', 'IUD', 'Natural methods', 'Tubal ligation (referred)', 'Other method'];
+  const PN_FP_STATUS = ['Not applicable', 'Given today', 'Referred to the family planning clinic', 'Will start later'];
+  const PN_FEED = ['Exclusive breastfeeding', 'Mixed feeding', 'Replacement feeding', 'Not feeding well'];
+  const PN_CLOSE = ['Completed postnatal care (six weeks)', 'Moved to child welfare and family planning care', 'Moved away or transferred to another facility', 'Did not return (lost to follow-up)', 'Mother died', 'Baby died'];
+  const PN_REF_WHY = ['Heavy bleeding', 'Fever or suspected infection', 'High blood pressure or fits', 'Wound infection or breakdown', 'Breast abscess or mastitis not improving', 'Severe anaemia', 'Painful, swollen leg or breathlessness', 'Severe low mood or thoughts of self-harm', 'Baby: not feeding or fits', 'Baby: fast breathing or chest drawing in', 'Baby: jaundice', 'Baby: cord infection', 'Baby: low weight or weight loss', 'Other'];
+  const PN_DAY = 86400000;
+  const pnNote = (html, kind) => { const m = document.getElementById('pnMsg'); if (m) m.innerHTML = `<div class="${kind === 'ok' ? 'success' : 'error-inline'}" style="margin-bottom:12px">${html}</div>`; };
+  const pnShow = html => { const f = document.getElementById('pnForm'); f.innerHTML = html; f.style.display = 'block'; f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const pnClose = () => { const f = document.getElementById('pnForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } };
+  const pnLocal = iso => new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const pnPat = pid => fdPatients.find(p => p.patient_id === pid);
+  const pnEps = () => pnRecs.filter(r => String(r.record_id).startsWith('pn#'));
+  const pnKey = e => String(e.record_id).slice(3);
+  const pnVisitsOf = e => pnRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('pnv#' + pnKey(e) + '#')).sort((x, y) => (x.visit_at || '').localeCompare(y.visit_at || ''));
+  const pnRefs = e => pnRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('pnr#' + pnKey(e) + '#')).sort((x, y) => (x.left_at || '').localeCompare(y.left_at || ''));
+  const pnRef = e => pnRefs(e).slice(-1)[0];
+  const pnClosed = e => pnRecs.find(r => r.patient_id === e.patient_id && r.record_id === 'pnd#' + pnKey(e));
+  const pnActive = () => pnEps().filter(e => !pnClosed(e));
+  const pnBabies = e => { try { return JSON.parse(e.babies_json || '[]'); } catch (x) { return []; } };
+  const pnDay = (e, iso) => (new Date(iso) - new Date(e.birth_at)) / PN_DAY;
+  const pnAge = d => d < 2 ? Math.max(0, Math.round(d * 24)) + ' hours old' : d < 14 ? 'day ' + Math.floor(d) : Math.floor(d / 7) + ' weeks';
+  const pnKind = d => d <= 2 ? 'First (within 48 hours)' : d <= 14 ? 'Second (day 3 to 14)' : d < 35 ? 'Extra visit' : 'Six-week visit';
+  const pnPut = async item => (await getClient()).send(new PutItemCommand({ TableName: PN_TABLE, Item: g2(item), ConditionExpression: 'attribute_not_exists(record_id)' }));
+  const pnStamp = now => ldStamp(now);
+  const pnFmtList = s => String(s || '').split('|').filter(Boolean).join(', ');
+  async function pnRefresh() {
+    await refreshData();
+    pnRecs = await scanTable(PN_TABLE);
+    try { ldRecs = await scanTable(LD_TABLE); } catch (e) { ldRecs = []; }
+  }
+  // the first check before she leaves the labour ward counts as the first postnatal contact
+  function pnContacts(e) {
+    const out = pnVisitsOf(e).map(v => ({ at: v.visit_at, days: pnDay(e, v.visit_at), src: 'visit', rec: v }));
+    const a = e.adm_id ? ldAdms().find(x => x.record_id === e.adm_id) : null, dc = a && ldDis(a);
+    if (dc && dc.m_sys && dc.discharged_at) out.push({ at: dc.discharged_at, days: pnDay(e, dc.discharged_at), src: 'ward', rec: dc, adm: a });
+    return out.sort((x, y) => String(x.at).localeCompare(String(y.at)));
+  }
+  function pnNext(e) {
+    const cs = pnContacts(e), has = (lo, hi) => cs.some(c => c.days >= lo && c.days <= hi), birth = String(e.birth_at).slice(0, 10), vs = pnVisitsOf(e), last = vs[vs.length - 1];
+    let plan = null;
+    if (!cs.length) plan = { date: anAdd(birth, 2), label: 'First check (within 48 hours)' };
+    else if (!has(3, 14)) plan = { date: e.pnc2_date || anAdd(birth, 7), label: 'Day 6 or 7 visit' };
+    else if (!cs.some(c => c.days >= 35)) plan = { date: e.pnc3_date || anAdd(birth, 42), label: 'Six-week visit' };
+    if (last && last.next_visit && last.next_visit > String(last.visit_at).slice(0, 10)) plan = { date: last.next_visit, label: plan ? plan.label : 'Follow-up visit' };
+    if (!plan) return null;
+    return { ...plan, overdue: plan.date < today10(), today: plan.date === today10() };
+  }
+  // ---- Findings that need action ----
+  function pnMotherAlerts(m) {
+    const al = [];
+    if (m.sys >= 140 || m.dia >= 90) al.push('blood pressure ' + m.sys + '/' + m.dia); if (m.tmp >= 38) al.push('fever ' + m.tmp); if (m.pul > 100) al.push('pulse ' + m.pul);
+    if (m.ut === 'Not contracted') al.push('womb not contracted'); if (m.lamt === 'Heavy') al.push('heavy bleeding'); if (m.lo === 'Offensive') al.push('offensive lochia');
+    if (m.inc === 'Infected' || m.inc === 'Gaping') al.push('wound ' + m.inc.toLowerCase()); if (m.br === 'Mastitis') al.push('mastitis'); if (m.calf === 'Painful or swollen') al.push('painful or swollen leg');
+    if (m.pal === 'Yes') al.push('pale (possible anaemia)'); if (m.hb !== null && m.hb !== undefined && m.hb < 8) al.push('haemoglobin ' + m.hb + ' g/dL'); if (m.mood) al.push('low mood screen positive');
+    (m.danger || []).forEach(x => al.push('reports: ' + x.split(' (')[0].toLowerCase()));
+    return al;
+  }
+  function pnBabyAlerts(x, days, bw) {
+    const al = [];
+    if (x.tmp < 36.5) al.push('temperature low (' + x.tmp + ')'); if (x.tmp > 37.5) al.push('temperature high (' + x.tmp + ')'); if (x.rr >= 60) al.push('fast breathing (' + x.rr + ')'); if (x.rr < 30) al.push('slow breathing (' + x.rr + ')');
+    if (x.hr !== null && x.hr !== undefined && (x.hr < 100 || x.hr > 180)) al.push('heart rate ' + x.hr);
+    if (x.feed === 'Not feeding well') al.push('not feeding well'); if (x.cord === 'Red skin or pus' || x.cord === 'Bleeding') al.push('cord: ' + x.cord.toLowerCase());
+    if (x.jau === 'Below the umbilicus' || x.jau === 'Palms and soles') al.push('jaundice: ' + x.jau.toLowerCase()); else if (x.jau === 'Face only' && (days < 1 || days >= 14)) al.push(days < 1 ? 'jaundice in the first 24 hours' : 'jaundice after two weeks');
+    if (x.eyes !== 'Normal') al.push('eyes: pus or swelling'); if (x.skin === 'Pustules') al.push('skin pustules'); if (x.act !== 'Normal') al.push('sleepy or floppy');
+    if (bw && x.wt) { if (days <= 14 && x.wt < bw * 0.9) al.push('weight down more than 10% from birth'); else if (days >= 10 && days <= 28 && x.wt < bw) al.push('not back to birth weight'); }
+    if (x.arv === 'Not given') al.push('infant ARV prophylaxis not given');
+    return al;
+  }
+  const pnLast = e => pnVisitsOf(e).slice(-1)[0];
+  const pnFlag = e => { const l = pnLast(e); return l && l.alerts ? l.alerts : ''; };
+  const pnMatch = e => { const q = pnQ.trim().toLowerCase(); if (!q) return true; const p = pnPat(e.patient_id) || {}; return [e.patient_name, e.client_id, e.pn_no, p.phone_number].some(v => String(v || '').toLowerCase().includes(q)); };
+  const pnBabySum = e => pnBabies(e).map(b => `${b.sex ? b.sex[0] : '?'} ${b.wt ? b.wt + ' g' : ''}`.trim()).join(', ') || '—';
+  const pnNameCell = (e, extra) => `<a class="lnk" data-pnact="file|${esc(e.record_id)}"><b>${esc(e.patient_name || '—')}</b></a><br><span class="cid">${esc(e.client_id || '')}</span>${extra || ''}`;
+  async function pnNextReg(year) {
+    const r = await (await getClient()).send(new UpdateItemCommand({ TableName: PN_TABLE, Key: { patient_id: { S: 'COUNTER' }, record_id: { S: 'counter#' + year } }, UpdateExpression: 'ADD seq :one', ExpressionAttributeValues: { ':one': { N: '1' } }, ReturnValues: 'UPDATED_NEW' }));
+    const seq = parseInt(r.Attributes.seq.N, 10); return { year: String(year), seq, no: `PNC-${year}-${String(seq).padStart(4, '0')}` };
+  }
+  // ---- Screen ----
+  function pnShellHtml() {
+    return `
+    <div class="fd-wrap">
+      <div id="pnMsg"></div>
+      <div class="data-card" id="pnForm" style="display:none;"></div>
+      <div class="ph-tabs">
+        <button class="ph-tab on" data-pntab="due">Due and overdue <span class="n amber" id="pnTabDue" style="display:none"></span></button>
+        <button class="ph-tab" data-pntab="active">Mothers and babies <span class="n green" id="pnTabAct" style="display:none"></span></button>
+        <button class="ph-tab" data-pntab="ref">Referrals <span class="n amber" id="pnTabRef" style="display:none"></span></button>
+        <button class="ph-tab" data-pntab="register">Register</button>
+        <button class="ph-tab" data-pntab="rx">Prescriptions <span class="n amber" id="pnTabRx" style="display:none"></span></button>
+        <button class="ph-tab" data-pntab="find">Find a client</button>
+      </div>
+      <div id="pnSearchRow" class="fd-search" style="display:none;gap:10px;flex-wrap:wrap;align-items:center"><input id="pnSearch" type="search" placeholder="Search by name, client ID, postnatal number or phone" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="pnSearchBtn" type="button">Search</button><button class="btn-sm ghost" id="pnClearBtn" type="button">Clear</button></div>
+      <div id="pnPaneDue">
+        <div class="data-card"><h4>Delivered here, not yet registered for postnatal care</h4><div class="vit" style="margin-bottom:8px">Mothers discharged from the labour ward. Register them so the visits on day 6 or 7 and at six weeks are tracked.</div><div class="recent-scroll" style="min-height:0" id="pnToReg"></div></div>
+        <div class="data-card"><h4>Arrived today</h4><div class="vit" style="margin-bottom:8px">Checked in by the front desk for postnatal care.</div><div class="recent-scroll" style="min-height:0" id="pnWait"></div></div>
+        <div class="data-card"><h4>Visits due today or overdue</h4><div class="vit" style="margin-bottom:8px">Ghana Health Service schedule: before discharge or within 48 hours, day 6 or 7, and six weeks. Red means findings at the last visit need follow-up.</div><div class="recent-scroll" id="pnDue"></div></div>
+        <div class="data-card"><h4>Coming up in the next 7 days</h4><div class="recent-scroll" style="min-height:0" id="pnSoon"></div></div>
+      </div>
+      <div id="pnPaneActive" style="display:none"><div class="data-card"><h4>Mothers and babies in postnatal care</h4><div class="recent-scroll" id="pnActive"></div></div></div>
+      <div id="pnPaneRef" style="display:none">
+        ${canPn ? `<div class="data-card"><h4>Refer a mother or baby</h4><div class="vit" style="margin-bottom:8px">Use this when there is a problem during postnatal care. The referral letter carries her history and postnatal visits.</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div class="f" style="min-width:260px"><label>Client</label><select id="pnRefPick"><option value="">Choose…</option></select></div><button class="btn-sm b-rel" id="pnRefGo" type="button">Refer out</button></div></div>` : ''}
+        <div class="data-card"><h4>Referrals made</h4><div class="recent-scroll" id="pnRefList"></div></div></div>
+      <div id="pnPaneRegister" style="display:none"><div class="data-card"><h4>Postnatal register</h4><div id="pnRegister"></div></div></div>
+      <div id="pnPaneRx" style="display:none"></div>
+      <div id="pnPaneFind" style="display:none"><div class="data-card"><h4>Find a client</h4>
+        <div class="fd-search"><input id="pnFind" type="search" placeholder="Search by name, phone or client ID (VMH-00001)" autocomplete="off"></div>
+        <div class="results" id="pnFindRes"></div></div></div>
+    </div>`;
+  }
+  function setPnTab(t) {
+    pnTab = t;
+    ['due', 'active', 'ref', 'register', 'rx', 'find'].forEach(k => { const p = document.getElementById('pnPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
+    document.querySelectorAll('[data-pntab]').forEach(b => b.classList.toggle('on', b.dataset.pntab === t));
+    if (t === 'rx') rxmOpen('postnatal');
+    const sr = document.getElementById('pnSearchRow'); if (sr) sr.style.display = (t === 'active' || (t === 'register' && pnRegView === 'list')) ? 'flex' : 'none';
+  }
+  const pnToRegister = () => ldAdms().filter(a => { const d = ldDel(a), dc = ldDis(a); return d && dc && d.maternal_outcome !== 'Died' && !pnEps().some(e => e.adm_id === a.record_id); }).sort((x, y) => (ldDis(y).discharged_at || '').localeCompare(ldDis(x).discharged_at || ''));
+  const pnWaiting = () => fdVisits.filter(v => v.status === 'checked-in' && v.service === 'postnatal' && v.entered_at && new Date(v.entered_at).toDateString() === new Date().toDateString()).sort((a, b) => a.entered_at.localeCompare(b.entered_at))
+    .filter(v => { const e = pnActive().find(x => x.patient_id === v.patient_id); return !(e && pnVisitsOf(e).some(r => new Date(r.visit_at).toDateString() === new Date().toDateString())); });
+  function pnRow(e, withNext) {
+    const n = pnNext(e), fl = pnFlag(e), d = pnDay(e, pnNow());
+    return `<tr class="rowbar ${fl ? 'red' : ''}"><td>${pnNameCell(e, `<div class="vit">${esc(e.pn_no || '')}</div>`)}</td><td>${fmtDate(e.birth_at)}<div class="vit">${esc(pnAge(d))}</div></td><td class="vit">${esc(pnBabySum(e))}</td>
+      <td>${n ? `<b>${esc(n.label)}</b><div class="vit" ${n.overdue ? 'style="color:#C62828"' : ''}>${anDate(n.date)}${n.overdue ? ' · overdue' : n.today ? ' · today' : ''}</div>` : '<span class="st done">All visits done</span>'}</td>
+      <td>${fl ? `<div class="vit" style="color:#C62828">${esc(fl.slice(0, 90))}</div>` : '<span class="vit">—</span>'}</td>
+      <td style="white-space:nowrap">${canPn ? `<button class="btn-sm b-rel" data-pnact="visit|${esc(e.record_id)}">Record visit</button> · ` : ''}<a class="lnk" data-pnact="file|${esc(e.record_id)}">Open</a></td></tr>`;
+  }
+  const pnNow = () => new Date().toISOString();
+  function renderPnDue() {
+    const set = (id, n) => { const el = document.getElementById(id); if (!el) return; el.textContent = n; el.style.display = n ? '' : 'none'; };
+    const reg = pnToRegister(), w = pnWaiting(), act = pnActive(), td = today10(), end = anAdd(td, 7);
+    const due = act.map(e => ({ e, n: pnNext(e) })).filter(x => x.n && x.n.date <= td).sort((a, b) => a.n.date.localeCompare(b.n.date)), soon = act.map(e => ({ e, n: pnNext(e) })).filter(x => x.n && x.n.date > td && x.n.date <= end).sort((a, b) => a.n.date.localeCompare(b.n.date));
+    set('pnTabDue', due.length + reg.length + w.length); set('pnTabAct', act.length);
+    const head = '<thead><tr><th>Mother</th><th>Birth</th><th>Baby</th><th>Next visit</th><th>Last findings</th><th></th></tr></thead>';
+    const a = document.getElementById('pnToReg'); if (a) a.innerHTML = `<table class="data-table"><thead><tr><th>Mother</th><th>Left the ward</th><th>Born</th><th>Baby</th><th></th></tr></thead><tbody>${reg.map(x => { const dc = ldDis(x), d = ldDel(x); return `<tr class="rowbar"><td><b>${esc(x.patient_name)}</b><br><span class="cid">${esc(x.client_id || '')}</span></td><td>${fmtDate(dc.discharged_at)}</td><td>${fmtDate(d.birth_at)}</td><td class="vit">${esc(ldBabySum(x))}</td><td>${canPn ? `<button class="btn-sm b-rel" data-pnact="reg|a:${esc(x.record_id)}">Register</button>` : ''}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="5">Everyone discharged from the labour ward is registered.</td></tr>'}</tbody></table>`;
+    const b = document.getElementById('pnWait'); if (b) b.innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Arrived</th><th></th></tr></thead><tbody>${w.map(v => { const p = pnPat(v.patient_id) || {}, e = act.find(x => x.patient_id === v.patient_id); return `<tr class="rowbar red"><td><b>${esc(p.full_name || v.patient_name || '—')}</b><br><span class="cid">${esc(p.client_id || '')}</span></td><td>${fmtDate(v.entered_at)}</td><td>${canPn ? (e ? `<button class="btn-sm b-rel" data-pnact="visit|${esc(e.record_id)}">Record visit</button>` : `<button class="btn-sm b-rel" data-pnact="reg|p:${esc(v.patient_id)}">Register for postnatal care</button>`) : ''}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="3">Nobody is waiting.</td></tr>'}</tbody></table>`;
+    const c = document.getElementById('pnDue'); if (c) c.innerHTML = `<table class="data-table">${head}<tbody>${due.map(x => pnRow(x.e)).join('') || '<tr class="empty-row"><td colspan="6">No visits are due or overdue.</td></tr>'}</tbody></table>`;
+    const d2 = document.getElementById('pnSoon'); if (d2) d2.innerHTML = `<table class="data-table">${head}<tbody>${soon.map(x => pnRow(x.e)).join('') || '<tr class="empty-row"><td colspan="6">Nothing due in the next 7 days.</td></tr>'}</tbody></table>`;
+  }
+  function renderPnActive() {
+    const el = document.getElementById('pnActive'); if (!el) return;
+    const rows = pnActive().filter(pnMatch).sort((x, y) => (pnNext(x) ? pnNext(x).date : '9').localeCompare(pnNext(y) ? pnNext(y).date : '9'));
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Mother</th><th>Birth</th><th>Baby</th><th>Next visit</th><th>Last findings</th><th></th></tr></thead><tbody>${rows.map(e => pnRow(e)).join('') || `<tr class="empty-row"><td colspan="6">${pnQ ? 'No client matches your search.' : 'Nobody is in postnatal care.'}</td></tr>`}</tbody></table>`;
+  }
+  function pnFindRender() {
+    const q = val('pnFind').toLowerCase(), res = document.getElementById('pnFindRes'); if (!res) return; if (!q) { res.innerHTML = ''; return; }
+    const digits = q.replace(/\D/g, '');
+    const hits = fdPatients.filter(p => p.sex !== 'male' && ((p.full_name || '').toLowerCase().includes(q) || (p.client_id || '').toLowerCase().includes(q) || (digits.length >= 4 && canonPhone(p.phone_number).includes(canonPhone(q))))).slice(0, 15);
+    res.innerHTML = hits.map(p => { const act = pnActive().find(e => e.patient_id === p.patient_id), old = pnEps().filter(e => e.patient_id === p.patient_id && pnClosed(e)).length;
+      return `<div class="result-row" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border-bottom:1px solid #EFF3EC"><div><b>${esc(p.full_name)}</b> <span class="cid">${esc(p.client_id || '')}</span><div class="vit">${act ? 'In postnatal care (' + esc(act.pn_no || '') + ')' : 'Not registered for postnatal care'}${old ? ' · ' + old + ' earlier episode' + (old > 1 ? 's' : '') : ''}</div></div>
+        <div>${act ? `<a class="lnk" data-pnact="file|${esc(act.record_id)}">Open file</a>` : (canPn ? `<button class="btn-sm b-rel" data-pnact="reg|p:${esc(p.patient_id)}">Register for postnatal care</button>` : '<span class="vit">Not registered</span>')}</div></div>`; }).join('') || '<div class="vit" style="padding:10px">No client found. Register her at the front desk first.</div>';
+  }
+  function renderPnRefs() {
+    const pk = document.getElementById('pnRefPick'); if (pk && !pk.dataset.n || (pk && Number(pk.dataset.n) !== pnActive().length)) { pk.dataset.n = pnActive().length; const cur = pk.value; pk.innerHTML = '<option value="">Choose…</option>' + pnActive().map(e => `<option value="${esc(e.record_id)}">${esc(e.patient_name)} · ${esc(e.client_id || '')} · ${esc(e.pn_no || '')}</option>`).join(''); pk.value = cur; }
+    const rows = pnRecs.filter(r => String(r.record_id).startsWith('pnr#')).sort((x, y) => (y.left_at || '').localeCompare(x.left_at || '')), el = document.getElementById('pnRefList'); if (!el) return;
+    const set = document.getElementById('pnTabRef'); if (set) { const n = rows.filter(r => Date.now() - new Date(r.left_at) < 7 * PN_DAY).length; set.textContent = n; set.style.display = n ? '' : 'none'; }
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Left</th><th>Mother</th><th>Referred</th><th>To</th><th>Reason</th><th>Condition on leaving</th><th>By</th><th>Letter</th></tr></thead><tbody>${rows.map(r => { const e = pnEps().find(x => x.record_id === r.pn_id); if (!e) return ''; const nn = String(r.record_id).split('#').pop();
+      return `<tr class="rowbar ${r.urgency === 'Emergency' ? 'red' : ''}"><td>${fmtDate(r.left_at)}</td><td>${pnNameCell(e, `<div class="vit">${esc(e.pn_no || '')}</div>`)}</td><td>${esc(r.who || '')}<div class="vit">${esc(r.urgency || '')}</div></td><td>${esc(r.referred_to)}<div class="vit">${esc(r.transport || '')}</div></td><td>${esc(r.reason)}</td><td class="vit">${esc(String(r.condition || '').slice(0, 120))}</td><td>${esc(r.entered_by || '')}</td><td style="white-space:nowrap">${refBtns('pn', e.record_id + '@' + nn)}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="8">No referrals yet.</td></tr>'}</tbody></table>`;
+  }
+  function pnRenderAll() { gxStrip(); renderPnDue(); renderPnActive(); renderPnRefs(); renderPnRegister(); }
+  // ---- Register for postnatal care ----
+  function pnRegForm(src) {
+    if (!canPn) return; src = String(src);
+    const isA = src.startsWith('a:'), id = src.slice(2), a = isA ? ldAdms().find(x => x.record_id === id) : null, d = a && ldDel(a), dc = a && ldDis(a);
+    const pid = isA ? (a && a.patient_id) : id; if (!pid || (isA && !d)) return;
+    if (pnActive().some(e => e.patient_id === pid)) return pnNote('She is already in postnatal care. Open her file.');
+    const p = pnPat(pid) || {}, babies = isA ? ldLiveBabies(a) : [], birth = isA ? pnLocal(d.birth_at) : '';
+    gxArm('pnForm', 'pnreg', src, pid, p.full_name || (a && a.patient_name) || '');
+    pnShow(`<div class="fd-form">${anBanner(pid, null)}<h5>Register for postnatal care</h5>
+      ${isA ? `<div class="notice" style="margin-bottom:8px">Born in the labour ward here (${esc(a.adm_no || '')}) on ${fmtDate(d.birth_at)}${babies.length ? ': ' + esc(ldBabySum(a)) : ''}. The birth details are copied from the labour record.</div>` : ''}
+      <div class="grid3">
+        <div class="f"><label>Birth date and time <span class="req">*</span></label><input id="pr_birth" type="datetime-local" max="${ldLocalNow()}" value="${birth}" ${isA ? 'readonly' : ''}></div>
+        ${isA ? '' : `<div class="f"><label>Where she gave birth <span class="req">*</span></label>${ldSelBlank('pr_place', PN_PLACE)}</div><div class="f"><label>Who delivered her <span class="req">*</span></label>${ldSelBlank('pr_att', PN_ATT)}</div><div class="f"><label>Type of birth <span class="req">*</span></label>${ldSel('pr_mode', PN_MODE)}</div>
+        <div class="f"><label>Babies born alive <span class="req">*</span></label>${ldSel('pr_nb', ['1', '2', '3', '0'], '1')}<div class="vit">Choose 0 if the baby did not survive. She is then seen as a mother only.</div></div>`}
+        <div class="f"><label>HIV status ${isA ? '' : '<span class="req">*</span>'}</label>${isA ? `<input id="pr_hiv" value="${esc(a.hiv || 'Not known')}" readonly>` : ldSel('pr_hiv', ['Not known', 'Non-reactive', 'Reactive'])}</div></div>
+      ${isA ? '' : [1, 2, 3].map(i => `<div class="grid3" id="pr_brow${i}" style="${i > 1 ? 'display:none;' : ''}margin-top:6px"><div class="f"><label>Baby ${'ABC'[i - 1]} sex <span class="req">*</span></label>${ldSelBlank('pr_bs' + i, ['Female', 'Male'])}</div><div class="f"><label>Birth weight <span class="unit">grams, if known</span></label><input id="pr_bw${i}" type="number" min="500" max="6500"></div></div>`).join('')}
+      <h5>Visits planned</h5><div class="grid3"><div class="f"><label>Visit 2 <span class="unit">day 6 or 7</span></label><input id="pr_p2" type="date" value="${isA && dc && dc.pnc2_date ? dc.pnc2_date : ''}"></div><div class="f"><label>Visit 3 <span class="unit">6 weeks</span></label><input id="pr_p3" type="date" value="${isA && dc && dc.pnc3_date ? dc.pnc3_date : ''}"></div></div><div class="vit">Left blank, they are set to day 7 and day 42 after the birth.</div>
+      <div class="f" style="margin-top:8px"><label>Notes</label><textarea id="pr_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="prSave">Register</button><button class="btn-sm ghost" id="pnCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('pnCancel').onclick = pnClose;
+    const nb = document.getElementById('pr_nb'); if (nb) { const sync = () => [1, 2, 3].forEach(i => { document.getElementById('pr_brow' + i).style.display = i <= Number(nb.value) ? '' : 'none'; }); nb.onchange = sync; sync(); }
+    document.getElementById('prSave').onclick = async () => {
+      clearErrs(document.getElementById('pnForm')); const errs = [], at = isA ? d.birth_at : ldIso('pr_birth');
+      if (!at) errs.push(['pr_birth', 'Enter the birth date and time.']); else if (new Date(at) > new Date()) errs.push(['pr_birth', 'The birth cannot be in the future.']);
+      if (!isA) { if (!val('pr_place')) errs.push(['pr_place', 'Choose where she gave birth.']); if (!val('pr_att')) errs.push(['pr_att', 'Choose who delivered her.']); }
+      const n = isA ? babies.length : Number(val('pr_nb') || 0), bl = [];
+      for (let i = 1; i <= n && !isA; i++) { const w = anNum('pr_bw' + i); if (!val('pr_bs' + i)) errs.push(['pr_bs' + i, 'Choose the sex.']); if (w !== null && (w < 500 || w > 6500)) errs.push(['pr_bw' + i, 'Weight in grams, 500 to 6500.']); bl.push({ no: 'ABC'[i - 1], sex: val('pr_bs' + i), wt: w }); }
+      if (isA) babies.forEach((b, i) => bl.push({ no: b.baby_no || 'ABC'[i], sex: b.sex, wt: b.weight ? Number(b.weight) : null }));
+      const bday = at ? String(at).slice(0, 10) : '', p2 = val('pr_p2'), p3 = val('pr_p3');
+      if (p2 && bday && p2 <= bday) errs.push(['pr_p2', 'Visit 2 must be after the birth.']); if (p3 && p3 <= (p2 || bday)) errs.push(['pr_p3', 'Visit 3 must be after visit 2.']);
+      if (errs.length) return showErrs(errs);
+      const btn = document.getElementById('prSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const now = pnNow(), reg = await pnNextReg(new Date().getFullYear()), key = Date.now().toString(36) + Math.random().toString(36).slice(2, 6), hrs = ldHrs(at, now);
+        await pnPut({ patient_id: S(pid), record_id: S('pn#' + key), record_type: S('postnatal'), pn_no: S(reg.no), pn_year: S(reg.year), pn_seq: { N: String(reg.seq) }, client_id: S(p.client_id || (a && a.client_id) || ''), patient_name: S(p.full_name || (a && a.patient_name) || ''), birth_at: S(at),
+          birth_place: S(isA ? 'This clinic (labour ward)' : val('pr_place')), attendant: isA ? S(d.attendant || '') : S(val('pr_att')), mode: S(isA ? d.mode : val('pr_mode')), adm_id: isA ? S(a.record_id) : undefined, babies_json: S(JSON.stringify(bl)), babies_n: { N: String(bl.length) }, hiv: S(isA ? (a.hiv || 'Not known') : val('pr_hiv')),
+          pnc2_date: S(p2 || anAdd(bday, 7)), pnc3_date: S(p3 || anAdd(bday, 42)), registered_at: S(now), reg_hours_after_birth: { N: String(Math.round(hrs * 10) / 10) }, notes: val('pr_note').trim() ? S(val('pr_note').trim()) : undefined, ...pnStamp(now) });
+        await pnRefresh(); pnClose(); pnRenderAll();
+        pnNote(`<b>${esc(p.full_name || '')}</b> registered for postnatal care (${esc(reg.no)}).${hrs > 48 ? ' She is more than 48 hours after the birth, so the first check should be done today.' : ''} <button class="btn-sm b-rel" data-pnact="visit|pn#${esc(key)}" style="margin-left:8px">Record a visit now</button>`, 'ok');
+      } catch (e) { btn.disabled = false; btn.textContent = 'Register'; pnNote(`Could not save: ${esc(e.message)}`); }
+    };
+  }
+  // ---- A postnatal visit: mother and baby together ----
+  function pnBabyFormHtml(e, b, i, prev) {
+    const P = `pb${i}_`, g = (k, d) => (prev && prev[k]) || d, imm = k => prev && ['Given today', 'Given earlier'].includes(prev[k]) ? 'Given earlier' : 'Not yet given', IMM = ['Not yet given', 'Given today', 'Given earlier'];
+    return `<div class="notice" style="background:#FAFCF8;border-color:#D7E4D2;color:#222;margin-top:10px"><b>Baby ${esc(b.no || 'ABC'[i - 1])}${b.sex ? ' (' + esc(b.sex.toLowerCase()) + ')' : ''}</b><span class="vit"> ${b.wt ? 'birth weight ' + esc(b.wt) + ' g' : 'birth weight not recorded'}</span>
+      <div class="grid3" style="margin-top:6px">
+        <div class="f"><label>Weight now <span class="unit">grams</span> <span class="req">*</span></label><input id="${P}wt" type="number" min="500" max="9000"></div>
+        <div class="f"><label>Temperature <span class="unit">°C</span> <span class="req">*</span></label><input id="${P}tmp" type="number" step="0.1" min="33" max="42"></div>
+        <div class="f"><label>Breathing rate <span class="unit">per minute</span> <span class="req">*</span></label><input id="${P}rr" type="number" min="10" max="120"></div>
+        <div class="f"><label>Heart rate <span class="unit">per minute, if counted</span></label><input id="${P}hr" type="number" min="60" max="260"></div>
+        <div class="f"><label>Feeding <span class="req">*</span></label>${ldSelBlank(P + 'feed', PN_FEED)}</div>
+        <div class="f"><label>Cord <span class="req">*</span></label>${ldSelBlank(P + 'cord', ['Clean and dry', 'Wet or sticky', 'Red skin or pus', 'Bleeding', 'Already fallen off'])}</div>
+        <div class="f"><label>Yellow skin or eyes <span class="req">*</span></label>${ldSelBlank(P + 'jau', ['None', 'Face only', 'Below the umbilicus', 'Palms and soles'])}</div>
+        <div class="f"><label>Eyes <span class="req">*</span></label>${ldSelBlank(P + 'eyes', ['Normal', 'Pus or swelling'])}</div>
+        <div class="f"><label>Skin <span class="req">*</span></label>${ldSelBlank(P + 'skin', ['Normal', 'Pustules', 'Rash'])}</div>
+        <div class="f"><label>Activity <span class="req">*</span></label>${ldSelBlank(P + 'act', ['Normal', 'Sleepy or floppy'])}</div>
+        <div class="f"><label>BCG</label>${ldSel(P + 'bcg', IMM, imm('bcg'))}</div><div class="f"><label>Oral polio (OPV 0)</label>${ldSel(P + 'opv', IMM, imm('opv'))}</div>
+        ${anReactive(e.hiv) ? `<div class="f"><label>Infant ARV prophylaxis <span class="req">*</span></label>${ldSelBlank(P + 'arv', ['Given', 'Not given'])}</div>` : ''}
+        <div class="f" style="grid-column:span 2"><label>Remarks <span class="unit">required if anything needs action</span></label><input id="${P}note"></div></div></div>`;
+  }
+  // earlier visits shown at the top of a new visit, newest first, so the midwife sees how mother and baby have been doing
+  function pnHistoryHtml(e) {
+    const cs = pnContacts(e).slice().reverse(); if (!cs.length) return '<div class="vit" style="margin-top:6px">No earlier visits.</div>';
+    const rows = cs.map(c => { if (c.src === 'ward') return `<tr style="background:#FAFCF8"><td>${fmtDate(c.at)}<div class="vit">${esc(pnAge(c.days))}</div></td><td>Before leaving the ward</td><td class="vit">BP ${esc(c.rec.m_sys)}/${esc(c.rec.m_dia)}, pulse ${esc(c.rec.m_pulse)}, temp ${esc(c.rec.m_temp)}</td><td class="vit">${esc(ldOf(c.adm, 'nbx').map(x => (x.wt || '') + ' g').join(', ') || '—')}</td><td>${c.rec.exam_alerts ? `<span style="color:#C62828">${esc(c.rec.exam_alerts)}</span>` : ''}</td></tr>`;
+      let ex = []; try { ex = JSON.parse(c.rec.babies_json || '[]'); } catch (z) { /* skip */ } const v = c.rec;
+      return `<tr class="${v.alerts ? 'rowbar red' : ''}"><td>${fmtDate(v.visit_at)}<div class="vit">${esc(pnAge(c.days))}</div></td><td>${esc(v.contact_kind || '')}</td><td class="vit">${pnMotherLine(v)}</td><td class="vit">${ex.map(pnBabyLine).join('<br>') || '—'}</td><td>${v.alerts ? `<span style="color:#C62828">${esc(v.alerts)}</span>` : ''}${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}</td></tr>`; }).join('');
+    return `<details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:600;color:var(--mid-green)">Previous visits (${cs.length})</summary><div class="recent-scroll" style="min-height:0;margin-top:6px"><table class="data-table" id="pnHist"><thead><tr><th>Date</th><th>Visit</th><th>Mother</th><th>Baby</th><th>Findings and plan</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  }
+  function pnVisitForm(rid) {
+    const e = pnEps().find(x => x.record_id === rid); if (!e || !canPn) return;
+    if (pnClosed(e)) return pnNote('Postnatal care for her has been closed.');
+    const bs = pnBabies(e), vs = pnVisitsOf(e), lastV = vs[vs.length - 1], prevB = i => { let o = null; vs.forEach(v => { try { const x = JSON.parse(v.babies_json || '[]').find(q => q.i === i); if (x) o = x; } catch (z) { /* skip */ } }); return o; };
+    gxArm('pnForm', 'pnvisit', rid, e.patient_id, e.patient_name);
+    const n = pnNext(e);
+    pnShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Postnatal visit <span class="vit" style="font-weight:400">${esc(e.pn_no || '')} · born ${fmtDate(e.birth_at)} (<span id="pvAge">${esc(pnAge(pnDay(e, pnNow())))}</span>)</span></h5>
+      ${n ? `<div class="vit">Next planned: ${esc(n.label)} on ${anDate(n.date)}${n.overdue ? ' (overdue)' : ''}.</div>` : '<div class="vit">All planned visits are done.</div>'}
+      ${pnHistoryHtml(e)}
+      ${lastV && lastV.alerts ? `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#8E1C14;margin-top:6px">Findings at the last visit (${fmtDate(lastV.visit_at)}): ${esc(lastV.alerts)}</div>` : ''}
+      <div class="grid3" style="margin-top:8px"><div class="f"><label>Visit time <span class="req">*</span></label><input id="pv_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div></div>
+      <h5>Mother</h5><div class="grid3">
+        <div class="f"><label>Blood pressure <span class="req">*</span></label><div style="display:flex;gap:8px"><input id="pv_sys" type="number" min="50" max="260"><input id="pv_dia" type="number" min="30" max="160"></div></div>
+        <div class="f"><label>Pulse <span class="req">*</span></label><input id="pv_pul" type="number" min="30" max="200"></div>
+        <div class="f"><label>Temperature <span class="unit">°C</span> <span class="req">*</span></label><input id="pv_tmp" type="number" step="0.1" min="34" max="42"></div>
+        <div class="f"><label>Womb <span class="req">*</span></label>${ldSelBlank('pv_ut', ['Contracted', 'Not contracted', 'Not felt (back to normal size)'])}</div>
+        <div class="f"><label>Lochia colour</label>${ldSel('pv_lc', ['Red', 'Pink or brown', 'Yellow or white', 'None'])}</div>
+        <div class="f"><label>Lochia amount <span class="req">*</span></label>${ldSelBlank('pv_la', ['Scanty', 'Normal', 'Heavy'])}</div>
+        <div class="f"><label>Lochia smell</label>${ldSel('pv_lo', ['Normal', 'Offensive'])}</div>
+        <div class="f"><label>Tear or caesarean wound <span class="req">*</span></label>${ldSelBlank('pv_inc', ['Clean and healing', 'Infected', 'Gaping', 'No wound or tear'])}</div>
+        <div class="f"><label>Breasts <span class="req">*</span></label>${ldSelBlank('pv_br', ['Normal', 'Engorged', 'Cracked nipples', 'Mastitis'])}</div>
+        <div class="f"><label>Legs <span class="req">*</span></label>${ldSelBlank('pv_calf', ['Normal', 'Painful or swollen'])}</div>
+        <div class="f"><label>Pale (pallor) <span class="req">*</span></label>${ldSelBlank('pv_pal', ['No', 'Yes'])}</div>
+        <div class="f"><label>Haemoglobin <span class="unit">g/dL, if done</span></label><input id="pv_hb" type="number" step="0.1" min="3" max="20"></div>
+        <div class="f"><label>Iron and folic acid <span class="unit">days given</span></label><input id="pv_ifa" type="number" min="0" max="180"></div></div>
+      <div style="margin-top:10px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Mood: two questions <span class="req">*</span></label><div class="grid2" style="margin-top:4px">
+        <div class="f"><label>In the past month, has she often felt down, depressed or hopeless?</label>${ldSelBlank('pv_m1', ['No', 'Yes'])}</div><div class="f"><label>In the past month, has she often had little interest or pleasure in doing things?</label>${ldSelBlank('pv_m2', ['No', 'Yes'])}</div></div></div>
+      <div style="margin-top:10px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Does she report any of these?</label><div class="grid2" style="margin-top:6px">${PN_DANGER_M.map(k => `<label class="chk"><input type="checkbox" name="pv_dg" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div></div>
+      ${bs.length ? `<h5>Baby or babies</h5>${bs.map((b, i) => pnBabyFormHtml(e, b, i + 1, prevB(i + 1))).join('')}` : '<div class="vit" style="margin-top:8px">Mother only: no baby is recorded as alive.</div>'}
+      <h5>Family planning</h5><div class="grid3"><div class="f"><label>Method chosen</label>${ldSel('pv_fpm', PN_FP)}</div><div class="f"><label>Method status</label>${ldSel('pv_fps', PN_FP_STATUS)}</div></div>
+      <div style="margin-top:12px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Counselled on <span class="req">*</span> <span class="unit">the starred items are required</span></label><div class="grid2" style="margin-top:6px">${PN_COUNSEL.map(k => `<label class="chk"><input type="checkbox" name="pv_cn" value="${esc(k)}" ${PN_COUNSEL_REQ.includes(k) ? 'data-req="1"' : ''}> ${esc(k)}${PN_COUNSEL_REQ.includes(k) ? ' <span class="req">*</span>' : ''}</label>`).join('')}</div></div>
+      <div class="grid3" style="margin-top:8px"><div class="f"><label>Next visit <span class="unit">date</span></label><input id="pv_next" type="date" min="${today10()}" value=""></div></div>
+      <div class="f" style="margin-top:8px"><label>Notes and plan <span class="unit">required if anything needs action</span></label><textarea id="pv_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="pvSave">Save visit</button><button class="btn-sm ghost" id="pnCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('pnCancel').onclick = pnClose;
+    document.getElementById('pvSave').onclick = async () => {
+      clearErrs(document.getElementById('pnForm')); const errs = [], at = ldIso('pv_at');
+      if (!at) errs.push(['pv_at', 'Enter the time.']); else if (new Date(at) < new Date(e.birth_at)) errs.push(['pv_at', 'The time is before the birth.']); else if (new Date(at) > new Date(Date.now() + 60000)) errs.push(['pv_at', 'The time is in the future.']);
+      const days = at ? pnDay(e, at) : 0, sys = anNum('pv_sys'), dia = anNum('pv_dia'), pul = anNum('pv_pul'), tmp = anNum('pv_tmp'), hb = anNum('pv_hb');
+      if (sys === null || dia === null || sys < 50 || sys > 260 || dia < 30 || dia > 160 || sys <= dia) errs.push([sys === null || sys < 50 || sys > 260 ? 'pv_sys' : 'pv_dia', "Enter the mother's blood pressure."]);
+      if (pul === null || pul < 30 || pul > 200) errs.push(['pv_pul', "Enter the mother's pulse."]); if (tmp === null || tmp < 34 || tmp > 42) errs.push(['pv_tmp', "Enter the mother's temperature."]);
+      [['pv_ut', 'Say how the womb feels.'], ['pv_la', 'Choose the lochia amount.'], ['pv_inc', 'Say how the tear or wound looks.'], ['pv_br', 'Choose the breast finding.'], ['pv_calf', 'Choose the leg finding.'], ['pv_pal', 'Say if she is pale.'], ['pv_m1', 'Ask and choose an answer.'], ['pv_m2', 'Ask and choose an answer.']].forEach(([id, m]) => { if (!val(id)) errs.push([id, m]); });
+      if (hb !== null && (hb < 3 || hb > 20)) errs.push(['pv_hb', 'Haemoglobin 3 to 20 g/dL.']);
+      const miss = [...document.querySelectorAll('input[name="pv_cn"][data-req]')].filter(c => !c.checked); if (miss.length) errs.push([miss[0], 'Counselling is required: ' + miss.map(c => c.value).join(', ') + '.']);
+      if (val('pv_fpm') !== PN_FP[0] && val('pv_fps') === PN_FP_STATUS[0]) errs.push(['pv_fps', 'Say if the method was given, referred or will start later.']);
+      if (val('pv_next') && val('pv_next') <= today10()) errs.push(['pv_next', 'The next visit must be after today.']);
+      const danger = [...document.querySelectorAll('input[name="pv_dg"]:checked')].map(c => c.value);
+      const m = { sys, dia, pul, tmp, hb, ut: val('pv_ut'), lamt: val('pv_la'), lo: val('pv_lo'), inc: val('pv_inc'), br: val('pv_br'), calf: val('pv_calf'), pal: val('pv_pal'), mood: val('pv_m1') === 'Yes' || val('pv_m2') === 'Yes', danger };
+      const mAl = errs.length ? [] : pnMotherAlerts(m), exams = [], bAl = [];
+      bs.forEach((b, i0) => { const i = i0 + 1, P = `pb${i}_`, g = k => val(P + k), nn = k => anNum(P + k), wt = nn('wt'), t = nn('tmp'), rr = nn('rr'), hr = nn('hr');
+        if (wt === null || wt < 500 || wt > 9000) errs.push([P + 'wt', "Enter the baby's weight in grams."]); if (t === null || t < 33 || t > 42) errs.push([P + 'tmp', "Enter the baby's temperature."]); if (rr === null || rr < 10 || rr > 120) errs.push([P + 'rr', "Enter the baby's breathing rate."]);
+        if (hr !== null && (hr < 60 || hr > 260)) errs.push([P + 'hr', 'Heart rate 60 to 260.']);
+        ['feed', 'cord', 'jau', 'eyes', 'skin', 'act'].concat(anReactive(e.hiv) ? ['arv'] : []).forEach(k => { if (!g(k)) errs.push([P + k, 'Choose an answer.']); });
+        const x = { i, no: b.no, wt, tmp: t, rr, hr, feed: g('feed'), cord: g('cord'), jau: g('jau'), eyes: g('eyes'), skin: g('skin'), act: g('act'), bcg: g('bcg'), opv: g('opv'), arv: g('arv') || undefined };
+        const al = errs.length ? [] : pnBabyAlerts(x, days, b.wt ? Number(b.wt) : null); if (al.length && !val(P + 'note').trim()) errs.push([P + 'note', 'Write what was done about: ' + al.join(', ') + '.']);
+        if (al.length) bAl.push(`Baby ${b.no || 'ABC'[i0]}: ${al.join(', ')}`); x.alerts = al.join('; '); x.note = val(P + 'note').trim(); exams.push(x); });
+      if ((mAl.length || bAl.length) && !val('pv_note').trim() && !errs.length) errs.push(['pv_note', 'Write what was done about: ' + mAl.concat(bAl).join('; ') + '.']);
+      if (errs.length) return showErrs(errs);
+      const btn = document.getElementById('pvSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const now = pnNow(), nth = vs.length + 1, all = mAl.map(x => 'Mother: ' + x).concat(bAl);
+        await pnPut({ patient_id: S(e.patient_id), record_id: S(`pnv#${pnKey(e)}#${String(nth).padStart(2, '0')}`), record_type: S('postnatal-visit'), pn_id: S(e.record_id), n: { N: String(nth) }, visit_at: S(at), days_pp: { N: String(Math.round(days * 10) / 10) }, contact_kind: S(pnKind(days)),
+          m_sys: anN(sys), m_dia: anN(dia), m_pulse: anN(pul), m_temp: anN(tmp), uterus: S(m.ut), fundal_cm: undefined, lochia_colour: S(val('pv_lc')), lochia_amount: S(m.lamt), lochia_odour: S(m.lo), incision: S(m.inc), breasts: S(m.br), calf: S(m.calf), pallor: S(m.pal), hb: hb !== null ? anN(hb) : undefined, ifa_days: anNum('pv_ifa') !== null ? anN(anNum('pv_ifa')) : undefined,
+          mood_low: S(val('pv_m1')), mood_interest: S(val('pv_m2')), mood_positive: S(m.mood ? 'yes' : 'no'), danger: danger.length ? S(danger.join('|')) : undefined, fp_method: S(val('pv_fpm')), fp_status: S(val('pv_fps')),
+          counselled: S([...document.querySelectorAll('input[name="pv_cn"]:checked')].map(c => c.value).join('|')), babies_json: S(JSON.stringify(exams)), alerts: all.length ? S(all.join(' | ')) : undefined, next_visit: val('pv_next') ? S(val('pv_next')) : undefined, notes: val('pv_note').trim() ? S(val('pv_note').trim()) : undefined, ...pnStamp(now) });
+        await pnRefresh(); pnClose(); pnRenderAll();
+        pnNote(`Visit saved for <b>${esc(e.patient_name)}</b> (${esc(pnKind(days).toLowerCase())}).${all.length ? ` <b>Findings to follow up: ${esc(all.join('; '))}.</b> Refer to a doctor if needed. <button class="btn-sm ghost" data-pnact="refer|${esc(e.record_id)}" style="margin-left:8px">Refer out</button>` : ''}`, all.length ? '' : 'ok');
+      } catch (err) { btn.disabled = false; btn.textContent = 'Save visit'; pnNote(`Could not save: ${esc(err.message)}`); }
+    };
+  }
+  // ---- Refer out, and close postnatal care ----
+  function pnReferForm(rid) {
+    const e = pnEps().find(x => x.record_id === rid); if (!e || !canPn) return;
+    gxArm('pnForm', 'pnrefer', rid, e.patient_id, e.patient_name);
+    pnShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Refer to another facility</h5>
+      <div class="grid3"><div class="f"><label>Who is referred <span class="req">*</span></label>${ldSel('prf_who', ['Mother', 'Baby', 'Mother and baby'])}</div>
+        <div class="f"><label>Time leaving <span class="req">*</span></label><input id="prf_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
+        <div class="f"><label>Referred to <span class="req">*</span></label><input id="prf_to" placeholder="Hospital name"></div>
+        <div class="f"><label>Main reason <span class="req">*</span></label>${ldSelBlank('prf_why', PN_REF_WHY)}</div>
+        <div class="f"><label>Urgency <span class="req">*</span></label>${ldSel('prf_urg', ['Emergency', 'Urgent', 'Routine'], 'Urgent')}</div>
+        <div class="f"><label>Transport <span class="req">*</span></label>${ldSelBlank('prf_tr', ['Ambulance', 'Private vehicle', 'Other'])}</div>
+        <div class="f"><label>Accompanied by <span class="unit">name</span></label><input id="prf_with"></div>
+        <div class="f"><label>Receiving facility phoned ahead</label>${ldSel('prf_call', ['Yes', 'No'])}</div></div>
+      <div class="f" style="margin-top:8px"><label>Condition on leaving <span class="req">*</span></label><textarea id="prf_cond" rows="2" placeholder="Blood pressure, pulse, temperature, bleeding, baby's weight and breathing"></textarea></div>
+      <div class="f" style="margin-top:8px"><label>Treatment given before leaving</label><textarea id="prf_tx" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="prfSave">Save referral</button><button class="btn-sm ghost" id="pnCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time. The letter carries her antenatal history, labour record and postnatal visits.</div></div>`);
+    document.getElementById('pnCancel').onclick = pnClose;
+    document.getElementById('prfSave').onclick = async () => {
+      clearErrs(document.getElementById('pnForm')); const errs = [], at = ldIso('prf_at');
+      if (!at) errs.push(['prf_at', 'Enter the time.']); else if (new Date(at) < new Date(e.birth_at)) errs.push(['prf_at', 'The time is before the birth.']);
+      if (!val('prf_to').trim()) errs.push(['prf_to', 'Say where she is being referred.']); if (!val('prf_why')) errs.push(['prf_why', 'Choose the reason.']); if (!val('prf_tr')) errs.push(['prf_tr', 'Choose the transport.']); if (!val('prf_cond').trim()) errs.push(['prf_cond', 'Write the condition on leaving.']);
+      if (errs.length) return showErrs(errs);
+      const b = document.getElementById('prfSave'); b.disabled = true; b.textContent = 'Saving…';
+      try { const n = pnRefs(e).length + 1, to = val('prf_to').trim();
+        await pnPut({ patient_id: S(e.patient_id), record_id: S(`pnr#${pnKey(e)}#${String(n).padStart(2, '0')}`), record_type: S('referral'), pn_id: S(e.record_id), who: S(val('prf_who')), left_at: S(at), referred_to: S(to), urgency: S(val('prf_urg')), reason: S(val('prf_why')), transport: S(val('prf_tr')), accompanied_by: val('prf_with') ? S(val('prf_with')) : undefined, phoned_ahead: S(val('prf_call')), condition: S(val('prf_cond')), treatment: val('prf_tx') ? S(val('prf_tx')) : undefined, ...pnStamp(pnNow()) });
+        await pnRefresh(); pnClose(); pnRenderAll(); pnNote(`<b>${esc(e.patient_name)}</b> referred to ${esc(to)}.<div style="margin-top:8px">${refBtns('pn', e.record_id)} <span class="vit">Send it with her. It carries her history and postnatal visits.</span></div>`, 'ok'); }
+      catch (err) { b.disabled = false; b.textContent = 'Save referral'; pnNote(`Could not save the referral: ${esc(err.message)}`); }
+    };
+  }
+  function pnCloseForm(rid) {
+    const e = pnEps().find(x => x.record_id === rid); if (!e || !canPn) return;
+    if (pnClosed(e)) return pnNote('Postnatal care for her is already closed.');
+    gxArm('pnForm', 'pnclose', rid, e.patient_id, e.patient_name); const nx = pnNext(e);
+    pnShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Close postnatal care</h5>
+      ${nx ? `<div class="notice" style="margin-bottom:8px">A visit is still planned: ${esc(nx.label)} on ${anDate(nx.date)}. Close only if she will not need it.</div>` : '<div class="vit">All planned visits are done.</div>'}
+      <div class="grid3"><div class="f"><label>Reason <span class="req">*</span></label>${ldSelBlank('pc_why', PN_CLOSE)}</div></div>
+      <div class="f" style="margin-top:8px"><label>Notes <span class="unit">required unless care was completed</span></label><textarea id="pc_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="pcSave">Close</button><button class="btn-sm ghost" id="pnCancel">Cancel</button></div><div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('pnCancel').onclick = pnClose;
+    document.getElementById('pcSave').onclick = async () => {
+      clearErrs(document.getElementById('pnForm')); const errs = [], why = val('pc_why'); if (!why) errs.push(['pc_why', 'Choose the reason.']); else if (why !== PN_CLOSE[0] && !val('pc_note').trim()) errs.push(['pc_note', 'Write a short note.']);
+      if (errs.length) return showErrs(errs);
+      const b = document.getElementById('pcSave'); b.disabled = true;
+      try { await pnPut({ patient_id: S(e.patient_id), record_id: S('pnd#' + pnKey(e)), record_type: S('postnatal-close'), pn_id: S(e.record_id), reason: S(why), closed_at: S(pnNow()), notes: val('pc_note').trim() ? S(val('pc_note').trim()) : undefined, ...pnStamp(pnNow()) });
+        await pnRefresh(); pnClose(); pnRenderAll(); pnNote(`Postnatal care closed for <b>${esc(e.patient_name)}</b>.`, 'ok'); }
+      catch (err) { b.disabled = false; pnNote(`Could not save: ${esc(err.message)}`); }
+    };
+  }
+  // ---- The client's postnatal file ----
+  const pnMotherLine = v => `BP ${esc(v.m_sys)}/${esc(v.m_dia)}, pulse ${esc(v.m_pulse)}, temp ${esc(v.m_temp)}; womb ${esc(String(v.uterus || '').toLowerCase())}; lochia ${esc(v.lochia_colour || '')}, ${esc(String(v.lochia_amount || '').toLowerCase())}${v.lochia_odour === 'Offensive' ? ', offensive' : ''}; wound ${esc(String(v.incision || '').toLowerCase())}; breasts ${esc(String(v.breasts || '').toLowerCase())}${v.hb !== undefined ? '; Hb ' + esc(v.hb) : ''}`;
+  const pnBabyLine = x => `${x.no ? 'Baby ' + esc(x.no) + ': ' : ''}${esc(x.wt)} g, temp ${esc(x.tmp)}, breathing ${esc(x.rr)}; ${esc(String(x.feed || '').toLowerCase())}; cord ${esc(String(x.cord || '').toLowerCase())}; jaundice ${esc(String(x.jau || '').toLowerCase())}${x.bcg === 'Given today' ? '; BCG given' : ''}${x.opv === 'Given today' ? '; OPV 0 given' : ''}`;
+  function pnFile(rid) {
+    const e = pnEps().find(x => x.record_id === rid); if (!e) return;
+    const vs = pnVisitsOf(e), cl = pnClosed(e), rfs = pnRefs(e), bs = pnBabies(e), nx = pnNext(e), kv = (k, v) => v !== undefined && v !== '' && v !== null ? `<div><span style="color:#777">${k}</span> ${esc(v)}</div>` : '';
+    const a = e.adm_id ? ldAdms().find(x => x.record_id === e.adm_id) : null, ward = pnContacts(e).filter(c => c.src === 'ward')[0];
+    const rxn = pnRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('rxn#' + pnKey(e) + '#'));
+    const vRows = vs.map(v => { let ex = []; try { ex = JSON.parse(v.babies_json || '[]'); } catch (z) { /* skip */ }
+      return { t: String(v.visit_at || ''), h: `<tr class="rowbar ${v.alerts ? 'red' : ''}"><td>${fmtDate(v.visit_at)}<div class="vit">${esc(pnAge(Number(v.days_pp)))}</div></td><td>${esc(v.contact_kind || '')}</td><td class="vit">${pnMotherLine(v)}</td><td class="vit">${ex.map(pnBabyLine).join('<br>') || '—'}</td><td>${v.alerts ? `<div style="color:#C62828;font-size:12.5px"><b>${esc(v.alerts)}</b></div>` : ''}${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}${v.fp_method && v.fp_method !== PN_FP[0] ? `<div class="vit">Family planning: ${esc(v.fp_method)} (${esc(String(v.fp_status || '').toLowerCase())})</div>` : ''}</td><td>${esc(v.entered_by || '')}</td></tr>` }; });
+    const rRows = rxn.map(x => ({ t: String(x.entered_at || ''), h: `<tr style="background:#F3F8F0"><td>${fmtDate(x.entered_at)}</td><td colspan="4"><b>Prescription ${esc(x.rx_no || '')}</b> sent to the pharmacy: ${esc(x.meds || '')}${x.notes ? ' <span class="vit">(' + esc(x.notes) + ')</span>' : ''}</td><td>${esc(x.entered_by || '')}</td></tr>` }));
+    const wRow = ward ? [{ t: String(ward.at), h: `<tr style="background:#FAFCF8"><td>${fmtDate(ward.at)}<div class="vit">${esc(pnAge(ward.days))}</div></td><td>Before leaving the ward</td><td class="vit">BP ${esc(ward.rec.m_sys)}/${esc(ward.rec.m_dia)}, pulse ${esc(ward.rec.m_pulse)}, temp ${esc(ward.rec.m_temp)}; womb ${esc(String(ward.rec.uterus || '').toLowerCase())}</td><td class="vit">${esc(ldOf(ward.adm, 'nbx').map(x => 'Baby ' + (x.baby_no || '') + ': ' + (x.wt || '') + ' g, ' + (x.suck === 'Yes' ? 'sucking well' : 'not sucking well')).join('; ') || '—')}</td><td>${ward.rec.exam_alerts ? `<div style="color:#C62828;font-size:12.5px"><b>${esc(ward.rec.exam_alerts)}</b></div>` : ''}</td><td>${esc(ward.rec.entered_by || '')}</td></tr>` }] : [];
+    const rows = vRows.concat(rRows, wRow).sort((x, y) => y.t.localeCompare(x.t)).map(x => x.h).join('');
+    pnShow(`<div class="fd-form">${anBanner(e.patient_id, null)}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b>${esc(e.pn_no || '')}</b> <span class="st ${cl ? 'wait' : 'done'}">${cl ? 'Closed' : 'In postnatal care'}</span>
+        ${canPn && !cl ? `<button class="btn-sm b-rel" data-pnact="visit|${esc(e.record_id)}">Record visit</button><button class="btn-sm ghost" data-pnact="refer|${esc(e.record_id)}">Refer out</button><button class="btn-sm ghost" data-pnact="close|${esc(e.record_id)}">Close postnatal care</button>` : ''}
+        ${rfs.length ? refBtns('pn', e.record_id) : ''}<button class="btn-sm ghost" id="pnCancel" style="margin-left:auto">Close file</button></div>
+      ${nx && !cl ? `<div class="vit">Next: <b>${esc(nx.label)}</b> on ${anDate(nx.date)}${nx.overdue ? ' <span style="color:#C62828">(overdue)</span>' : ''}</div>` : (!cl ? '<div class="vit">All planned visits are done. Close postnatal care when she is ready.</div>' : '')}
+      <h5>Birth</h5><div class="grid3" style="font-size:13.5px;line-height:1.7"><div>${kv('Born', fmtDate(e.birth_at))}${kv('Age now', pnAge(pnDay(e, cl ? cl.closed_at : pnNow())))}${kv('Place', e.birth_place)}${kv('Delivered by', e.attendant)}${kv('Type of birth', e.mode)}</div>
+        <div>${kv('Baby or babies', bs.length ? bs.map(b => (b.no || '') + ' ' + (b.sex || '') + (b.wt ? ', ' + b.wt + ' g' + (b.wt < 2500 ? ' (low birth weight)' : '') : '')).join('; ') : 'No baby alive')}${kv('HIV status', e.hiv)}${kv('Registered', fmtDate(e.registered_at) + (e.reg_hours_after_birth !== undefined ? ' (' + Math.round(Number(e.reg_hours_after_birth)) + ' hours after birth)' : ''))}${a ? kv('Labour ward record', a.adm_no) : ''}</div>
+        <div>${kv('Visit 2 planned', e.pnc2_date ? anDate(e.pnc2_date) : '')}${kv('Visit 3 planned', e.pnc3_date ? anDate(e.pnc3_date) : '')}${kv('Notes', e.notes)}</div></div>
+      <div class="stamp" style="margin-top:6px">Registered by ${esc(e.entered_by || '')} · ${fmtDate(e.entered_at)}</div>
+      <h5>Visits</h5><div class="recent-scroll" style="min-height:0"><table class="data-table"><thead><tr><th>Date</th><th>Visit</th><th>Mother</th><th>Baby</th><th>Findings and plan</th><th>By</th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="6">No visits yet.</td></tr>'}</tbody></table></div>
+      ${rfs.map(r => `<h5>Referral</h5><div class="notice">${esc(r.who || '')} referred to <b>${esc(r.referred_to)}</b> at ${fmtDate(r.left_at)} (${esc(r.urgency || '')}): ${esc(r.reason)}. ${esc(r.transport)}${r.accompanied_by ? ', with ' + esc(r.accompanied_by) : ''}. Phoned ahead: ${esc(r.phoned_ahead)}.<br>Condition: ${esc(r.condition)}${r.treatment ? '<br>Treatment: ' + esc(r.treatment) : ''}<div class="vit">${esc(r.entered_by || '')} · ${fmtDate(r.entered_at)}</div></div>`).join('')}
+      <h5>Prescriptions</h5><div id="pnRxBox" class="vit">Loading…</div>
+      ${cl ? `<h5>✔ Closed</h5><div style="font-size:13.5px;line-height:1.7">${kv('Reason', cl.reason)}${kv('Closed', fmtDate(cl.closed_at))}${kv('Notes', cl.notes)}</div><div class="stamp">${esc(cl.entered_by || '')} · ${fmtDate(cl.entered_at)}</div>` : ''}
+      </div>`);
+    document.getElementById('pnCancel').onclick = pnClose;
+    rxmHistory('pnRxBox', e.patient_id);
+  }
+  function pnOpen(mode, id) {
+    document.getElementById('pnMsg').innerHTML = '';
+    if (mode === 'reg') return pnRegForm(id); if (mode === 'file') return pnFile(id); if (mode === 'visit') return pnVisitForm(id); if (mode === 'refer') return pnReferForm(id); if (mode === 'close') return pnCloseForm(id);
+  }
+  // ---- Referral letter pages for a postnatal client ----
+  function pnLetterSections(e, vs, sections) {
+    const bs = pnBabies(e), d = pnDay(e, pnNow());
+    sections.push({ h: 'Postnatal care at this clinic', kv: [['Postnatal number', e.pn_no], ['Born', fmtDate(e.birth_at) + ' (' + pnAge(d) + ')'], ['Place of birth', e.birth_place], ['Delivered by', e.attendant], ['Type of birth', e.mode], ['Baby or babies', bs.length ? bs.map(b => (b.no || '') + ' ' + (b.sex || '') + (b.wt ? ', ' + b.wt + ' g' : '')).join('; ') : 'No baby alive'], ['HIV status', e.hiv], ['Registered for postnatal care', fmtDate(e.registered_at)]].filter(k => k[1]) });
+    if (vs.length) sections.push({ h: 'Postnatal visits', head: ['Date', 'Day', 'Mother', 'Baby', 'Findings and plan'], widths: [22, 14, 50, 50, 46],
+      body: vs.map(v => { let ex = []; try { ex = JSON.parse(v.babies_json || '[]'); } catch (z) { /* skip */ }
+        return { flag: !!v.alerts, c: [refD(v.visit_at), pnAge(Number(v.days_pp)), `BP ${v.m_sys}/${v.m_dia}, pulse ${v.m_pulse}, temp ${v.m_temp}; womb ${String(v.uterus || '').toLowerCase()}; lochia ${v.lochia_colour || ''} ${String(v.lochia_amount || '').toLowerCase()}${v.lochia_odour === 'Offensive' ? ' offensive' : ''}; wound ${String(v.incision || '').toLowerCase()}; breasts ${String(v.breasts || '').toLowerCase()}${v.hb !== undefined ? '; Hb ' + v.hb : ''}`,
+          ex.map(x => `${x.no ? 'Baby ' + x.no + ': ' : ''}${x.wt} g, temp ${x.tmp}, breathing ${x.rr}; ${String(x.feed || '').toLowerCase()}; cord ${String(x.cord || '').toLowerCase()}; jaundice ${String(x.jau || '').toLowerCase()}${x.bcg === 'Given today' ? '; BCG given' : ''}`).join('\n') || '', [v.alerts, v.notes].filter(Boolean).join('. ')] }; }) });
+  }
+  // ---- Register and tally (the monthly postnatal counts: registrants, visits by schedule, family planning, newborn feeding and immunisation) ----
+  const pnBabyExams = () => { const out = []; pnVisitsOf0().forEach(v => { let ex = []; try { ex = JSON.parse(v.babies_json || '[]'); } catch (z) { /* skip */ } ex.forEach(x => out.push({ v, x })); }); return out; };
+  const pnVisitsOf0 = () => pnRecs.filter(r => String(r.record_id).startsWith('pnv#'));
+  const pnEpOf = v => pnEps().find(e => e.record_id === v.pn_id);
+  function pnIndicators() {
+    const eps = pnEps(), vis = pnVisitsOf0().map(v => ({ v, e: pnEpOf(v), d: pnDay(pnEpOf(v) || { birth_at: v.visit_at }, v.visit_at) })).filter(x => x.e), dd = f => vis.filter(f).map(x => String(x.v.visit_at).slice(0, 10));
+    const contacts = []; eps.forEach(e => pnContacts(e).forEach(c => contacts.push({ e, c })));
+    const cd = f => contacts.filter(f).map(x => String(x.c.at).slice(0, 10)), cm = f => eps.map(e => pnContacts(e).find(c => f(c))).filter(Boolean).map(c => String(c.at).slice(0, 10)),   // cm: each mother counted once, on her first qualifying contact
+    ex = pnBabyExams(), bd = f => ex.filter(f).map(x => String(x.v.visit_at).slice(0, 10));
+    const refs = pnRecs.filter(r => String(r.record_id).startsWith('pnr#')), cls = pnRecs.filter(r => String(r.record_id).startsWith('pnd#')), reg = f => eps.filter(f).map(e => String(e.registered_at).slice(0, 10));
+    const firstMethod = []; eps.forEach(e => { const v = pnVisitsOf(e).find(q => q.fp_method && q.fp_method !== PN_FP[0]); if (v) firstMethod.push(v); });
+    const grp = (name, items) => items.map(i => ({ group: name, ...i })), meth = m => firstMethod.filter(v => v.fp_method === m).map(v => String(v.visit_at).slice(0, 10));
+    return [
+      ...grp('Registrants', [{ id: 'reg', label: 'New postnatal registrants (mothers)', dates: reg(() => true) }, { id: 'reg48', label: 'Registrants first seen within 48 hours of birth', dates: reg(e => { const c = pnContacts(e)[0]; return c && c.days <= 2; }) },
+        { id: 'regL', label: 'Born in this clinic\'s labour ward', dates: reg(e => !!e.adm_id) }, { id: 'regH', label: 'Born at home or elsewhere', dates: reg(e => !e.adm_id) }, { id: 'lbw', label: 'Babies born under 2,500 g', dates: eps.flatMap(e => pnBabies(e).filter(b => b.wt && b.wt < 2500).map(() => String(e.registered_at).slice(0, 10))) }]),
+      ...grp('Mother and baby contacts (the first check before leaving the ward counts)', [{ id: 'c1', label: 'Mothers with a contact within 48 hours', dates: cm(c => c.days <= 2) }, { id: 'c2', label: 'Mothers with a contact on day 3 to 14', dates: cm(c => c.days > 2 && c.days <= 14) }, { id: 'c2w', label: '  of which on day 6 or 7', dates: cm(c => Math.floor(c.days) >= 6 && Math.floor(c.days) <= 7) },
+        { id: 'c3', label: 'Mothers with a six-week contact (day 35 or later)', dates: cm(c => c.days >= 35) }, { id: 'cx', label: 'Extra visits (week 3 to 5), all visits', dates: cd(x => x.c.days > 14 && x.c.days < 35) }, { id: 'ct', label: 'All postnatal contacts (every mother and visit)', dates: cd(() => true) }]),
+      ...grp('Mother: findings at visits', [{ id: 'hbp', label: 'Blood pressure 140/90 or higher', dates: dd(x => x.v.m_sys >= 140 || x.v.m_dia >= 90) }, { id: 'fev', label: 'Fever 38 °C or higher', dates: dd(x => x.v.m_temp >= 38) }, { id: 'ble', label: 'Heavy bleeding', dates: dd(x => x.v.lochia_amount === 'Heavy') },
+        { id: 'inf', label: 'Offensive lochia or wound infection', dates: dd(x => x.v.lochia_odour === 'Offensive' || x.v.incision === 'Infected' || x.v.incision === 'Gaping') }, { id: 'mas', label: 'Mastitis', dates: dd(x => x.v.breasts === 'Mastitis') }, { id: 'pal', label: 'Pale or haemoglobin under 8', dates: dd(x => x.v.pallor === 'Yes' || (x.v.hb !== undefined && x.v.hb < 8)) },
+        { id: 'mood', label: 'Low mood screen positive', dates: dd(x => x.v.mood_positive === 'yes') }, { id: 'ifa', label: 'Iron and folic acid given', dates: dd(x => Number(x.v.ifa_days) > 0) }]),
+      ...grp('Family planning (first method accepted by each mother)', [{ id: 'fpc', label: 'Counselled on family planning at a visit', dates: dd(x => String(x.v.counselled || '').includes('Family planning')) }, { id: 'fpm', label: 'Accepted a method', dates: firstMethod.map(v => String(v.visit_at).slice(0, 10)) },
+        ...PN_FP.slice(1).map((m, i) => ({ id: 'fp' + i, label: '  ' + m, dates: meth(m) }))]),
+      ...grp('Babies', [{ id: 'bx', label: 'Baby examinations at visits', dates: bd(() => true) }, { id: 'b2', label: 'Babies examined, day 3 to 14', dates: bd(x => { const e = pnEpOf(x.v); return e && pnDay(e, x.v.visit_at) > 2 && pnDay(e, x.v.visit_at) <= 14; }) }, { id: 'b6', label: 'Babies examined, six weeks', dates: bd(x => { const e = pnEpOf(x.v); return e && pnDay(e, x.v.visit_at) >= 35; }) },
+        { id: 'ebf2', label: 'Exclusively breastfed, day 3 to 14', dates: bd(x => { const e = pnEpOf(x.v); return x.x.feed === 'Exclusive breastfeeding' && e && pnDay(e, x.v.visit_at) > 2 && pnDay(e, x.v.visit_at) <= 14; }) }, { id: 'ebf6', label: 'Exclusively breastfed, six weeks', dates: bd(x => { const e = pnEpOf(x.v); return x.x.feed === 'Exclusive breastfeeding' && e && pnDay(e, x.v.visit_at) >= 35; }) },
+        { id: 'bcg', label: 'BCG given at this clinic', dates: bd(x => x.x.bcg === 'Given today') }, { id: 'opv', label: 'Oral polio (OPV 0) given at this clinic', dates: bd(x => x.x.opv === 'Given today') }, { id: 'jau', label: 'Jaundice found', dates: bd(x => x.x.jau && x.x.jau !== 'None') },
+        { id: 'cord', label: 'Cord infection or bleeding', dates: bd(x => x.x.cord === 'Red skin or pus' || x.x.cord === 'Bleeding') }, { id: 'bal', label: 'Babies with a finding to act on', dates: bd(x => x.x.alerts) }]),
+      ...grp('Referrals and closure', [{ id: 'ref', label: 'Referrals out', dates: refs.map(r => String(r.left_at).slice(0, 10)) }, { id: 'clD', label: 'Completed postnatal care', dates: cls.filter(r => r.reason === PN_CLOSE[0]).map(r => String(r.closed_at).slice(0, 10)) }, { id: 'clT', label: 'Moved to child welfare and family planning care', dates: cls.filter(r => r.reason === PN_CLOSE[1]).map(r => String(r.closed_at).slice(0, 10)) },
+        { id: 'clL', label: 'Did not return (lost to follow-up)', dates: cls.filter(r => r.reason === PN_CLOSE[3]).map(r => String(r.closed_at).slice(0, 10)) }, { id: 'md', label: 'Mother died', dates: cls.filter(r => r.reason === 'Mother died').map(r => String(r.closed_at).slice(0, 10)) }, { id: 'nd', label: 'Baby died', dates: cls.filter(r => r.reason === 'Baby died').map(r => String(r.closed_at).slice(0, 10)) }])
+    ].map(i => ({ ...i, dates: (i.dates || []).filter(Boolean) }));
+  }
+  const PN_RATES = [{ label: 'Seen within 48 hours % of registrants', num: ['reg48'], den: 'reg' }, { label: 'Second contact by day 6 or 7 % of registrants', num: ['c2w'], den: 'reg' }, { label: 'Six-week contact % of registrants', num: ['c3'], den: 'reg' },
+    { label: 'Exclusively breastfed % of babies examined, day 3 to 14', num: ['ebf2'], den: 'b2' }, { label: 'Exclusively breastfed % of babies examined at six weeks', num: ['ebf6'], den: 'b6' }, { label: 'Accepted a family planning method % of registrants', num: ['fpm'], den: 'reg' }];
+  function pnTallyCols() {
+    if (pnRegPeriod === 'quarterly') return [0, 1, 2, 3].map(q => ({ label: 'Q' + (q + 1), key: d => d.slice(0, 4) === pnRegYear && Math.floor((Number(d.slice(5, 7)) - 1) / 3) === q }));
+    if (pnRegPeriod === 'yearly') { const ys = new Set([pnRegYear]); pnIndicators().forEach(i => i.dates.forEach(d => ys.add(d.slice(0, 4)))); return [...ys].sort().map(y => ({ label: y, key: d => d.slice(0, 4) === y })); }
+    return AN_MONTHS.map((m, i) => ({ label: m, key: d => d.slice(0, 4) === pnRegYear && Number(d.slice(5, 7)) === i + 1 }));
+  }
+  function pnTallyData() {
+    const cols = pnTallyCols(), rows = pnIndicators().map(i => { const counts = cols.map(c => i.dates.filter(c.key).length); return { ...i, counts, total: counts.reduce((a, b) => a + b, 0) }; }), by = id => rows.find(r => r.id === id);
+    PN_RATES.forEach(r => { const f = (n, d) => d ? Math.round(n * 1000 / d) / 10 + '%' : '—'; rows.push({ group: 'Rates (same period)', id: 'rate_' + r.num.join('') + r.den, label: r.label, rate: true, counts: cols.map((c, i) => f(r.num.reduce((s, id) => s + by(id).counts[i], 0), by(r.den).counts[i])), total: f(r.num.reduce((s, id) => s + by(id).total, 0), by(r.den).total) }); });
+    return { cols, rows };
+  }
+  function pnRegList() {
+    return pnEps().filter(e => (pnRegYear === 'all' || String(e.registered_at).slice(0, 4) === pnRegYear) && pnMatch(e)).sort((a, b) => (a.pn_year || '').localeCompare(b.pn_year || '') || (Number(a.pn_seq) || 0) - (Number(b.pn_seq) || 0)).map(e => {
+      const vs = pnVisitsOf(e), cs = pnContacts(e), cl = pnClosed(e), p = pnPat(e.patient_id) || {}, f = cs[0];
+      return { e, no: e.pn_no || '', name: e.patient_name, reg: String(e.registered_at).slice(0, 10), born: e.birth_at, place: e.birth_place || '', babies: pnBabySum(e), contacts: cs.length, first: f ? pnKind(f.days) : 'None yet', last: vs.length ? String(vs[vs.length - 1].visit_at).slice(0, 10) : '', status: cl ? 'Closed: ' + cl.reason : 'In postnatal care', phone: p.phone_number || '' };
+    });
+  }
+  function renderPnRegister() {
+    const el = document.getElementById('pnRegister'); if (!el) return;
+    const years = new Set([String(new Date().getFullYear()), pnRegYear === 'all' ? '' : pnRegYear]); pnEps().forEach(e => years.add(String(e.registered_at).slice(0, 4))); years.delete('');
+    const yo = [...years].sort().reverse().map(y => `<option value="${y}" ${y === pnRegYear ? 'selected' : ''}>${y}</option>`).join('');
+    const bar = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><button class="btn-sm ${pnRegView === 'list' ? '' : 'ghost'}" data-pnreg="list">Register</button><button class="btn-sm ${pnRegView === 'tally' ? '' : 'ghost'}" data-pnreg="tally">Tally report</button>
+      <select id="pnRegYear" style="padding:7px 10px">${pnRegView === 'list' ? `<option value="all" ${pnRegYear === 'all' ? 'selected' : ''}>All years</option>` : ''}${yo}</select>
+      ${pnRegView === 'tally' ? `<select id="pnRegPeriod" style="padding:7px 10px">${['monthly', 'quarterly', 'yearly'].map(p => `<option value="${p}" ${p === pnRegPeriod ? 'selected' : ''}>${p[0].toUpperCase() + p.slice(1)}</option>`).join('')}</select>` : ''}</div>`;
+    let body;
+    if (pnRegView === 'list') {
+      const rows = pnRegList();
+      body = `<div class="vit" style="margin-bottom:8px">Every mother registered for postnatal care, in register order. <b>${rows.length}</b> ${rows.length === 1 ? 'entry' : 'entries'}${pnRegYear === 'all' ? '' : ' for ' + esc(pnRegYear)}.</div><div class="recent-scroll"><table class="data-table" id="pnRegTable"><thead><tr><th>Number</th><th>Registered</th><th>Mother</th><th>Born</th><th>Place</th><th>Baby</th><th>Contacts</th><th>First contact</th><th>Last visit</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${esc(r.no)}</b></td><td>${anDate(r.reg)}</td><td>${pnNameCell(r.e)}</td><td>${anDate(String(r.born).slice(0, 10))}</td><td class="vit">${esc(r.place)}</td><td class="vit">${esc(r.babies)}</td><td>${r.contacts}</td><td class="vit">${esc(r.first)}</td><td>${r.last ? anDate(r.last) : '—'}</td><td class="vit">${esc(r.status)}</td></tr>`).join('') || '<tr class="empty-row"><td colspan="10">No entries.</td></tr>'}</tbody></table></div>`;
+    } else {
+      const d = pnTallyData(); let last = '';
+      body = `<div class="vit" style="margin-bottom:8px">Counts for ${pnRegPeriod === 'yearly' ? 'each year' : esc(pnRegYear)}, built from the postnatal register and the midwife's monthly return: registrants, contacts by the Ghana Health Service schedule, family planning, and newborn feeding and immunisation. Check the row names against your current DHIMS2 form before copying numbers across. Registrants are counted on the registration date and visits on the visit date.</div><div class="recent-scroll"><table class="data-table" id="pnTallyTable"><thead><tr><th>Indicator</th>${d.cols.map(c => `<th style="text-align:right">${esc(c.label)}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead><tbody>${d.rows.map(r => { const head = r.group !== last ? `<tr><td colspan="${d.cols.length + 2}" style="background:#EFF5EC;font-weight:700;color:var(--forest)">${esc(r.group)}</td></tr>` : ''; last = r.group; return head + `<tr><td style="white-space:pre">${esc(r.label)}</td>${r.counts.map(c => `<td style="text-align:right">${esc(c)}</td>`).join('')}<td style="text-align:right"><b>${esc(r.total)}</b></td></tr>`; }).join('')}</tbody></table></div>`;
+    }
+    el.innerHTML = bar + body + `<div class="vit" style="margin-top:10px">Downloading or printing the register will follow the same approval rule as the other registers.</div>`;
+  }
+  async function pnAutoRefresh() {
+    if (pnTimer) clearInterval(pnTimer);
+    pnTimer = setInterval(async () => {
+      if (!document.getElementById('pnPaneDue') || !document.getElementById('detailView').classList.contains('active')) { clearInterval(pnTimer); pnTimer = null; return; }
+      const f = document.getElementById('pnForm'); if (f && f.style.display !== 'none') return;
+      try { await pnRefresh(); pnRenderAll(); if (pnTab === 'rx') await rxmTick('postnatal'); } catch (e) { /* try again next time */ }
+    }, 45000);
+  }
+  async function loadPostnatalData() {
+    const liveEl = document.getElementById('liveContent'); liveEl.style.display = 'block';
+    liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
+    try {
+      await pnRefresh(); liveEl.innerHTML = pnShellHtml();
+      if (!liveEl.dataset.boundP) {
+        liveEl.addEventListener('click', e => {
+          const tb = e.target.closest('[data-pntab]'); if (tb) { setPnTab(tb.dataset.pntab); return; }
+          const rg = e.target.closest('[data-pnreg]'); if (rg) { pnRegView = rg.dataset.pnreg; if (pnRegView === 'tally' && pnRegYear === 'all') pnRegYear = String(new Date().getFullYear()); renderPnRegister(); setPnTab('register'); return; }
+          const a = e.target.closest('[data-pnact]'); if (a) { e.preventDefault(); const k = a.dataset.pnact, i = k.indexOf('|'); pnOpen(k.slice(0, i), k.slice(i + 1)); }
+        });
+        liveEl.addEventListener('change', e => { if (e.target.id === 'pnRegYear') { pnRegYear = e.target.value; renderPnRegister(); } else if (e.target.id === 'pnRegPeriod') { pnRegPeriod = e.target.value; renderPnRegister(); } });
+        liveEl.dataset.boundP = '1';
+      }
+      const run = () => { pnQ = document.getElementById('pnSearch').value; renderPnActive(); renderPnRegister(); };
+      pnQ = ''; document.getElementById('pnSearch').addEventListener('input', run); document.getElementById('pnSearchBtn').addEventListener('click', run); document.getElementById('pnClearBtn').addEventListener('click', () => { document.getElementById('pnSearch').value = ''; run(); });
+      document.getElementById('pnFind').addEventListener('input', pnFindRender);
+      const rg = document.getElementById('pnRefGo'); if (rg) rg.onclick = () => { const v = val('pnRefPick'); if (!v) return showErrs([['pnRefPick', 'Choose the client.']]); pnOpen('refer', v); };
+      pnTab = 'due'; setPnTab('due'); pnRenderAll(); pnAutoRefresh();
+    } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load postnatal data: ${esc(err.message)}</div>`; }
+  }
+
   // Every panel that opens inside a department gets a "Back" button at the top, so nobody has to go back to the department list.
   const BACK_MAP = { phForm: 'phCancel', lbForm: 'lbCancel', clWork: 'clClose', clRxReply: 'rqClose', clResult: 'clResultClose', fdProfileCard: 'fdProfileClose', fdFormCard: 'fdCancel', bgForm: 'bgCancel', anForm: 'anCancel', ldForm: 'ldCancel' };
   function addBackBars() {
@@ -6439,6 +6950,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       if (dept.slug === 'billing') loadBillingData();
       if (dept.slug === 'antenatal') loadAntenatalData();
       if (dept.slug === 'labour-delivery') loadLabourData();
+      if (dept.slug === 'postnatal') loadPostnatalData();
     } else {
       liveEl.style.display = 'none';
       placeholderEl.style.display = 'block';
@@ -6475,6 +6987,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     canIncharge = canAnc && groups.includes('antenatal-incharge');
     canLd = groups.includes('labour-delivery') && !groups.includes('admin');
     canLdIn = canLd && groups.includes('labour-delivery-incharge');
+    canPn = groups.includes('postnatal') && !groups.includes('admin');
     renderDeptGrid(groups);
   }
 
