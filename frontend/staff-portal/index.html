@@ -4637,8 +4637,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   let gdArmed = null, gdCur = null, gdVisitRid = null, gdWrites = 0;
   function gdNote(c) {   // counts real saves (not drafts) so we know when a form was completed
-    const n = (c && c.constructor && c.constructor.name) || '', i = (c && (c.input || c.i)) || {};
-    if (!/Put|Update|Delete|Batch|Transact/.test(n)) return;
+    const i = (c && (c.input || c.i)) || {};
+    if (!(i.Item || i.UpdateExpression || i.RequestItems || i.TransactItems)) return;   // a write, whatever the SDK calls its classes (names are mangled in the minified bundle)
     if (i.Item && i.Item.record_type && ['form-draft', 'draft', 'rx-draft'].includes(i.Item.record_type.S)) return;
     if (i.UpdateExpression && /cleared_at/.test(i.UpdateExpression)) return;
     if (i.TableName === 'vidacare-form-drafts') return;
@@ -4757,7 +4757,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v45';
+  const PORTAL_VERSION = 'v46';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
