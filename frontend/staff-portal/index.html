@@ -4775,9 +4775,11 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const c = { ...armed, w0: gdWrites, snap: '', live: null }, rec = gxFind(c), cancel = el.querySelector('#' + GX_CONT[armed.cont]);
     if (rec) { let o = {}; try { o = JSON.parse(rec.data_json || '{}'); } catch (e) { /* damaged */ } gdApply(el, o); c.restored = true; const fd = el.querySelector('.fd-form') || el; fd.insertAdjacentHTML('afterbegin', `<div class="notice" id="gxBanner">Draft restored from ${fmtDate(rec.saved_at)}. It is not saved to a record until you save it. <a class="lnk" id="gxDiscard">Discard the draft and start again</a></div>`); }
     else c.snap = JSON.stringify(gdCapture(el));
-    const btn = '<button class="btn-sm ghost" id="gxSave" type="button" style="margin-right:6px">Save draft</button>';
+    const btn = '<button class="btn-sm ghost" id="gxSave" data-gxsave="1" type="button" style="margin-right:6px">Save draft</button>';
     if (cancel) { cancel.insertAdjacentHTML('beforebegin', btn); cancel.addEventListener('click', () => { c.cancelled = true; }, true); } else (el.querySelector('.fd-form') || el).insertAdjacentHTML('beforeend', `<div style="margin-top:10px">${btn}</div>`);
-    el.querySelector('#gxSave').onclick = () => gxPut(c, gdCapture(el), false);
+    const lastBtn = [...el.querySelectorAll('button:not([data-gxsave])')].pop();   // also next to the main save button at the bottom
+    if (lastBtn && lastBtn !== cancel) lastBtn.insertAdjacentHTML('afterend', '<button class="btn-sm ghost" data-gxsave="1" type="button" style="margin-left:8px">Save draft</button>');
+    el.querySelectorAll('[data-gxsave]').forEach(bt => { bt.onclick = () => gxPut(c, gdCapture(el), false); });
     const dc = el.querySelector('#gxDiscard'); if (dc) dc.onclick = async () => { c.cancelled = true; await gxDelete(c); GX_OPEN[c.kind](c.ctx); };
     gxCur = c;
   }
