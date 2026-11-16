@@ -361,7 +361,11 @@ module "iam_postnatal" {
     { sid = "PostnatalRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.postnatal_records.arn}", "${aws_dynamodb_table.postnatal_records.arn}/index/*"] },
     { sid = "LabRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
     { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
-    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] }
+    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] },
+    { sid = "AntenatalRead", actions = local.read_actions, resource_arns = ["${aws_dynamodb_table.antenatal_records.arn}", "${aws_dynamodb_table.antenatal_records.arn}/index/*"] },
+    { sid = "LabRequestsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] },
+    { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
+    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] }
   ]
 }
 
