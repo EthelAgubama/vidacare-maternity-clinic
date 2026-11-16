@@ -4747,19 +4747,23 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     bgprice: c => bgPriceForm(c || undefined)
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
-  let gxIdentityId = '', gxOk = false, gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
+  let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
+  const PORTAL_VERSION = 'v42';
+  { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
   const gxFind = c => gxDrafts.find(d => d.draft_id === gxKey(c));
   const gxToast = (html, ok) => { let t = document.getElementById('gxToast'); if (!t) { t = document.createElement('div'); t.id = 'gxToast'; t.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:9999;max-width:90%'; document.body.appendChild(t); } t.innerHTML = `<div class="${ok ? 'success' : 'error-inline'}" style="box-shadow:0 4px 14px rgba(0,0,0,.18)">${html}</div>`; clearTimeout(t._t); t._t = setTimeout(() => { t.innerHTML = ''; }, 6000); };
   async function gxLoad() {
-    gxOk = false; gxDrafts = [];
+    gxOk = false; gxDrafts = []; gxErr = '';
     try {
-      await getClient(); if (!gxIdentityId) return;
+      await getClient();
+      if (!gxIdentityId && currentIdToken) { try { gxIdentityId = (await cognitoIdentityRequest('GetId', { IdentityPoolId: IDENTITY_POOL_ID, Logins: { [USER_POOL_PROVIDER]: currentIdToken } })).IdentityId || ''; } catch (e) { /* reported below */ } }
+      if (!gxIdentityId) { gxErr = 'could not read your sign-in identity'; return; }
       let key, items = [];
       do { const r = await (await getClient()).send(new QueryCommand({ TableName: GX_TABLE, KeyConditionExpression: 'owner = :o', ExpressionAttributeValues: { ':o': { S: gxIdentityId } }, ExclusiveStartKey: key })); items = items.concat((r.Items || []).map(unmarshal)); key = r.LastEvaluatedKey; } while (key);
       gxDrafts = items.filter(d => !d.cleared_at); gxOk = true;
-    } catch (e) { gxOk = false; }
+    } catch (e) { gxOk = false; gxErr = (e && e.message) || String(e); }
     gxStrip();
   }
   function gxEnter(slug) { gxDept = slug; gxCur = null; gxArmed = {}; gxOk = false; gxDrafts = []; if (!GX_NO.includes(slug)) gxLoad(); }
@@ -4789,7 +4793,11 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     if (c.live && JSON.stringify(c.live) !== c.snap) gxPut(c, c.live, true);          // she left it half-filled: keep it as a draft
   }
   function gxWatch() {
-    if (!gxOk || GX_NO.includes(gxDept)) return;
+    if (GX_NO.includes(gxDept)) return;
+    if (!gxOk) {   // say so, instead of silently showing no draft buttons
+      Object.keys(GX_CONT).forEach(cont => { const el = document.getElementById(cont); if (!el || el.style.display === 'none' || !el.querySelector('input, select, textarea') || el.querySelector('#gxOff')) return; const fd = el.querySelector('.fd-form') || el; fd.insertAdjacentHTML('afterbegin', `<div class="vit" id="gxOff" style="margin-bottom:8px;color:#8a5a00">Save draft is not available right now${gxErr ? ' (' + esc(gxErr.slice(0, 120)) + ')' : ''}. Finish this form before you leave it.</div>`); });
+      return;
+    }
     Object.keys(GX_CONT).forEach(cont => {
       const el = document.getElementById(cont); if (!el) return;
       const fields = el.style.display !== 'none' && el.querySelector('input, select, textarea');
