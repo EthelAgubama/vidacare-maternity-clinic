@@ -498,7 +498,7 @@
 
   async function getClient() {
     if (!currentCredentials) currentCredentials = await getAwsCredentials(currentIdToken);
-    if (!fdClient) fdClient = new DynamoDBClient({ region: REGION, credentials: currentCredentials });
+    if (!fdClient) { fdClient = new DynamoDBClient({ region: REGION, credentials: currentCredentials }); const s0 = fdClient.send.bind(fdClient); fdClient.send = c => { try { gdNote(c); } catch (e) { /* counting only */ } return s0(c); }; }
     return fdClient;
   }
 
@@ -3625,8 +3625,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   const anEddCond = pg => pg.edd ? { cond: '#st = :act AND edd = :old', condVals: { ':act': { S: 'active' }, ':old': { S: pg.edd } } } : { cond: '#st = :act AND attribute_not_exists(edd)', condVals: { ':act': { S: 'active' } } };
   const anDueTxt = pg => pg.edd ? anDate(pg.edd) : 'Due date pending';
   const anNext = pg => (pg.next_appt && pg.next_appt !== 'none') ? pg.next_appt : '';
-  const anShow = html => { const f = document.getElementById('anForm'); f.innerHTML = html; f.style.display = 'block'; f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-  const anClose = () => { const f = document.getElementById('anForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } anPick = null; };
+  const anShow = html => { gdLeaving('an'); const f = document.getElementById('anForm'); f.innerHTML = html; f.style.display = 'block'; gdAfterShow('an'); f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const anClose = () => { gdClosing('an'); const f = document.getElementById('anForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } anPick = null; };
   const anNote = (html, kind) => { const m = document.getElementById('anMsg'); if (m) m.innerHTML = `<div class="${kind === 'ok' ? 'success' : 'error-inline'}" style="margin-bottom:12px">${html}</div>`; };
   let anPick = null;
 
@@ -3797,6 +3797,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const waiting = anLabOf(pg.patient_id).filter(r => !['released', 'rejected'].includes(r.status));
     const rest = LAB_TESTS.filter(t => !AN_LAB_COMMON.includes(t));
     const box = t => `<label class="chk"><input type="checkbox" name="an_lt" value="${esc(t)}"> ${esc(t)}</label>`;
+    gdArm('an', 'labreq', rid, pg.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Request lab tests</h5>
       ${waiting.length ? `<div class="notice">Already waiting for this client: ${esc(waiting.map(r => r.test).join(', '))}. Tick them again only if a new sample is needed.</div>` : ''}
       <label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Usual antenatal tests</label><div class="grid3" style="margin:6px 0 12px">${AN_LAB_COMMON.map(box).join('')}</div>
@@ -3872,6 +3873,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     return `
     <div class="fd-wrap">
       <div id="anMsg"></div>
+      <div id="gdStrip_an"></div>
       <div class="data-card" id="anForm" style="display:none;"></div>
       <div class="ph-tabs">
         <button class="ph-tab on" data-antab="today">Today <span class="n" id="anTabToday" style="display:none"></span></button>
@@ -4265,7 +4267,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     doc.close(); setTimeout(() => { try { f.contentWindow.focus(); f.contentWindow.print(); } catch (e) { /* print not available */ } setTimeout(() => f.remove(), 3000); }, 300);
   }
 
-  function anRenderAll() { renderAnTabs(); renderAnToday(); renderAnMothers(); renderAnDue(); renderAnScans(); renderAnLabs(); renderAnRegister(); }
+  function anRenderAll() { gdStrip('an'); renderAnTabs(); renderAnToday(); renderAnMothers(); renderAnDue(); renderAnScans(); renderAnLabs(); renderAnRegister(); }
 
   function anFindRender() {
     const q = val('anFind').toLowerCase(), res = document.getElementById('anFindRes'); if (!res) return;
@@ -4308,6 +4310,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const p = anPat(pid); if (!p || !canAnc) return;
     const old = anActive(pid); if (old) { anNote(`${esc(p.full_name)} already has an open pregnancy booked on ${anDate(old.booked_date)}. Open her file to record a visit.`); return anFile(old.record_id); }
     const age = anAgeNum(p.date_of_birth), t = today10();
+    gdArm('an', 'book', pid, pid);
     anShow(`<div class="fd-form">${anBanner(pid, null)}
       ${age !== null && age < 18 ? '<div class="notice">She is under 18. This is a high-risk booking; plan hospital delivery and involve a senior midwife.</div>' : ''}
       <h5>Dates</h5><label class="chk" style="margin-bottom:10px"><input type="checkbox" id="an_unk"> Early pregnancy: her last period and due date are not known yet</label><div class="grid3">
@@ -4479,6 +4482,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   function mchForm(rid) {
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return;
+    gdArm('an', 'mch', rid, pg.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Record book details</h5><div class="vit">The same details as the Ghana MCH Record Book. Fill what you know now; come back to add the rest.</div>${mchHtml(pg, true)}
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="mcSave">Save details</button><button class="btn-sm ghost" id="anCancel">Cancel</button></div><div class="stamp">Recorded with your name and the time.</div></div>`);
     document.getElementById('anCancel').onclick = anClose;
@@ -4609,6 +4613,250 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const k = rxmK(d), host = document.getElementById(k === 'an' ? 'anPaneRx' : 'ldPaneRx'); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
     if (host.querySelector('textarea:focus')) return; await rxmRefresh(d); rxmLists(d);
   }
+
+  // ---- Drafts for every antenatal and labour form: Save draft, Resume, and automatic save on sign-out ----
+  const GD_LABEL = { admit: 'Admission in labour', obs: 'Labour observation', deliver: 'Birth record', refer: 'Referral', disch: 'Discharge', book: 'Booking', mch: 'Record book details', tests: 'Test results', scanreq: 'Scan request', scanres: 'Scan result', edd: 'Due date', close: 'Close pregnancy', labreq: 'Lab request' };
+  const GD = {
+    an: { table: () => ANC_TABLE, recs: () => anRecs, form: 'anForm', cancel: 'anCancel', note: (h, k) => anNote(h, k), close: () => anClose(), open: (m, c) => anOpen(m, c), render: () => anRenderAll(), strip: 'gdStrip_an' },
+    ld: { table: () => LD_TABLE, recs: () => ldRecs, form: 'ldForm', cancel: 'ldCancel', note: (h, k) => ldNote(h, k), close: () => ldClose(), open: (m, c) => ldOpen(m, c), render: () => ldRenderAll(), strip: 'gdStrip_ld' }
+  };
+  let gdArmed = null, gdCur = null, gdVisitRid = null, gdWrites = 0;
+  function gdNote(c) {   // counts real saves (not drafts) so we know when a form was completed
+    const n = (c && c.constructor && c.constructor.name) || '', i = (c && (c.input || c.i)) || {};
+    if (!/Put|Update|Delete|Batch|Transact/.test(n)) return;
+    if (i.Item && i.Item.record_type && ['form-draft', 'draft', 'rx-draft'].includes(i.Item.record_type.S)) return;
+    if (i.UpdateExpression && /cleared_at/.test(i.UpdateExpression)) return;
+    gdWrites++;
+  }
+  const gdArm = (dept, kind, ctx, pid) => { gdArmed = { dept, kind, ctx, pid }; };
+  const gdPrefix = () => 'fdraft#' + staffUser() + '#';
+  const gdRid = c => `${gdPrefix()}${c.kind}#${c.ctx}`;
+  const gdFind = c => GD[c.dept].recs().find(r => r.record_id === gdRid(c) && r.patient_id === c.pid && !r.cleared_at);
+  const gdMine = dept => GD[dept].recs().filter(r => String(r.record_id).startsWith(gdPrefix()) && !r.cleared_at).sort((x, y) => (y.saved_at || '').localeCompare(x.saved_at || ''));
+  function gdCapture(form) {
+    const o = {};
+    form.querySelectorAll('input, select, textarea').forEach(el => {
+      if (el.id === 'gdSave' || ['button', 'submit', 'file', 'password'].includes(el.type)) return;
+      const k = el.id || (el.name ? el.name + '#' + el.value : ''); if (!k) return;
+      o[k] = (el.type === 'checkbox' || el.type === 'radio') ? !!el.checked : el.value;
+    });
+    return o;
+  }
+  function gdApply(form, o) {
+    const els = () => [...form.querySelectorAll('input, select, textarea')];
+    for (let pass = 0; pass < 2; pass++) {
+      els().forEach(el => {
+        const k = el.id || (el.name ? el.name + '#' + el.value : ''); if (!k || !(k in o)) return;
+        if (el.type === 'checkbox' || el.type === 'radio') el.checked = !!o[k]; else if (el.tagName === 'SELECT') { if ([...el.options].some(op => op.value === o[k])) el.value = o[k]; } else el.value = o[k];
+        if (pass === 0) el.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+    }
+  }
+  // called from anShow/ldShow just before the old form is replaced
+  function gdLeaving(dept) {
+    const c = gdCur; if (!c || c.dept !== dept) return; gdCur = null;
+    if (gdWrites > c.w0) { gdClear(c); return; }   // she saved something while the form was open: it was completed
+    const form = document.getElementById(GD[dept].form); if (!form || !form.firstChild || c.cancelled) return;
+    if (JSON.stringify(gdCapture(form)) !== c.snap) gdPut(c, gdCapture(form), true);   // left a half-filled form: keep it as a draft
+  }
+  // called right after the new form is drawn
+  function gdAfterShow(dept) {
+    const form = document.getElementById(GD[dept].form), armed = gdArmed; gdArmed = null; gdCur = null;
+    if (!form || !armed || armed.dept !== dept) return;
+    const c = { ...armed, snap: '', w0: gdWrites }, cancel = document.getElementById(GD[dept].cancel);
+    const rec = gdFind(c);
+    if (rec) { let o = {}; try { o = JSON.parse(rec.data_json || '{}'); } catch (e) { /* damaged */ } gdApply(form, o); c.restored = true; const fd = form.querySelector('.fd-form'); if (fd) fd.insertAdjacentHTML('afterbegin', `<div class="notice" id="gdBanner">Draft restored from ${fmtDate(rec.saved_at)}. It is not part of her record until you save it. <a class="lnk" id="gdDiscard">Discard the draft and start again</a></div>`); }
+    c.snap = rec ? '' : JSON.stringify(gdCapture(form));
+    if (cancel) { cancel.insertAdjacentHTML('beforebegin', '<button class="btn-sm ghost" id="gdSave" type="button">Save draft</button>'); cancel.addEventListener('click', () => { if (gdCur) gdCur.cancelled = true; }, true); }
+    const sv = document.getElementById('gdSave'); if (sv) sv.onclick = () => gdPut(gdCur, gdCapture(document.getElementById(GD[dept].form)), false);
+    const dc = document.getElementById('gdDiscard'); if (dc) dc.onclick = async () => { gdCur = null; await gdClear(c); GD[dept].open(c.kind, c.ctx); };
+    gdCur = c;
+  }
+  // called when a form is closed. Closing by Cancel keeps any draft; any other close means it was saved to the record.
+  function gdClosing(dept) { const c = gdCur; if (!c || c.dept !== dept) return; gdCur = null; if (!c.cancelled) gdClear(c); }
+  async function gdClear(c) {
+    const x = gdFind(c); if (!x) return; const now = new Date().toISOString(); x.cleared_at = now;
+    try { await ddbUpdate({ table: GD[c.dept].table(), key: { patient_id: { S: c.pid }, record_id: { S: x.record_id } }, set: { cleared_at: now } }); } catch (e) { /* the record itself is saved */ }
+    gdStrip(c.dept);
+  }
+  async function gdPut(c, data, silent) {
+    if (!c) return false; const D = GD[c.dept], str = JSON.stringify(data);
+    if (!c.restored && str === c.snap) { if (!silent) D.note('Type something in the form first, then save the draft.'); return false; }
+    const p = fdPatients.find(x => x.patient_id === c.pid) || {}, now = new Date().toISOString(), rid = gdRid(c);
+    const raw = { patient_id: S(c.pid), record_id: S(rid), record_type: S('form-draft'), form_kind: S(c.kind), ctx: S(c.ctx), client_id: S(p.client_id), patient_name: S(p.full_name), data_json: S(str), saved_at: S(now), saved_by: S(staffName()), saved_by_username: S(staffUser()) };
+    const item = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
+    const btn = document.getElementById('gdSave'); if (btn && !silent) { btn.disabled = true; btn.textContent = 'Saving…'; }
+    try {
+      await (await getClient()).send(new PutItemCommand({ TableName: D.table(), Item: item }));
+      const recs = D.recs(), i = recs.findIndex(r => r.patient_id === c.pid && r.record_id === rid), u = unmarshal(item); if (i >= 0) recs[i] = u; else recs.push(u);
+      gdStrip(c.dept);
+      if (!silent) { if (gdCur === c) gdCur = null; D.close(); D.note(`Draft saved for <b>${esc(p.full_name || '')}</b> (${esc(GD_LABEL[c.kind] || c.kind)}) at ${fmtDate(now)}. It is not part of her record yet. Press <b>Resume</b> to continue.`, 'ok'); }
+      return true;
+    } catch (err) { if (!silent) D.note(`Could not save the draft: ${esc(err.message)}`); return false; }
+    finally { if (btn && !silent) { btn.disabled = false; btn.textContent = 'Save draft'; } }
+  }
+  function gdStrip(dept) {
+    const el = document.getElementById(GD[dept].strip); if (!el) return; const ds = gdMine(dept);
+    el.innerHTML = ds.length ? `<div class="notice" style="margin-bottom:12px"><b>Your saved drafts</b> <span class="vit">only you can see these. Nothing here is part of a client's record yet.</span>${ds.map(x => `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><span><b>${esc(x.patient_name || '')}</b> <span class="cid">${esc(x.client_id || '')}</span> · ${esc(GD_LABEL[x.form_kind] || x.form_kind)} · saved ${fmtDate(x.saved_at)}</span><button class="btn-sm b-rel" data-gdres="${dept}|${esc(x.patient_id)}|${esc(x.record_id)}">Resume</button><button class="btn-sm ghost" data-gddis="${dept}|${esc(x.patient_id)}|${esc(x.record_id)}">Discard</button></div>`).join('')}</div>` : '';
+  }
+  document.addEventListener('click', e => {
+    const r = e.target.closest('[data-gdres]'), d = e.target.closest('[data-gddis]'); if (!r && !d) return;
+    const [dept, pid, rid] = (r || d).dataset[r ? 'gdres' : 'gddis'].split('|'), x = GD[dept].recs().find(q => q.patient_id === pid && q.record_id === rid); if (!x) return;
+    const c = { dept, kind: x.form_kind, ctx: x.ctx, pid };
+    if (r) { document.getElementById(dept === 'an' ? 'anMsg' : 'ldMsg').innerHTML = ''; GD[dept].open(c.kind, c.ctx); }
+    else if (confirm('Discard this draft?')) gdClear(c);
+  });
+  // Sign-out: save whatever is open as a draft first, so the next person on this computer starts clean and nothing is lost.
+  let gdOut = false;
+  async function gdSignOut() {
+    const jobs = [];
+    ['an', 'ld'].forEach(dept => { const c = gdCur && gdCur.dept === dept ? gdCur : null, form = document.getElementById(GD[dept].form); if (c && form && form.firstChild && !c.cancelled && JSON.stringify(gdCapture(form)) !== c.snap) jobs.push(gdPut(c, gdCapture(form), true)); });
+    if (gdVisitRid && document.getElementById('av_wt')) jobs.push(anSaveDraft(gdVisitRid, true));
+    ['antenatal', 'labour-delivery'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
+    await Promise.race([Promise.allSettled(jobs), new Promise(r => setTimeout(r, 5000))]);
+  }
+  document.addEventListener('click', e => {
+    if (gdOut || !e.target.closest('#logoutBtn')) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    gdSignOut().finally(() => { gdOut = true; document.getElementById('logoutBtn').click(); });
+  }, true);
+
+  // ---- Referral letter (same look as the lab report: logo, watermark, clinic footer, signatures) ----
+  const refD = iso => iso ? new Date(iso).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '';
+  const refRxText = r => { let it = []; try { it = JSON.parse(r.items_json || '[]'); } catch (e) { /* ignore */ } return it.map(i => [i.n, i.d, i.f, i.u].filter(Boolean).join(', ')).join('; '); };
+  async function refSvgPng(svg) {
+    const m = svg.match(/viewBox="0 0 (\d+) (\d+)"/); if (!m) return null; const W = +m[1], H = +m[2];
+    const s = svg.replace('<svg ', `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" `).replace(/style="[^"]*"/, '');
+    const url = URL.createObjectURL(new Blob([s], { type: 'image/svg+xml' }));
+    try {
+      const img = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = url; });
+      const c = document.createElement('canvas'); c.width = W * 2; c.height = H * 2; const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+      return { data: c.toDataURL('image/png'), w: W, h: H };
+    } catch (e) { return null; } finally { URL.revokeObjectURL(url); }
+  }
+  // src: { pid, rf: { to, reason, at, transport, accompanied, phoned, condition, treatment, by, byAt, urgency }, adm?, obs?, visit? }
+  async function refBuild(src) {
+    const { pid, rf, adm, obs, visit } = src, now = new Date().toISOString();
+    const p = fdPatients.find(x => x.patient_id === pid) || {};
+    let anc = [], labs = [], rx = [];
+    try { anc = (await scanTable(ANC_TABLE)).filter(r => r.patient_id === pid); } catch (e) { /* no access */ }
+    try { labs = (await scanTable(LAB_TABLE)).filter(r => r.patient_id === pid && r.status === 'released').sort((a, b) => (b.requested_at || '').localeCompare(a.requested_at || '')).slice(0, 12); } catch (e) { labs = []; }
+    try { rx = (await scanTable(RX_TABLE)).filter(r => r.patient_id === pid && ['dispensed', 'partial'].includes(r.status)).sort((a, b) => (b.prescribed_at || '').localeCompare(a.prescribed_at || '')).slice(0, 10); } catch (e) { rx = []; }
+    const ident = [['Name', p.full_name || '—'], ['Client ID', p.client_id || '—'], ['Sex', p.sex ? p.sex.charAt(0).toUpperCase() + p.sex.slice(1) : 'Female'], ['Age', p.date_of_birth ? ageOf(p.date_of_birth) : '—'], ['Date', refD(rf.at || now)]];
+    const meta = [['Referred to', rf.to], ['Urgency', rf.urgency], ['Main reason', rf.reason], ['Time leaving', rf.at ? fmtDate(rf.at) : ''], ['Transport', rf.transport], ['Accompanied by', rf.accompanied], ['Receiving facility phoned ahead', rf.phoned],
+      ['Allergies', p.allergies || 'None recorded'], ['Phone', p.phone_number], ['Referred by', rf.by ? rf.by + (rf.byAt ? ' — ' + fmtDate(rf.byAt) : '') : '']].filter(m => m[1]);
+    const sections = [];
+    if (rf.condition) sections.push({ h: 'Condition on leaving', text: rf.condition });
+    if (rf.treatment) sections.push({ h: 'Treatment given before leaving', text: rf.treatment });
+    if (visit) {
+      const v = visit; sections.push({ h: 'This antenatal visit', kv: [['Date', anDate(v.visit_date)], ['Weeks', anGaTxt(Number(v.ga_days))], ['Blood pressure', v.bp_sys ? v.bp_sys + '/' + v.bp_dia : ''], ['Weight', v.weight ? v.weight + ' kg' : ''], ['Fundal height', v.fundal ? v.fundal + ' cm' : ''], ['Baby heart rate', v.fhr], ['Presentation', v.presentation], ['Urine protein', v.urine_protein], ['Haemoglobin', v.hb], ['Malaria test', v.malaria], ['Danger signs', String(v.danger || '').split('|').filter(Boolean).join(', ')], ['Complaints', v.complaints], ['Findings and plan', v.plan]].filter(k => k[1]) });
+    }
+    if (adm) {
+      const a = adm;
+      sections.push({ h: 'This labour', kv: [['Admitted', fmtDate(a.admitted_at)], ['Arrived', a.arrival], ['Why she came', a.reason], ['Labour started', a.onset], ['Waters', a.membranes], ['Obstetric history', 'Gravida ' + (a.gravida || '?') + ', Para ' + (a.para || 0) + ', Abortus ' + (a.abortions || 0)], ['Due date', a.edd ? anDate(a.edd) : 'Not known'], ['Antenatal care here', a.booked_here === 'yes' ? 'Yes, ' + (a.anc_contacts || 0) + ' contacts' : 'No (unbooked)'], ['Blood group', a.blood_group], ['Haemoglobin', a.hb], ['HIV', a.hiv], ['Hepatitis B (HBsAg)', a.hepb], ['Syphilis', a.syphilis], ['Risk factors', String(a.risk || '').split('|').filter(Boolean).join(', ')], ['Plan on admission', a.plan]].filter(k => k[1]) });
+      const list = (obs || []);
+      if (list.length) {
+        let cx = 0; const carried = list.map(o => { if (o.cervix !== undefined && o.cervix !== '') cx = Number(o.cervix); return cx; });
+        sections.push({ h: 'Labour observations', head: ['Time', 'Cervix', 'Baby heart', 'Contractions', 'BP', 'Pulse / Temp', 'Liquor', 'Medicine'], widths: [26, 22, 20, 22, 18, 22, 26, 26],
+          body: list.map((o, i) => { const al = ldObsAlerts(o, carried[i]); return { flag: al.red.length > 0, c: [fmtDate(o.obs_at), o.cervix !== undefined && o.cervix !== '' ? o.cervix + ' cm' + (o.progress ? ' (' + o.progress.toLowerCase() + ')' : '') : 'routine', [o.fhr, o.decel && o.decel !== 'None' ? o.decel + ' decel.' : ''].filter(Boolean).join(' '), [o.contr, o.contr_sec ? 'x ' + o.contr_sec + 's' : ''].filter(Boolean).join(' '), o.bp_sys ? o.bp_sys + '/' + o.bp_dia : '', [o.pulse, o.temp ? o.temp + ' C' : ''].filter(Boolean).join(' / '), o.liquor || '', [o.oxytocin && o.oxytocin !== 'No' ? 'Oxytocin' : '', o.medicine].filter(Boolean).join('; ')] }; }) });
+        const imgs = []; for (const s of ((ldChart(list) + ldCharts(list)).match(/<svg[\s\S]*?<\/svg>/g) || []).slice(0, 2)) { const im = await refSvgPng(s); if (im) imgs.push(im); }
+        if (imgs.length) sections.push({ h: 'Labour charts (cervix, baby\'s heart rate)', images: imgs });
+      }
+    }
+    // antenatal history
+    const pregs = anc.filter(r => String(r.record_id).startsWith('preg#')).sort((a, b) => (b.booked_date || '').localeCompare(a.booked_date || '')), pg = pregs.find(x => x.status === 'active') || pregs[0];
+    if (pg) {
+      const key = String(pg.record_id).slice(5);
+      sections.push({ h: 'Antenatal history at this clinic', kv: [['Booked', anDate(pg.booked_date)], ['Register no.', pg.reg_no], ['Due date', pg.edd ? anDate(pg.edd) : ''], ['Last period', pg.lmp ? anDate(pg.lmp) : ''], ['Obstetric history', 'Gravida ' + (pg.gravida || '?') + ', Para ' + (pg.para || 0) + ', Abortus ' + (pg.abortions || 0)], ['Blood group', pg.blood_group], ['Height', pg.height ? pg.height + ' cm' : ''], ['HIV screening', pg.hiv && pg.hiv !== 'Not done' ? pg.hiv : ''], ['Hepatitis B (HBsAg)', pg.hepb && pg.hepb !== 'Not done' ? pg.hepb : ''], ['Syphilis', pg.syphilis && pg.syphilis !== 'Not done' ? pg.syphilis : ''], ['Medical and obstetric history', [String(pg.risk_hx || '').split('|').filter(Boolean).join(', '), pg.hx_other].filter(Boolean).join('; ')]].filter(k => k[1]) });
+      const vis = anc.filter(r => String(r.record_id).startsWith('anc#' + key + '#')).sort((a, b) => (a.visit_date || '').localeCompare(b.visit_date || ''));
+      if (vis.length) sections.push({ h: 'Antenatal visits', head: ['Date', 'Weeks', 'BP', 'Weight', 'Findings', 'Plan'], widths: [22, 16, 16, 16, 62, 52],
+        body: vis.map(v => ({ flag: !!v.danger, c: [anDate(v.visit_date), anGaTxt(Number(v.ga_days)), v.bp_sys ? v.bp_sys + '/' + v.bp_dia : '', v.weight ? v.weight + ' kg' : '', [v.fundal ? 'Fundal ' + v.fundal + ' cm' : '', v.fhr ? 'Heart rate ' + v.fhr : '', v.presentation, v.oedema ? 'Swelling ' + v.oedema : '', v.urine_protein ? 'Urine protein ' + v.urine_protein : '', v.hb ? 'Hb ' + v.hb : '', v.malaria ? 'Malaria ' + v.malaria : '', v.danger ? 'DANGER SIGNS: ' + String(v.danger).split('|').join(', ') : ''].filter(Boolean).join('; '), v.plan || ''] })) });
+      const scans = anc.filter(r => String(r.record_id).startsWith('scan#' + key + '#') && r.status === 'done').sort((a, b) => (a.scan_date || '').localeCompare(b.scan_date || ''));
+      if (scans.length) sections.push({ h: 'Scans', head: ['Date', 'Scan', 'Findings'], widths: [24, 40, 118], body: scans.map(x => ({ c: [anDate(x.scan_date), x.scan_type, x.findings || ''] })) });
+    } else sections.push({ h: 'Antenatal history at this clinic', text: 'No antenatal record at this clinic.' });
+    // lab results
+    const labRows = [];
+    for (const l of labs) {
+      try { const res = await (await getClient()).send(new GetItemCommand({ TableName: RESULTS_TABLE, Key: { patient_id: { S: pid }, record_id: { S: l.request_id } } })); const x = res.Item ? unmarshal(res.Item) : null; if (!x) continue; const pl = parseParams(x);
+        labRows.push({ flag: /critical/i.test(x.flag || ''), c: [refD(l.released_at || l.requested_at), l.test, pl.length ? pl.map(q => [q.n, [q.v, q.u].filter(Boolean).join(' '), q.f && q.f !== 'normal' ? '(' + q.f + ')' : ''].filter(Boolean).join(' ')).join('; ') : [[x.result_value, x.unit].filter(Boolean).join(' ') || x.result_text, x.flag && x.flag !== 'normal' ? '(' + x.flag + ')' : ''].filter(Boolean).join(' ')] });
+      } catch (e) { /* skip */ }
+    }
+    if (labRows.length) sections.push({ h: 'Laboratory results', head: ['Date', 'Test', 'Result'], widths: [24, 44, 114], body: labRows });
+    const cons = fdConsults.filter(c => c.patient_id === pid).slice(0, 8);
+    if (cons.length) sections.push({ h: 'Doctor consultations', head: ['Date', 'Diagnosis', 'Complaints and findings', 'Treatment plan'], widths: [22, 40, 62, 58], body: cons.map(c => ({ c: [refD(c.entered_at), c.diagnosis || '', [c.complaints, c.examination].filter(Boolean).join('. '), [c.treatment_plan, c.prescriptions].filter(Boolean).join('. ')] })) });
+    if (rx.length) sections.push({ h: 'Medicines given at this clinic', head: ['Date', 'Medicines', 'Status'], widths: [24, 128, 30], body: rx.map(r => ({ c: [refD(r.prescribed_at), refRxText(r), r.status === 'dispensed' ? 'Given' : 'Partly given'] })) });
+    const sign = [['Referred by', rf.by || staffName()]];
+    return { title: 'Referral letter', ident, meta, sections, sign, receive: true, file: `Referral_${String(p.client_id || p.full_name || 'client').replace(/[^A-Za-z0-9-]+/g, '_')}_${(rf.at || now).slice(0, 10)}`,
+      footer: `Printed by ${staffName()} on ${fmtDate(now)}. Confidential: this letter contains personal health information for the receiving clinician only. Please send back a note of her condition and treatment.` };
+  }
+  async function refPdf(m) {
+    if (!(window.jspdf && window.jspdf.jsPDF && window.jspdf.jsPDF.API.autoTable)) {
+      if (!(window.jspdf && window.jspdf.jsPDF)) await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+      await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js');
+    }
+    const doc = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' }), logo = await getLogo(), wmDone = new Set();
+    const wm = () => { if (!logo) return; const n = doc.internal.getCurrentPageInfo().pageNumber; if (wmDone.has(n)) return; wmDone.add(n); const size = 125, h = size * logo.h / logo.w; doc.saveGraphicsState(); doc.setGState(new doc.GState({ opacity: 0.07 })); doc.addImage(logo.data, 'JPEG', (210 - size) / 2, (297 - h) / 2, size, h); doc.restoreGraphicsState(); };
+    wm(); let tx = 14;
+    if (logo) { const lh = 20, lw = lh * logo.w / logo.h; doc.addImage(logo.data, 'JPEG', 14, 9, lw, lh); tx = 14 + lw + 5; }
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(18); doc.setTextColor(27, 94, 32); doc.text('VidaCare Maternity Home', tx, 18);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(11); doc.setTextColor(90); doc.text(m.title, tx, 24.5); doc.setFont('helvetica', 'italic'); doc.setFontSize(9.5); doc.setTextColor(184, 134, 11); doc.text(pdfSafe(CLINIC.motto), tx, 29.5); doc.setFont('helvetica', 'normal');
+    doc.setDrawColor(27, 94, 32); doc.setLineWidth(0.5); doc.line(14, 32, 196, 32); doc.setFillColor(232, 245, 233); doc.roundedRect(14, 36, 182, 17, 2, 2, 'F');
+    let cx = 17; [58, 32, 20, 24, 40].forEach((w, i) => { const it = m.ident[i]; doc.setFont('helvetica', 'normal'); doc.setFontSize(7.5); doc.setTextColor(95); doc.text(pdfSafe(it[0]), cx, 41.5); doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(20); const ln = doc.splitTextToSize(pdfSafe(it[1]), w - 4); doc.text(ln[0], cx, 47.5); if (ln[1]) { doc.setFontSize(8.5); doc.text(ln[1], cx, 51.2); } cx += w; });
+    doc.setFont('helvetica', 'normal');
+    doc.autoTable({ margin: { bottom: 26 }, startY: 57, body: m.meta.map(k => [pdfSafe(k[0]), pdfSafe(k[1])]), theme: 'plain', styles: { fontSize: 9.5, cellPadding: 1.2, textColor: 20 }, columnStyles: { 0: { cellWidth: 52, textColor: 90 } }, willDrawPage: wm });
+    let y = doc.lastAutoTable.finalY + 4;
+    const room = need => { if (y + need > 270) { doc.addPage(); wm(); y = 20; } };
+    const heading = t => { room(14); doc.setFont('helvetica', 'bold'); doc.setFontSize(11); doc.setTextColor(27, 94, 32); doc.text(pdfSafe(t), 14, y + 4); doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(14, y + 6, 196, y + 6); y += 8; doc.setFont('helvetica', 'normal'); };
+    for (const s of m.sections) {
+      heading(s.h);
+      if (s.text) { doc.setFontSize(10); doc.setTextColor(20); const t = doc.splitTextToSize(pdfSafe(s.text), 180); room(t.length * 5 + 2); doc.text(t, 14, y + 3); y += t.length * 5 + 4; }
+      else if (s.kv) { doc.autoTable({ margin: { bottom: 26 }, startY: y, body: s.kv.map(k => [pdfSafe(k[0]), pdfSafe(k[1])]), theme: 'plain', styles: { fontSize: 9.5, cellPadding: 1, textColor: 20 }, columnStyles: { 0: { cellWidth: 52, textColor: 90 } }, willDrawPage: wm }); y = doc.lastAutoTable.finalY + 4; }
+      else if (s.head) { doc.autoTable({ margin: { bottom: 26 }, startY: y, head: [s.head.map(pdfSafe)], body: s.body.map(r => r.c.map(v => pdfSafe(v))), theme: 'grid', willDrawPage: wm, headStyles: { fillColor: [27, 94, 32], textColor: 255, lineColor: [27, 94, 32], fontSize: 8.5 }, styles: { fontSize: 8.5, cellPadding: 1.6, lineColor: [200, 200, 200], lineWidth: 0.2, textColor: 20, overflow: 'linebreak' }, columnStyles: Object.fromEntries((s.widths || []).map((w, i) => [i, { cellWidth: w }])), didParseCell: d => { if (d.section === 'body' && s.body[d.row.index] && s.body[d.row.index].flag) { d.cell.styles.textColor = [198, 40, 40]; d.cell.styles.fontStyle = 'bold'; } } }); y = doc.lastAutoTable.finalY + 4; }
+      else if (s.images) { for (const im of s.images) { const w = 150, h = w * im.h / im.w; room(h + 2); doc.addImage(im.data, 'PNG', 14, y, w, h); y += h + 3; } }
+    }
+    room(30); let sy = y + 14; if (sy > 255) { doc.addPage(); wm(); sy = 40; }
+    doc.setDrawColor(60); doc.setLineWidth(0.3); doc.setFontSize(9.5);
+    const sg = m.sign.slice(); if (m.receive) sg.push(['Received by (receiving facility)', '']);
+    sg.forEach((q, i) => { const x0 = 14 + i * 95; doc.line(x0, sy, x0 + 82, sy); doc.setTextColor(20); doc.text(pdfSafe(q[0] + (q[1] ? ': ' + q[1] : '')), x0, sy + 5); doc.setTextColor(120); doc.setFontSize(8.5); doc.text('Name, signature / stamp', x0, sy + 10); doc.setFontSize(9.5); });
+    doc.setFontSize(8.5); doc.setTextColor(110); doc.text(doc.splitTextToSize(pdfSafe(m.footer), 180), 14, sy + 20);
+    const pages = doc.getNumberOfPages();
+    for (let i = 1; i <= pages; i++) { doc.setPage(i); doc.setDrawColor(200); doc.setLineWidth(0.2); doc.line(14, 280, 196, 280); doc.setFontSize(7.5); doc.setTextColor(95); let fy = 284.5; clinicLines().forEach(l => { doc.splitTextToSize(pdfSafe(l), 182).forEach(part => { doc.text(part, 105, fy, { align: 'center' }); fy += 3.6; }); }); doc.text(`Page ${i} of ${pages}`, 196, 294.5, { align: 'right' }); }
+    doc.save(m.file + '.pdf'); return doc;
+  }
+  async function refPrint(m, w) {
+    const logo = await getLogo(), logoSrc = logo ? logo.data : LOGO_FALLBACK, sec = m.sections.map(s => `<h3>${esc(s.h)}</h3>` + (s.text ? `<p>${esc(s.text)}</p>` : s.kv ? `<table class="meta"><tbody>${s.kv.map(k => `<tr><td class="k">${esc(k[0])}</td><td>${esc(k[1])}</td></tr>`).join('')}</tbody></table>` : s.head ? `<table><thead><tr>${s.head.map(h => `<th>${esc(h)}</th>`).join('')}</tr></thead><tbody>${s.body.map(r => `<tr class="${r.flag ? 'red' : ''}">${r.c.map(v => `<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table>` : s.images ? s.images.map(im => `<img class="ch" src="${im.data}" alt="">`).join('') : '')).join('');
+    const sg = m.sign.slice(); if (m.receive) sg.push(['Received by (receiving facility)', '']);
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(m.file)}</title>
+<style>body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:32px;font-size:12.5px}.hd{display:flex;align-items:center;gap:16px;margin-bottom:16px;border-bottom:2px solid #1B5E20;padding-bottom:12px}.hd img{height:64px;width:auto}h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}h3{color:#1B5E20;font-size:14px;margin:16px 0 4px;border-bottom:1px solid #ccc;padding-bottom:2px}
+table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #bbb;padding:4px 6px;text-align:left;vertical-align:top;font-size:11.5px}th{background:#E8F5E9}tr.red td{color:#C62828;font-weight:700}.idrow{display:flex;gap:6px;background:#E8F5E9;border-radius:8px;padding:10px 14px;margin-bottom:10px}.idrow div{flex:1}.idrow div:first-child{flex:2}.idrow small{display:block;color:#555;font-size:10.5px}.idrow b{font-size:14px}
+.meta td{border:none;padding:2px 14px 2px 0;font-size:12.5px}.meta td.k{color:#555;width:190px}img.ch{width:70%;display:block;margin:6px 0}.wm{position:fixed;top:50%;left:50%;width:62%;transform:translate(-50%,-50%);opacity:.07;z-index:-1}.sig{display:flex;gap:40px;margin-top:44px}.sig div{flex:1;border-top:1px solid #333;padding-top:4px;font-size:12px}.sig small{color:#666}
+.contact{position:fixed;bottom:0;left:0;right:0;text-align:center;font-size:11px;color:#555;border-top:1px solid #ccc;padding:6px 20px;background:#fff}.foot{margin-top:22px;font-size:11px;color:#555}.btn{margin-top:14px;padding:8px 16px}@media print{.btn{display:none}}</style></head><body>
+<img class="wm" src="${logoSrc}" alt=""><div class="hd"><img src="${logoSrc}" alt=""><div><h1>${esc(CLINIC.name)}</h1><div class="sub">${esc(m.title)}</div><div class="sub" style="font-size:11.5px;font-style:italic;color:#B8860B">${esc(CLINIC.motto)}</div></div></div>
+<div class="idrow">${m.ident.map(q => `<div><small>${esc(q[0])}</small><b>${esc(q[1])}</b></div>`).join('')}</div>
+<table class="meta"><tbody>${m.meta.map(k => `<tr><td class="k">${esc(k[0])}</td><td>${esc(k[1])}</td></tr>`).join('')}</tbody></table>${sec}
+<div class="sig">${sg.map(q => `<div>${esc(q[0])}${q[1] ? ': <b>' + esc(q[1]) + '</b>' : ''}<br><small>Name, signature / stamp</small></div>`).join('')}</div><div class="foot">${esc(m.footer)}</div><button class="btn" onclick="window.print()">Print</button>
+<div style="height:90px"></div>${clinicLines().length ? `<div class="contact">${clinicLines().map(esc).join('<br>')}</div>` : ''}</body></html>`);
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 500);
+  }
+  function refSource(kind, id) {
+    if (kind === 'ld') {
+      const a = ldAdms().find(x => x.record_id === id), r = a && ldRef(a); if (!r) return null;
+      return { pid: a.patient_id, adm: a, obs: ldObs(a), rf: { to: r.referred_to, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: r.condition, treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
+    }
+    const v = anRecs.find(x => x.record_id === id); if (!v || !v.referred_to) return null;
+    return { pid: v.patient_id, visit: v, rf: { to: v.referred_to, reason: v.referred_reason, at: v.entered_at, condition: [v.complaints && 'Complaints: ' + v.complaints, v.plan && 'Findings and plan: ' + v.plan].filter(Boolean).join('\n'), by: v.entered_by, byAt: v.entered_at } };
+  }
+  async function refRun(kind, id, pdf, btn) {
+    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : anNote; if (!src) return note('The referral could not be found.');
+    const w = pdf ? null : window.open('', '_blank'); if (!pdf && !w) return alert('Please allow pop-ups for this page to print the letter.');
+    const t = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = pdf ? 'Preparing PDF…' : 'Preparing…'; }
+    try { const m = await refBuild(src); if (pdf) await refPdf(m); else await refPrint(m, w); }
+    catch (err) { if (w) w.close(); note(`Could not make the letter: ${esc(err.message)}`); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = t; } }
+  }
+  const refBtns = (kind, id) => `<button class="btn-sm b-rel" data-refpdf="${kind}|${esc(id)}">Download letter (PDF)</button> <button class="btn-sm ghost" data-refprint="${kind}|${esc(id)}">Print letter</button>`;
+  document.addEventListener('click', e => { const b = e.target.closest('[data-refpdf],[data-refprint]'); if (!b) return; e.preventDefault(); const [k, id] = (b.dataset.refpdf || b.dataset.refprint).split('|'); refRun(k, id, !!b.dataset.refpdf, b); });
+
   // ---- Prescriptions in the client's file, and saved drafts ----
   const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery' };
   async function rxmHistory(boxId, pid) {
@@ -4626,22 +4874,23 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const k = rxmK(d), el = document.getElementById(`rxm_${k}_dr`); if (!el) return; const ds = rxmDrafts(d);
     el.innerHTML = ds.length ? `<div class="notice" style="margin-bottom:10px"><b>Saved drafts</b> <span class="vit">only you can see these. They are not sent to the pharmacy.</span>${ds.map(x => { let o = {}; try { o = JSON.parse(x.data_json || '{}'); } catch (e) { /* ignore */ } const n = (o.rows || []).length; return `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px"><span><b>${esc(x.patient_name)}</b> <span class="cid">${esc(x.client_id || '')}</span> · ${n} drug${n === 1 ? '' : 's'} · saved ${fmtDate(x.saved_at)}</span><button class="btn-sm b-rel" data-rxmres="${esc(x.patient_id)}">Resume</button><button class="btn-sm ghost" data-rxmdis="${esc(x.patient_id)}">Discard</button></div>`; }).join('')}</div>` : '';
   }
-  async function rxmSaveDraft(d) {
+  async function rxmSaveDraft(d, silent) {
     const k = rxmK(d), s = rxmS(d), msg = d === 'antenatal' ? anNote : ldNote, sel = val(`rxm_${k}_c`);
     clearErrs(document.getElementById('rxm_' + k + '_c').closest('.data-card'));
-    if (!sel) return showErrs([[`rxm_${k}_c`, 'Choose the client first.']]);
+    if (!sel) return silent ? false : showErrs([[`rxm_${k}_c`, 'Choose the client first.']]);
     const rows = s.rows.filter(rxFilled), notes = (document.getElementById(`rxm_${k}_notes`).value || '').trim();
-    if (!rows.length && !notes) return msg('Type something in the prescription first, then save the draft.');
-    const [pid, ctx] = sel.split('|'), p = fdPatients.find(x => x.patient_id === pid) || {}, btn = document.getElementById(`rxm_${k}_draft`); btn.disabled = true; btn.textContent = 'Saving…';
+    if (!rows.length && !notes) return silent ? false : msg('Type something in the prescription first, then save the draft.');
+    const [pid, ctx] = sel.split('|'), p = fdPatients.find(x => x.patient_id === pid) || {}, btn = document.getElementById(`rxm_${k}_draft`); if (!silent) { btn.disabled = true; btn.textContent = 'Saving…'; }
     try {
       const now = new Date().toISOString(), rid = rxmDraftPrefix() + pid;
       const raw = { patient_id: S(pid), record_id: S(rid), record_type: S('rx-draft'), client_id: S(p.client_id), patient_name: S(p.full_name), data_json: S(JSON.stringify({ pid, ctx, rows, notes })), saved_at: S(now), saved_by: S(staffName()), saved_by_username: S(staffUser()) };
       await (await getClient()).send(new PutItemCommand({ TableName: rxmTable(d), Item: Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined)) }));
       const recs = rxmRecs(d), i = recs.findIndex(r => r.patient_id === pid && r.record_id === rid); const u = unmarshal(Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined))); if (i >= 0) recs[i] = u; else recs.push(u);
+      if (silent) return true;
       s.rows = [rxBlank()]; s.pid = ''; document.getElementById(`rxm_${k}_notes`).value = ''; document.getElementById(`rxm_${k}_c`).value = ''; rxmRows(d); rxmAllergyBanner(d); rxmDraftStrip(d);
       msg(`Draft saved for <b>${esc(p.full_name)}</b> at ${fmtDate(now)}. It is not sent to the pharmacy. Press <b>Resume</b> to continue.`, 'ok');
-    } catch (err) { msg(`Could not save the draft: ${esc(err.message)}`); }
-    finally { btn.disabled = false; btn.textContent = 'Save draft'; }
+    } catch (err) { if (!silent) msg(`Could not save the draft: ${esc(err.message)}`); return false; }
+    finally { if (!silent) { btn.disabled = false; btn.textContent = 'Save draft'; } }
   }
   async function rxmClearDraft(d, pid) {
     const x = rxmDrafts(d).find(r => r.patient_id === pid); if (!x) return; const now = new Date().toISOString();
@@ -4710,6 +4959,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return;
     if (pg.status !== 'active') return anNote('This pregnancy is closed.');
     const cur = k => (pg[k] && pg[k] !== '') ? pg[k] : 'Not done';
+    gdArm('an', 'tests', rid, pg.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Update test results</h5>
       <div class="vit">Use this when results come back after booking, for example from the lab or a rapid test. Every change is kept in a log with your name and the time.</div>
       <div class="grid3" style="margin-top:8px">
@@ -4796,6 +5046,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
 
   // ---- Record an antenatal visit ----
   function anVisitForm(rid) {
+    gdVisitRid = rid;
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return;
     if (pg.status !== 'active') return anNote('This pregnancy is closed.');
     const t = today10(), sug = anSuggest(pg.edd, t), n = Number(pg.visits_n || 0) + 2;
@@ -4900,8 +5151,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       } catch (e) { await anRefresh(); anClose(); anRenderAll(); return anNote(`The visit was saved, but the client's summary line could not be updated: ${esc(e.message)}. Open her file to check.`); }
       await anClearDraft(pg);
       await anRefresh(); anClose(); anRenderAll();
-      const r = anRisk(anPregs.find(x => x.record_id === rid));
-      anNote(`Visit saved for <b>${esc(pg.patient_name)}</b>${Number.isFinite(ga) ? ' at ' + anGaTxt(ga) : ''}. ${nextAppt ? 'Next appointment ' + anDate(nextAppt) + '.' : 'No next appointment set.'}${r.hi.length ? ` <b>Check: ${esc(r.hi.join('; '))}</b>` : ''}`, r.hi.length ? '' : 'ok');
+      const val_ref = item.referred_to ? item.referred_to.S : ''; const r = anRisk(anPregs.find(x => x.record_id === rid));
+      anNote(`Visit saved for <b>${esc(pg.patient_name)}</b>${Number.isFinite(ga) ? ' at ' + anGaTxt(ga) : ''}. ${nextAppt ? 'Next appointment ' + anDate(nextAppt) + '.' : 'No next appointment set.'}${r.hi.length ? ` <b>Check: ${esc(r.hi.join('; '))}</b>` : ''}${item.referred_to ? `<div style="margin-top:8px"><b>Referred to ${esc(val_ref)}.</b> ${refBtns('an', item.record_id.S)}</div>` : ''}`, r.hi.length ? '' : 'ok');
     } catch (err) { btn.disabled = false; btn.textContent = 'Save visit'; anNote(`Could not save the visit: ${esc(err.message)}`); }
   }
 
@@ -4924,6 +5175,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${anRiskBadge(r)} ${active ? '<span class="st done">Open pregnancy</span>' : `<span class="st wait">Closed: ${esc(pg.outcome || '')}</span>`}
         ${active && canAnc ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button>${anCanLab() ? `<button class="btn-sm ghost" data-anact="labreq|${esc(pg.record_id)}">Request labs</button>` : ''}<button class="btn-sm ghost" data-anact="scanreq|${esc(pg.record_id)}">Request scan</button><button class="btn-sm ghost" data-anact="tests|${esc(pg.record_id)}">Update test results</button><button class="btn-sm ghost" data-anact="mch|${esc(pg.record_id)}">Record book details</button><button class="btn-sm ghost" data-anact="edd|${esc(pg.record_id)}">${pg.edd ? 'Change due date' : 'Set due date'}</button><button class="btn-sm ghost" data-anact="close|${esc(pg.record_id)}">Close pregnancy</button>` : ''}
+        ${(() => { const rv = vis.find(v => v.referred_to); return rv ? refBtns('an', rv.record_id) : ''; })()}
         <button class="btn-sm ghost" id="anCancel" style="margin-left:auto">Close file</button></div>
       <div class="vit">Flags are reminders to check from what was recorded. They do not replace your judgement.</div>${anRiskList(r)}
       <h5>Summary</h5><div class="grid3" style="font-size:13.5px;line-height:1.7">
@@ -4960,6 +5212,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     if (pg.status !== 'active') return anNote('This pregnancy is closed.');
     const t = today10(), ga = anGaDays(pg.edd);
     const open = anScansOf(pg).filter(x => x.status === 'requested');
+    gdArm('an', 'scanreq', rid, pg.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Request a scan</h5>
       ${open.length ? `<div class="notice">A scan is already waiting for this client: ${esc(open.map(x => x.scan_type).join(', '))}. Only add another if it is a different scan.</div>` : ''}
       <div class="grid3"><div class="f"><label>Scan wanted <span class="req">*</span></label><select id="sr_type"><option value="">Select…</option>${anOpts(AN_SCAN_TYPES, '')}</select></div>
@@ -4990,6 +5243,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const pg = anPregs.find(p => p.patient_id === x.patient_id && anKey(p) === String(x.record_id).split('#')[1]); if (!pg) return;
     if (x.status !== 'requested') return anNote('This scan request is no longer waiting.');
     const t = today10();
+    gdArm('an', 'scanres', rid, x.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Scan result: ${esc(x.scan_type)}</h5>
       <div class="vit">Asked for by ${esc(x.requested_by || '')}: ${esc(x.reason || '')}</div>
       <div class="grid3" style="margin-top:10px"><div class="f"><label>Scan date <span class="req">*</span></label><input id="sx_date" type="date" max="${t}" value="${t}"></div>
@@ -5082,6 +5336,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   // ---- Change due date / close pregnancy ----
   function anEddForm(rid) {
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return; const t = today10();
+    gdArm('an', 'edd', rid, pg.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>${pg.edd ? 'Change the due date' : 'Set the due date'}</h5>
       <div class="grid3"><div class="f"><label>New due date <span class="req">*</span></label><input id="ae_edd" type="date" value="${esc(pg.edd || '')}"></div>
       <div class="f"><label>Worked out from <span class="req">*</span></label><select id="ae_meth">${anOpts(['Last period', 'Ultrasound scan'], pg.edd_method)}</select></div></div>
@@ -5104,6 +5359,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   function anCloseForm(rid) {
     const pg = anPregs.find(x => x.record_id === rid); if (!pg || !canAnc) return; const t = today10();
+    gdArm('an', 'close', rid, pg.patient_id);
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}<h5>Close this pregnancy</h5>
       <div class="notice">Closing removes her from the Booked clients list and the due list. The file and every visit stay on record.</div>
       <div class="grid3"><div class="f"><label>Outcome <span class="req">*</span></label><select id="ac_out"><option value="">Select…</option>${anOpts(AN_OUT, '')}</select></div>
@@ -5196,8 +5452,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   const ldStatus = a => ldDis(a) ? 'discharged' : ldDel(a) ? 'delivered' : ldRef(a) ? 'referred' : 'labour';
   const ldPat = pid => fdPatients.find(p => p.patient_id === pid);
   const ldNow = () => new Date().toISOString();
-  const ldShow = html => { const f = document.getElementById('ldForm'); f.innerHTML = html; f.style.display = 'block'; f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
-  const ldClose = () => { const f = document.getElementById('ldForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } };
+  const ldShow = html => { gdLeaving('ld'); const f = document.getElementById('ldForm'); f.innerHTML = html; f.style.display = 'block'; gdAfterShow('ld'); f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const ldClose = () => { gdClosing('ld'); const f = document.getElementById('ldForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } };
   const ldNote = (html, kind) => { const m = document.getElementById('ldMsg'); if (m) m.innerHTML = `<div class="${kind === 'ok' ? 'success' : 'error-inline'}" style="margin-bottom:12px">${html}</div>`; };
   const ldSel = (id, list, cur) => `<select id="${id}">${anOpts(list, cur !== undefined ? cur : list[0])}</select>`;
   const ldSelBlank = (id, list) => `<select id="${id}"><option value="">Select…</option>${list.map(o => `<option>${esc(o)}</option>`).join('')}</select>`;
@@ -5261,6 +5517,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     return `
     <div class="fd-wrap">
       <div id="ldMsg"></div>
+      <div id="gdStrip_ld"></div>
       <div class="data-card" id="ldForm" style="display:none;"></div>
       <div class="ph-tabs">
         <button class="ph-tab on" data-ldtab="ward">In labour <span class="n" id="ldTabWard" style="display:none"></span></button>
@@ -5325,7 +5582,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       return `<div class="result-row" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border-bottom:1px solid #EFF3EC"><div><b>${esc(p.full_name)}</b> <span class="cid">${esc(p.client_id || '')}</span><div class="vit">${pg ? 'Booked for antenatal care here' : 'No open antenatal booking here'}${old ? ' · ' + old + ' earlier admission' + (old > 1 ? 's' : '') : ''}</div></div>
         <div>${act ? `<span class="st done">${ldStatus(act) === 'labour' ? 'In labour' : 'On the ward'}</span> <a class="lnk" data-ldact="file|${esc(act.record_id)}">Open file</a>` : (canLd ? `<button class="btn-sm b-rel" data-ldact="admit|${esc(p.patient_id)}">Admit in labour</button>` : '<span class="vit">Not admitted</span>')}</div></div>`; }).join('') || '<div class="vit" style="padding:10px">No client found. Register her at the front desk first.</div>';
   }
-  function ldRenderAll() { renderLdTabs(); renderLdWard(); renderLdPost(); renderLdRegister(); }
+  function ldRenderAll() { gdStrip('ld'); renderLdTabs(); renderLdWard(); renderLdPost(); renderLdRegister(); }
 
   // ---- Admit in labour ----
   function ldAdmitForm(pid) {
@@ -5334,6 +5591,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const pg = ldAncPregOf(pid), age = anAgeNum(p.date_of_birth), hx = pg ? String(pg.risk_hx || '').split('|') : [];
     const pre = { g: pg ? pg.gravida : '', p: pg ? pg.para : '', a: pg ? pg.abortions : '', edd: pg && pg.edd ? pg.edd : '' };
     const riskAuto = k => (k === 'Under 18 years' && age !== null && age < 18) || (k === 'Para 5 or more' && Number(pre.p) >= 5) || (k === 'No antenatal care' && !pg) || (k === 'Previous caesarean section' && hx.includes('Previous caesarean section')) || (k === 'Previous stillbirth or newborn death' && hx.includes('Previous stillbirth or newborn death')) || (k === 'Previous heavy bleeding after birth' && hx.includes('Previous heavy bleeding after birth'));
+    gdArm('ld', 'admit', pid, pid);
     ldShow(`<div class="fd-form">${anBanner(pid, null)}
       ${pg ? `<div class="notice" style="background:#EAF4E6;border-color:#B7D8AE;color:#1B5E20">Booked for antenatal care here (${esc(pg.reg_no || 'no register number')}), ${ldAncVisitsN(pg)} contact${ldAncVisitsN(pg) === 1 ? '' : 's'}, due ${pg.edd ? anDate(pg.edd) : 'date not known'}. Her booking details are filled in below: check them.</div>` : '<div class="notice">No open antenatal booking here: she is an unbooked client. Get her history and tests now.</div>'}
       <h5>Arrival</h5><div class="grid3">
@@ -5423,12 +5681,14 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const a = ldAdms().find(x => x.record_id === rid); if (!a || !canLd) return;
     if (ldStatus(a) !== 'labour') return ldNote('She is no longer in labour.');
     const obs = ldObs(a), last = obs[obs.length - 1], s = ldLabourState(a);
+    gdArm('ld', 'obs', rid, a.patient_id);
     ldShow(`<div class="fd-form">${anBanner(a.patient_id, null)}
       ${s.red.length ? `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#B71C1C"><b>Alerts now:</b> ${esc(s.red.join('; '))}</div>` : ''}
       <h5>Labour observation</h5><div class="vit">Last recorded ${last ? ldDur(ldHrs(last.obs_at, ldNow())) + ' ago, cervix ' + esc(last.cervix) + ' cm' : 'never'}. Active labour (5 cm or more): baby's heart rate every 30 minutes; second stage: every 5 to 10 minutes.</div>
       <div class="grid3" style="margin-top:8px">
         <div class="f"><label>Time <span class="req">*</span></label><input id="ob_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
-        <div class="f"><label>Cervix dilatation <span class="unit">cm, only if you examined her</span></label><input id="ob_cx" type="number" min="0" max="10" step="1" placeholder="leave empty for a routine check"></div>
+        <div class="f"><label>Cervix dilatation <span class="unit">cm, only if you examined her</span></label><select id="ob_cx"><option value="">No vaginal exam (routine check)</option>${[0,1,2,3,4,5,6,7,8,9,10].map(n => `<option value="${n}">${n} cm${n === 10 ? ' (fully dilated)' : ''}</option>`).join('')}</select></div>
+        <div class="f" id="ob_prw" style="display:none"><label>Progress since the last examination <span class="req">*</span></label><select id="ob_pr"><option value="Progressed">Progressed</option><option value="Not progressed">Not progressed</option></select><div class="vit" id="ob_prhint"></div></div>
         <div class="f"><label>Head, fifths above the brim</label>${ldSel('ob_desc', ['Not assessed', '5', '4', '3', '2', '1', '0'])}</div>
         <div class="f"><label>Baby's heart rate <span class="unit">per minute</span> <span class="req">*</span></label><input id="ob_fhr" type="number" min="60" max="220"></div>
         <div class="f"><label>Heart rate slowing (decelerations)</label>${ldSel('ob_dec', LD_DECEL)}</div>
@@ -5457,13 +5717,16 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     document.getElementById('ldCancel').onclick = ldClose;
     document.getElementById('ob_oxy').onchange = e => { document.getElementById('ob_oxyw').style.display = e.target.value === 'Yes' ? '' : 'none'; };
     const nxHint = () => { const cx = anNum('ob_cx'), c = cx !== null ? cx : s.cervix, m = Number(val('ob_next')), std = c >= 10 ? 10 : c >= 5 ? 30 : 240; document.getElementById('ob_nexthint').textContent = m > std ? `WHO: every ${std} minutes at this stage. The alert will use your chosen time.` : ''; }; document.getElementById('ob_next').onchange = nxHint; document.getElementById('ob_cx').oninput = nxHint; nxHint();
+    const lastCx0 = ldObs(a).filter(o => o.cervix !== undefined && o.cervix !== '').pop();
+    const prUp = () => { const cx = anNum('ob_cx'), w = document.getElementById('ob_prw'); if (cx === null || !lastCx0) { w.style.display = 'none'; nxHint(); return; } w.style.display = ''; document.getElementById('ob_pr').value = cx > Number(lastCx0.cervix) ? 'Progressed' : 'Not progressed'; document.getElementById('ob_prhint').textContent = `Last examination: ${lastCx0.cervix} cm (${fmtDate(lastCx0.obs_at)}). Now ${cx} cm.`; nxHint(); };
+    document.getElementById('ob_cx').onchange = prUp; prUp();
     document.getElementById('obSave').onclick = () => ldSaveObs(rid);
   }
   async function ldSaveObs(rid) {
     const a = ldAdms().find(x => x.record_id === rid), form = document.getElementById('ldForm'); clearErrs(form);
     const errs = [], at = ldIso('ob_at'), cx = anNum('ob_cx'), lastCxO = ldObs(a).filter(o => o.cervix !== undefined && o.cervix !== '').pop(), fhr = anNum('ob_fhr'), ct = anNum('ob_ct'), sys = anNum('ob_sys'), dia = anNum('ob_dia'), pul = anNum('ob_pul'), tmp = anNum('ob_tmp'), obs = ldObs(a), last = obs[obs.length - 1];
     if (!at) errs.push(['ob_at', 'Enter the time.']); else if (new Date(at) > new Date(Date.now() + 5 * 60000)) errs.push(['ob_at', 'The time cannot be in the future.']); else if (last && new Date(at) <= new Date(last.obs_at)) errs.push(['ob_at', 'This is not after the last observation (' + fmtDate(last.obs_at) + ').']); else if (new Date(at) < new Date(a.admitted_at)) errs.push(['ob_at', 'The time is before admission.']);
-    if (cx !== null && (cx < 0 || cx > 10)) errs.push(['ob_cx', 'Dilatation must be 0 to 10 cm, or leave it empty.']); else if (cx !== null && lastCxO && cx < Number(lastCxO.cervix)) errs.push(['ob_cx', `Dilatation is lower than the last recording (${lastCxO.cervix} cm). Check, or write the reason in the assessment and record it as the same.`]);
+    if (cx !== null && (cx < 0 || cx > 10)) errs.push(['ob_cx', 'Dilatation must be 0 to 10 cm, or leave it empty.']); else if (cx !== null && lastCxO && val('ob_pr') === 'Progressed' && cx === Number(lastCxO.cervix)) errs.push(['ob_pr', `Dilatation is ${cx} cm, the same as the last examination. Choose Not progressed.`]); else if (cx !== null && lastCxO && val('ob_pr') === 'Not progressed' && cx > Number(lastCxO.cervix)) errs.push(['ob_pr', `Dilatation went from ${lastCxO.cervix} cm to ${cx} cm. Choose Progressed.`]); else if (cx !== null && lastCxO && cx < Number(lastCxO.cervix)) errs.push(['ob_cx', `Dilatation is lower than the last recording (${lastCxO.cervix} cm). Check, or write the reason in the assessment and record it as the same.`]);
     if (fhr === null || fhr < 60 || fhr > 220) errs.push(['ob_fhr', "Enter the baby's heart rate (60 to 220)."]);
     if (ct === null || ct < 0 || ct > 10) errs.push(['ob_ct', 'Enter the contractions in 10 minutes.']);
     if (sys === null || dia === null || sys < 50 || sys > 260 || dia < 30 || dia > 160 || sys <= dia) errs.push([sys === null || sys < 50 || sys > 260 ? 'ob_sys' : 'ob_dia', 'Enter a blood pressure that makes sense.']);
@@ -5475,7 +5738,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const btn = document.getElementById('obSave'); btn.disabled = true; btn.textContent = 'Saving…';
     const nextDue = new Date(new Date(at).getTime() + Number(val('ob_next') || 60) * 60000).toISOString();
     try {
-      const now = ldNow(), item = { patient_id: S(a.patient_id), record_id: S(`lcg#${ldKey(a)}#${at}`), record_type: S('labour-observation'), adm_id: S(a.record_id), obs_at: S(at), next_due_at: S(nextDue), cervix: anN(cx), descent: val('ob_desc') !== 'Not assessed' ? S(val('ob_desc')) : undefined, fhr: anN(fhr), decel: S(val('ob_dec')), contr: anN(ct), contr_sec: anN(anNum('ob_cs')), liquor: S(val('ob_liq')), position: val('ob_pos') !== 'Not known' ? S(val('ob_pos')) : undefined, caput: S(val('ob_caput')), moulding: S(val('ob_mould')),
+      const now = ldNow(), item = { patient_id: S(a.patient_id), record_id: S(`lcg#${ldKey(a)}#${at}`), record_type: S('labour-observation'), adm_id: S(a.record_id), obs_at: S(at), next_due_at: S(nextDue), cervix: anN(cx), progress: (cx !== null && lastCxO) ? S(val('ob_pr')) : undefined, descent: val('ob_desc') !== 'Not assessed' ? S(val('ob_desc')) : undefined, fhr: anN(fhr), decel: S(val('ob_dec')), contr: anN(ct), contr_sec: anN(anNum('ob_cs')), liquor: S(val('ob_liq')), position: val('ob_pos') !== 'Not known' ? S(val('ob_pos')) : undefined, caput: S(val('ob_caput')), moulding: S(val('ob_mould')),
         bp_sys: anN(sys), bp_dia: anN(dia), pulse: anN(pul), temp: anN(tmp), urine_protein: val('ob_up') !== 'Not done' ? S(val('ob_up')) : undefined, urine_ketones: val('ob_uk') !== 'Not done' ? S(val('ob_uk')) : undefined, oxytocin: S(val('ob_oxy') === 'Yes' ? 'Yes: ' + val('ob_oxyd') : 'No'), medicine: val('ob_med') ? S(val('ob_med')) : undefined, iv_fluids: S(val('ob_iv')), companion: S(val('ob_comp')), assessment: S(val('ob_ass')), plan: S(val('ob_plan')), ...ldStamp(now) };
       await ldPut(item);
       const al = ldObsAlerts(unmarshal(Object.fromEntries(Object.entries(item).filter(e => e[1] !== undefined))), (lastCxO ? Number(lastCxO.cervix) : 0)); await ldRefresh(); ldClose(); ldRenderAll();
@@ -5516,6 +5779,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   function ldDeliverForm(rid) {
     const a = ldAdms().find(x => x.record_id === rid); if (!a || !canLd) return;
     if (ldStatus(a) !== 'labour') return ldNote('The birth is already recorded or she was referred.');
+    gdArm('ld', 'deliver', rid, a.patient_id);
     ldShow(`<div class="fd-form">${anBanner(a.patient_id, null)}
       ${anReactive(a.hiv) ? '<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#B71C1C"><b>HIV reactive:</b> give the baby ARV prophylaxis and record it below.</div>' : ''}
       <h5>The birth</h5><div class="grid3">
@@ -5627,6 +5891,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   function ldReferForm(rid) {
     const a = ldAdms().find(x => x.record_id === rid); if (!a || !canLd) return;
     if (ldStatus(a) !== 'labour') return ldNote('She is no longer in labour here.');
+    gdArm('ld', 'refer', rid, a.patient_id);
     ldShow(`<div class="fd-form">${anBanner(a.patient_id, null)}<h5>Refer to another facility</h5>
       <div class="grid3"><div class="f"><label>Time leaving <span class="req">*</span></label><input id="rf_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
         <div class="f"><label>Referred to <span class="req">*</span></label><input id="rf_to" placeholder="Hospital name"></div>
@@ -5646,7 +5911,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       if (errs.length) return showErrs(errs);
       const b = document.getElementById('rfSave'); b.disabled = true; b.textContent = 'Saving…';
       try { await ldPut({ patient_id: S(a.patient_id), record_id: S('ref#' + ldKey(a)), record_type: S('referral'), adm_id: S(a.record_id), left_at: S(at), referred_to: S(val('rf_to').trim()), reason: S(val('rf_why')), transport: S(val('rf_tr')), accompanied_by: val('rf_with') ? S(val('rf_with')) : undefined, phoned_ahead: S(val('rf_call')), condition: S(val('rf_cond')), treatment: val('rf_tx') ? S(val('rf_tx')) : undefined, ...ldStamp(ldNow()) });
-        await ldRefresh(); ldClose(); ldRenderAll(); ldNote(`<b>${esc(a.patient_name)}</b> referred to ${esc(val('rf_to') || '')}. The admission is closed.`, 'ok'); }
+        const rfTo = val('rf_to') || ''; await ldRefresh(); ldClose(); ldRenderAll(); ldNote(`<b>${esc(a.patient_name)}</b> referred to ${esc(rfTo)}. The admission is closed.<div style="margin-top:8px">${refBtns('ld', a.record_id)} <span class="vit">Send it with her. It carries her labour chart and history.</span></div>`, 'ok'); }
       catch (e) { b.disabled = false; b.textContent = 'Save referral'; ldNote(`Could not save the referral: ${esc(e.message)}`); }
     };
   }
@@ -5705,6 +5970,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const a = ldAdms().find(x => x.record_id === rid), d = a && ldDel(a); if (!a || !d || !canLd) return;
     if (ldDis(a)) return ldNote('She has already been discharged.');
     const died = d.maternal_outcome === 'Died', sug = anAdd(ldD10(ldNow()), 3);
+    gdArm('ld', 'disch', rid, a.patient_id);
     ldShow(`<div class="fd-form">${anBanner(a.patient_id, null)}<h5>${died ? 'Close the record' : 'Discharge mother and baby'}</h5>
       <div class="vit">Born ${fmtDate(d.birth_at)} (<span id="dcHrs">${ldDur(ldHrs(d.birth_at, ldNow()))}</span> ago). Mother and baby should stay at least 24 hours after birth.</div>
       <div class="grid3" style="margin-top:8px"><div class="f"><label>Leaving at <span class="req">*</span></label><input id="dc_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
@@ -5800,7 +6066,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     const a = ldAdms().find(x => x.record_id === rid); if (!a) return;
     const st = ldStatus(a), s = ldLabourState(a), obs = s.obs, d = ldDel(a), babies = ldBabies(a), rf = ldRef(a), dc = ldDis(a), kv = (k, v) => v !== undefined && v !== '' && v !== null ? `<div><span style="color:#777">${k}</span> ${esc(v)}</div>` : '';
     let cxRun = 0; const cxAt = {}; obs.forEach(o => { if (o.cervix !== undefined && o.cervix !== '') cxRun = Number(o.cervix); cxAt[o.record_id] = cxRun; });
-    const obsArr = obs.slice().reverse().map(o => { const al = ldObsAlerts(o, cxAt[o.record_id]); return `<tr class="rowbar ${al.red.length ? 'red' : ''}"><td>${fmtDate(o.obs_at)}</td><td>${o.cervix !== undefined && o.cervix !== '' ? '<b>' + esc(o.cervix) + '</b> cm' : '<span class="vit">routine check</span>'}${o.descent ? '<div class="vit">head ' + esc(o.descent) + '/5</div>' : ''}</td><td>${esc(o.fhr)}${o.decel && o.decel !== 'None' ? '<div class="vit">' + esc(o.decel) + ' decel.</div>' : ''}</td><td>${esc(o.contr)}${o.contr_sec ? ' × ' + esc(o.contr_sec) + 's' : ''}</td><td class="vit">${esc(o.liquor || '')}</td><td>${esc(o.bp_sys)}/${esc(o.bp_dia)}<div class="vit">pulse ${esc(o.pulse)}${o.temp ? ' · ' + esc(o.temp) + '°' : ''}</div></td><td class="vit">${[o.oxytocin && o.oxytocin !== 'No' ? 'Oxytocin' : '', o.medicine || ''].filter(Boolean).map(esc).join(', ')}</td><td>${esc(o.assessment || '')}<div class="vit">${esc(o.plan || '')}</div>${al.red.length ? `<div style="color:#C62828" class="vit"><b>${esc(al.red.join('; '))}</b></div>` : ''}</td><td>${esc(o.entered_by || '')}</td></tr>`; });
+    const obsArr = obs.slice().reverse().map(o => { const al = ldObsAlerts(o, cxAt[o.record_id]); return `<tr class="rowbar ${al.red.length ? 'red' : ''}"><td>${fmtDate(o.obs_at)}</td><td>${o.cervix !== undefined && o.cervix !== '' ? '<b>' + esc(o.cervix) + '</b> cm' + (o.progress ? '<div class="vit" style="color:' + (o.progress === 'Progressed' ? '#2E7D32' : '#C62828') + '">' + esc(o.progress) + '</div>' : '') : '<span class="vit">routine check</span>'}${o.descent ? '<div class="vit">head ' + esc(o.descent) + '/5</div>' : ''}</td><td>${esc(o.fhr)}${o.decel && o.decel !== 'None' ? '<div class="vit">' + esc(o.decel) + ' decel.</div>' : ''}</td><td>${esc(o.contr)}${o.contr_sec ? ' × ' + esc(o.contr_sec) + 's' : ''}</td><td class="vit">${esc(o.liquor || '')}</td><td>${esc(o.bp_sys)}/${esc(o.bp_dia)}<div class="vit">pulse ${esc(o.pulse)}${o.temp ? ' · ' + esc(o.temp) + '°' : ''}</div></td><td class="vit">${[o.oxytocin && o.oxytocin !== 'No' ? 'Oxytocin' : '', o.medicine || ''].filter(Boolean).map(esc).join(', ')}</td><td>${esc(o.assessment || '')}<div class="vit">${esc(o.plan || '')}</div>${al.red.length ? `<div style="color:#C62828" class="vit"><b>${esc(al.red.join('; '))}</b></div>` : ''}</td><td>${esc(o.entered_by || '')}</td></tr>`; });
     const rxNotesL = ldOf(a, 'rxn').slice();
     const obsRev = obs.slice().reverse();
     const rows = [...obsArr.map((h, i) => ({ t: String(obsRev[i].obs_at || ''), h })), ...rxNotesL.map(x => ({ t: String(x.entered_at || ''), h: `<tr style="background:#F3F8F0"><td>${fmtDate(x.entered_at)}</td><td colspan="7"><b>Prescription ${esc(x.rx_no || '')}</b> sent to the pharmacy: ${esc(x.meds || '')}${x.notes ? ' <span class="vit">(' + esc(x.notes) + ')</span>' : ''}</td><td>${esc(x.entered_by || '')}</td></tr>` }))].sort((p, q) => q.t.localeCompare(p.t)).map(x => x.h).join('');
@@ -5809,6 +6075,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     ldShow(`<div class="fd-form">${anBanner(a.patient_id, null)}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b>${esc(a.adm_no || '')}</b> ${st === 'labour' ? ldFlagBadge(s) : ''} <span class="st ${st === 'discharged' ? 'wait' : 'done'}">${{ labour: 'In labour', delivered: 'On the ward', discharged: 'Discharged', referred: 'Referred out' }[st]}</span>
         ${canLd && st === 'labour' ? `<button class="btn-sm b-rel" data-ldact="obs|${esc(a.record_id)}">Record observation</button><button class="btn-sm ghost" data-ldact="deliver|${esc(a.record_id)}">Record birth</button><button class="btn-sm ghost" data-ldact="refer|${esc(a.record_id)}">Refer out</button>` : ''}${canLd && st === 'delivered' ? `<button class="btn-sm b-rel" data-ldact="disch|${esc(a.record_id)}">${d.maternal_outcome === 'Died' ? 'Close the record' : 'Discharge'}</button>` : ''}
+        ${st === 'referred' ? refBtns('ld', a.record_id) : ''}
         <button class="btn-sm ghost" id="ldCancel" style="margin-left:auto">Close file</button></div>
       ${st === 'labour' && (s.red.length || s.amb.length) ? `<ul style="margin:6px 0 0 18px;padding:0;font-size:13px">${s.red.map(x => `<li style="color:#C62828"><b>${esc(x)}</b></li>`).join('')}${s.amb.map(x => `<li style="color:#6B5300">${esc(x)}</li>`).join('')}</ul>` : ''}
       <h5>Admission</h5><div class="grid3" style="font-size:13.5px;line-height:1.7">
