@@ -375,7 +375,10 @@ module "iam_family_planning" {
   policy_statements = [
     { sid = "PatientRecordsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.patient_records.arn] },
     { sid = "FamilyPlanningRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.family_planning_records.arn}", "${aws_dynamodb_table.family_planning_records.arn}/index/*"] },
-    { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] }
+    { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
+    { sid = "PostnatalRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.postnatal_records.arn] },
+    { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
+    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] }
   ]
 }
 

@@ -349,7 +349,7 @@
     { slug: "front-desk",       name: "Front Desk",       icon: "🛎️", live: true },
     { slug: "antenatal",        name: "Antenatal",        icon: "🤰", live: true },
     { slug: "postnatal",        name: "Postnatal",        icon: "👶", live: true },
-    { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧", live: false },
+    { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧", live: true },
     { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒", live: false },
     { slug: "labour-delivery",  name: "Labour & Delivery",icon: "🚨", live: true },
     { slug: "lab",              name: "Lab",               icon: "🔬", live: true },
@@ -4526,13 +4526,19 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       { t: 'Ibuprofen', n: 'Ibuprofen', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '3 days', q: 9, i: 'After food. Avoid if blood pressure is high.' },
       { t: 'Amoxicillin', n: 'Amoxicillin', r: 1, d: '1 capsule (500 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' },
       { t: 'Metronidazole', n: 'Metronidazole', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' }];
+  RXM_QUICK['family-planning'] = [
+      { t: 'Combined pill', n: 'Combined oral contraceptive (e.g. Microgynon, Lo-Femenal)', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 84, i: 'Start on days 1 to 5 of the period. Take at the same time each day.' },
+      { t: 'Progestin-only pill', n: 'Progestin-only pill (e.g. Microlut)', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 84, i: 'Take at the same time every day, with no break between packs.' },
+      { t: 'DMPA injection', n: 'Medroxyprogesterone acetate (DMPA) 150 mg/mL', r: 5, d: '1 vial (150 mg)', f: 'Once', u: 'Every 13 weeks', q: 1, i: 'Deep injection into the buttock or upper arm. Do not massage the site.' },
+      { t: 'Emergency pill', n: 'Levonorgestrel 1.5 mg (emergency contraception)', r: 0, d: '1 tablet (1.5 mg)', f: 'Once only', u: 'One dose', q: 1, i: 'Take as soon as possible, within 5 days of unprotected sex.' }];
   const RXM = {};
-  const rxmK = d => ({ antenatal: 'an', 'labour-delivery': 'ld', postnatal: 'pn' })[d];
-  const rxmCan = d => d === 'antenatal' ? canAnc : d === 'postnatal' ? canPn : canLd;
-  const rxmMsg = d => d === 'antenatal' ? anNote : d === 'postnatal' ? pnNote : ldNote;
+  const rxmK = d => ({ antenatal: 'an', 'labour-delivery': 'ld', postnatal: 'pn', 'family-planning': 'fp' })[d];
+  const rxmCan = d => d === 'antenatal' ? canAnc : d === 'postnatal' ? canPn : d === 'family-planning' ? canFp : canLd;
+  const rxmMsg = d => d === 'antenatal' ? anNote : d === 'postnatal' ? pnNote : d === 'family-planning' ? fpNote : ldNote;
   const rxmS = d => RXM[d] || (RXM[d] = { rows: [rxBlank()], pid: '', stock: [], rx: [], ok: false, err: '' });
   function rxmClients(d) {
     if (d === 'antenatal') return anPregs.filter(x => x.status === 'active').map(x => ({ pid: x.patient_id, ctx: x.record_id, name: x.patient_name, cid: x.client_id, tag: 'Antenatal ' + (x.reg_no || '') }));
+    if (d === 'family-planning') return fpActive().map(e => ({ pid: e.patient_id, ctx: e.record_id, name: e.patient_name, cid: e.client_id, tag: 'Family planning ' + (e.fp_no || '') }));
     if (d === 'postnatal') return pnActive().map(e => ({ pid: e.patient_id, ctx: e.record_id, name: e.patient_name, cid: e.client_id, tag: 'Postnatal ' + (e.pn_no || '') }));
     return ldAdms().filter(a => ['labour', 'delivered'].includes(ldStatus(a))).map(a => ({ pid: a.patient_id, ctx: a.record_id, name: a.patient_name, cid: a.client_id, tag: (ldStatus(a) === 'labour' ? 'In labour ' : 'On the ward ') + (a.adm_no || '') }));
   }
@@ -4545,7 +4551,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     } catch (e) { s.err = e.message; }
   }
   function rxmBadge(d) {
-    const el = document.getElementById({ antenatal: 'anTabRx', 'labour-delivery': 'ldTabRx', postnatal: 'pnTabRx' }[d]); if (!el) return;
+    const el = document.getElementById({ antenatal: 'anTabRx', 'labour-delivery': 'ldTabRx', postnatal: 'pnTabRx', 'family-planning': 'fpTabRx' }[d]); if (!el) return;
     const n = rxmS(d).rx.filter(r => r.status === 'query').length; el.textContent = n; el.style.display = n ? '' : 'none';
   }
   function rxmShell(d) {
@@ -4605,7 +4611,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     rxmDraftStrip(d); rxmBadge(d);
   }
   async function rxmOpen(d) {
-    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx' }[k]); if (!host) return;
+    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx', fp: 'fpPaneRx' }[k]); if (!host) return;
     const s = rxmS(d);
     if (!host.dataset.mounted) {
       host.innerHTML = '<div class="loading-inline">Loading prescriptions…</div>'; await rxmRefresh(d);
@@ -4625,7 +4631,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     } else { await rxmRefresh(d); rxmLists(d); }
   }
   async function rxmTick(d) { // keeps the lists fresh without touching what is being typed
-    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx' }[k]); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
+    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx', fp: 'fpPaneRx' }[k]); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
     if (host.querySelector('textarea:focus')) return; await rxmRefresh(d); rxmLists(d);
   }
 
@@ -4729,7 +4735,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     ['an', 'ld'].forEach(dept => { const c = gdCur && gdCur.dept === dept ? gdCur : null, form = document.getElementById(GD[dept].form); if (c && form && form.firstChild && !c.cancelled && JSON.stringify(gdCapture(form)) !== c.snap) jobs.push(gdPut(c, gdCapture(form), true)); });
     if (gdVisitRid && document.getElementById('av_wt')) jobs.push(anSaveDraft(gdVisitRid, true));
     if (gxCur && !gxCur.cancelled) { const el = document.getElementById(gxCur.cont); if (el && el.querySelector('#gxSave')) { const dd = gdCapture(el); if (gxCur.restored || JSON.stringify(dd) !== gxCur.snap) jobs.push(gxPut(gxCur, dd, true)); } }
-    ['antenatal', 'labour-delivery', 'postnatal'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
+    ['antenatal', 'labour-delivery', 'postnatal', 'family-planning'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
     await Promise.race([Promise.allSettled(jobs), new Promise(r => setTimeout(r, 5000))]);
   }
   document.addEventListener('click', e => {
@@ -4742,9 +4748,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   // ---- Private drafts for the front desk, lab, pharmacy and billing forms (shared drafts table, one row per draft, own rows only) ----
   const GX_TABLE = 'vidacare-form-drafts';
   const GX_CONT = { fdFormCard: 'fdCancel', lbForm: 'lbCancel', phForm: 'phCancel',
-    bgForm: 'bgCancel', pnForm: 'pnCancel'
+    bgForm: 'bgCancel', pnForm: 'pnCancel', fpForm: 'fpCancel'
   };
-  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price', pnreg: 'Postnatal registration', pnvisit: 'Postnatal visit', pnrefer: 'Referral', pnclose: 'Close postnatal care' };
+  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price', pnreg: 'Postnatal registration', pnvisit: 'Postnatal visit', pnrefer: 'Referral', pnclose: 'Close postnatal care', fpreg: 'Family planning registration', fpvisit: 'Family planning visit', fprefer: 'Referral', fpclose: 'Close family planning' };
   const GX_OPEN = {
     fd: c => { const p = c ? fdPatients.find(x => x.patient_id === c) : null; openForm(p || null, ''); },
     lab: c => { const [id, m] = c.split('|'); openLabForm(id, m); },
@@ -4753,11 +4759,12 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     phadj: c => { const [id, w] = c.split('|'); phAdjustForm(id, w === '1'); },
     phdisp: c => phDispenseForm(c),
     bgprice: c => bgPriceForm(c || undefined),
-    pnreg: c => pnRegForm(c), pnvisit: c => pnVisitForm(c), pnrefer: c => pnReferForm(c), pnclose: c => pnCloseForm(c)
+    pnreg: c => pnRegForm(c), pnvisit: c => pnVisitForm(c), pnrefer: c => pnReferForm(c), pnclose: c => pnCloseForm(c),
+    fpreg: c => fpRegForm(c), fpvisit: c => fpVisitForm(c), fprefer: c => fpReferForm(c), fpclose: c => fpCloseForm(c)
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v47';
+  const PORTAL_VERSION = 'v48';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -4858,7 +4865,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   // src: { pid, rf: { to, reason, at, transport, accompanied, phoned, condition, treatment, by, byAt, urgency }, adm?, obs?, visit? }
   async function refBuild(src) {
-    const { pid, rf, adm, obs, visit, pn, pnVisits } = src, now = new Date().toISOString();
+    const { pid, rf, adm, obs, visit, pn, pnVisits, fp, fpVisits } = src, now = new Date().toISOString();
     const p = fdPatients.find(x => x.patient_id === pid) || {};
     let anc = [], labs = [], rx = [];
     try { anc = (await scanTable(ANC_TABLE)).filter(r => r.patient_id === pid); } catch (e) { /* no access */ }
@@ -4886,6 +4893,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       }
     }
     if (pn) pnLetterSections(pn, pnVisits || [], sections);
+    if (fp) fpLetterSections(fp, fpVisits || [], sections);
     // antenatal history
     const pregs = anc.filter(r => String(r.record_id).startsWith('preg#')).sort((a, b) => (b.booked_date || '').localeCompare(a.booked_date || '')), pg = pregs.find(x => x.status === 'active') || pregs[0];
     if (pg) {
@@ -4970,11 +4978,15 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       const at = String(id).indexOf('@'), eid = at < 0 ? id : id.slice(0, at), e = pnEps().find(x => x.record_id === eid), r = e && (at < 0 ? pnRef(e) : pnRefs(e).find(q => String(q.record_id).endsWith('#' + id.slice(at + 1)))); if (!r) return null;
       return { pid: e.patient_id, pn: e, pnVisits: pnVisitsOf(e), adm: e.adm_id ? ldAdms().find(x => x.record_id === e.adm_id) : null, obs: [], rf: { to: r.referred_to, urgency: r.urgency, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: [r.who && 'Referred: ' + r.who, r.condition].filter(Boolean).join('\n'), treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
     }
+    if (kind === 'fp') {
+      const at = String(id).indexOf('@'), eid = at < 0 ? id : id.slice(0, at), e = fpEps().find(x => x.record_id === eid), r = e && (at < 0 ? fpRef(e) : fpRefs(e).find(q => String(q.record_id).endsWith('#' + id.slice(at + 1)))); if (!r) return null;
+      return { pid: e.patient_id, fp: e, fpVisits: fpVisitsOf(e), adm: null, obs: [], rf: { to: r.referred_to, urgency: r.urgency, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: r.condition, treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
+    }
     const v = anRecs.find(x => x.record_id === id); if (!v || !v.referred_to) return null;
     return { pid: v.patient_id, visit: v, rf: { to: v.referred_to, reason: v.referred_reason, at: v.entered_at, condition: [v.complaints && 'Complaints: ' + v.complaints, v.plan && 'Findings and plan: ' + v.plan].filter(Boolean).join('\n'), by: v.entered_by, byAt: v.entered_at } };
   }
   async function refRun(kind, id, pdf, btn) {
-    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : kind === 'pn' ? pnNote : anNote; if (!src) return note('The referral could not be found.');
+    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : kind === 'pn' ? pnNote : kind === 'fp' ? fpNote : anNote; if (!src) return note('The referral could not be found.');
     const w = pdf ? null : window.open('', '_blank'); if (!pdf && !w) return alert('Please allow pop-ups for this page to print the letter.');
     const t = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = pdf ? 'Preparing PDF…' : 'Preparing…'; }
     try { const m = await refBuild(src); if (pdf) await refPdf(m); else await refPrint(m, w); }
@@ -4985,7 +4997,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   document.addEventListener('click', e => { const b = e.target.closest('[data-refpdf],[data-refprint]'); if (!b) return; e.preventDefault(); const [k, id] = (b.dataset.refpdf || b.dataset.refprint).split('|'); refRun(k, id, !!b.dataset.refpdf, b); });
 
   // ---- Prescriptions in the client's file, and saved drafts ----
-  const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery', postnatal: 'Postnatal' };
+  const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery', postnatal: 'Postnatal', 'family-planning': 'Family planning' };
   async function rxmHistory(boxId, pid) {
     const box = document.getElementById(boxId); if (!box) return;
     try {
@@ -4993,8 +5005,8 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       box.innerHTML = rx.length ? `<table class="data-table"><thead><tr><th>Sent</th><th>Medicines</th><th>Status</th><th>By</th></tr></thead><tbody>${rx.map(r => `<tr><td>${fmtDate(r.prescribed_at)}<div class="vit">${esc(r.rx_no || '')}</div></td><td class="vit">${rxLinesHtml(r)}${r.notes ? '<div><b>Note:</b> ' + esc(r.notes) + '</div>' : ''}</td><td>${rxBadge(r, false)}</td><td>${esc(r.prescribed_by || '')}<div class="vit">${esc(RXM_DEPT[r.source_dept] || 'Clinic doctor')}</div></td></tr>`).join('')}</tbody></table>` : '<div class="vit">No prescriptions for this client yet.</div>';
     } catch (e) { box.innerHTML = `<div class="vit">Prescriptions could not be loaded: ${esc(e.message)}</div>`; }
   }
-  const rxmTable = d => d === 'antenatal' ? ANC_TABLE : d === 'postnatal' ? PN_TABLE : LD_TABLE;
-  const rxmRecs = d => d === 'antenatal' ? anRecs : d === 'postnatal' ? pnRecs : ldRecs;
+  const rxmTable = d => d === 'antenatal' ? ANC_TABLE : d === 'postnatal' ? PN_TABLE : d === 'family-planning' ? FP_TABLE : LD_TABLE;
+  const rxmRecs = d => d === 'antenatal' ? anRecs : d === 'postnatal' ? pnRecs : d === 'family-planning' ? fpRecs : ldRecs;
   const rxmDraftPrefix = () => 'rxdraft#' + staffUser() + '#';
   const rxmDrafts = d => rxmRecs(d).filter(r => String(r.record_id).startsWith(rxmDraftPrefix()) && !r.cleared_at).sort((x, y) => (y.saved_at || '').localeCompare(x.saved_at || ''));
   function rxmDraftStrip(d) {
@@ -5036,7 +5048,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   // a line in the client's own record (antenatal visits table or labour chart); the prescription itself lives in the prescriptions table
   async function rxmNote(d, ctx, pid, id, rxNo, lines, now, notes) {
     try {
-      const key = d === 'antenatal' ? (anPregs.find(x => x.record_id === ctx) ? anKey(anPregs.find(x => x.record_id === ctx)) : '') : d === 'postnatal' ? String(ctx).replace(/^pn#/, '') : (ldAdms().find(x => x.record_id === ctx) ? ldKey(ldAdms().find(x => x.record_id === ctx)) : ''); if (!key) return;
+      const key = d === 'antenatal' ? (anPregs.find(x => x.record_id === ctx) ? anKey(anPregs.find(x => x.record_id === ctx)) : '') : d === 'postnatal' ? String(ctx).replace(/^pn#/, '') : d === 'family-planning' ? String(ctx).replace(/^fp#/, '') : (ldAdms().find(x => x.record_id === ctx) ? ldKey(ldAdms().find(x => x.record_id === ctx)) : ''); if (!key) return;
       const raw = { patient_id: S(pid), record_id: S(`rxn#${key}#${now}#${id.replace(/-/g, '').slice(0, 6)}`), record_type: S('rx-note'), rx_id: S(id), rx_no: S(rxNo), meds: S(lines.map(l => `${l.n} ${l.d}, ${l.f.toLowerCase()}, ${l.u.toLowerCase()}`).join('; ')), notes: notes ? S(notes) : undefined, entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser()) };
       const item = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
       await (await getClient()).send(new PutItemCommand({ TableName: rxmTable(d), Item: item })); rxmRecs(d).push(unmarshal(item));
@@ -6911,6 +6923,547 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load postnatal data: ${esc(err.message)}</div>`; }
   }
 
+  // ================= FAMILY PLANNING (Ghana National Reproductive Health Service Policy and Standards; WHO medical eligibility criteria; DHIMS2-style monthly tally) =================
+  const FP_TABLE = 'vidacare-family-planning-records';
+  let canFp = false, fpRecs = [], fpTab = 'due', fpQ = '', fpTimer = null;
+  let fpRegView = 'list', fpRegYear = String(new Date().getFullYear()), fpRegPeriod = 'monthly';
+  const FP_DAY = 86400000;
+  // method: k key, t label, g group, cyp = couple-years of protection per unit issued, days = injection interval, late = days allowed late, years = life of implant or IUD
+  const FP_M = [
+    { k: 'coc', t: 'Combined pill (COC)', g: 'Pills', cyp: 1 / 15, unit: 'cycles', cls: ['hc'] },
+    { k: 'pop', t: 'Progestin-only pill (POP)', g: 'Pills', cyp: 1 / 15, unit: 'cycles', cls: ['pop', 'prog'] },
+    { k: 'dmpa', t: 'Injectable: DMPA (every 3 months)', g: 'Injectables', cyp: 1 / 4, unit: 'doses', days: 91, late: 28, cls: ['inj', 'prog'] },
+    { k: 'net', t: 'Injectable: NET-EN (every 2 months)', g: 'Injectables', cyp: 1 / 6, unit: 'doses', days: 56, late: 14, cls: ['inj', 'prog'] },
+    { k: 'mci', t: 'Monthly injectable (combined)', g: 'Injectables', cyp: 1 / 12, unit: 'doses', days: 28, late: 7, cls: ['hc'] },
+    { k: 'jad', t: 'Implant: Jadelle (5 years)', g: 'Implants', cyp: 3.8, unit: 'implants', years: 5, larc: true, cls: ['imp', 'prog'] },
+    { k: 'imp', t: 'Implant: Implanon NXT (3 years)', g: 'Implants', cyp: 2.5, unit: 'implants', years: 3, larc: true, cls: ['imp', 'prog'] },
+    { k: 'iud', t: 'IUD: Copper T 380A (up to 10 years)', g: 'IUD', cyp: 4.6, unit: 'devices', years: 10, larc: true, cls: ['iud'] },
+    { k: 'mc', t: 'Male condoms', g: 'Condoms', cyp: 1 / 120, unit: 'pieces', cls: [] },
+    { k: 'fc', t: 'Female condoms', g: 'Condoms', cyp: 1 / 120, unit: 'pieces', cls: [] },
+    { k: 'ec', t: 'Emergency contraception (pill)', g: 'Emergency', cyp: 1 / 20, unit: 'doses', cls: [] },
+    { k: 'lam', t: 'Lactational amenorrhoea (LAM)', g: 'Natural', cyp: 0, cls: [] },
+    { k: 'nat', t: 'Natural methods (Standard Days, cycle beads)', g: 'Natural', cyp: 0, cls: [] },
+    { k: 'fs', t: 'Female sterilisation (referred out)', g: 'Permanent', cyp: 0, perm: true, cls: [] },
+    { k: 'ms', t: 'Male sterilisation (vasectomy, referred out)', g: 'Permanent', cyp: 0, perm: true, cls: [] }
+  ];
+  const FP_BY = Object.fromEntries(FP_M.map(m => [m.t, m]));
+  const fpMethodsFor = male => male ? FP_M.filter(m => ['mc', 'ms'].includes(m.k)) : FP_M.filter(m => m.k !== 'ms');
+  const FP_VT = ['New acceptor (starting a method)', 'Revisit (resupply or next injection)', 'Follow-up check', 'Changing method', 'Stopping or removal', 'Emergency contraception only', 'Counselling only'];
+  const [VT_NEW, VT_REV, VT_FU, VT_CH, VT_STOP, VT_EC, VT_CO] = FP_VT;
+  const FP_ST = ['Given today', 'Continuing, nothing supplied today', 'Referred for the method', 'Will start later', 'Declined'];
+  const FP_SRC = ['Walk-in', 'Postnatal care here', 'Antenatal care here', 'After a miscarriage or abortion', 'Child welfare clinic', 'Community outreach', 'Referred from another facility'];
+  const FP_PREV = ['Never used a method', 'Used a method before and stopped', 'Using a method now (continuing here)'];
+  const FP_WHY = ['Spacing births', 'Limiting births (no more children)', 'Delaying the first birth', 'Other'];
+  const FP_PARTNER = ['Partner knows and supports', 'Partner does not know', 'No partner or not applicable'];
+  const FP_STOP_WHY = ['Wants to become pregnant', 'Side effects', 'Implant or IUD has reached its time limit', 'Moving away or no longer needs it', 'Partner opposes', 'Changing method', 'Menopause', 'Other'];
+  const FP_CLOSE = ['Wants to become pregnant', 'Became pregnant', 'Permanent method done (sterilised)', 'Menopause', 'Moved away or transferred to another facility', 'Lost to follow-up (not seen 6 months after the due date)', 'Died', 'Other'];
+  const FP_REF_WHY = ['Permanent method (tubal ligation or vasectomy)', 'Implant or IUD removal that cannot be done here', 'Suspected pregnancy with a method in place', 'Heavy or long bleeding', 'Pelvic pain or suspected infection', 'Medical condition needs a doctor to review', 'Method not available here', 'Other'];
+  // the usual six questions that let a provider be reasonably sure she is not pregnant
+  const FP_PQ = ['Her baby is under 6 months old, she is fully or nearly fully breastfeeding, and her period has not come back', 'She has not had sex since her last period', 'She gave birth in the last 4 weeks', 'Her last period started within the last 7 days', 'She had a miscarriage or abortion in the last 7 days', 'She has been using a reliable method correctly and consistently'];
+  // medical screening (WHO medical eligibility criteria, simplified). avoid = category 4 (do not give). review = category 3 (a doctor should review first). classes: hc combined hormones, pop pill, inj injectable, imp implant, iud, prog all progestin-only
+  const FP_COND = [
+    { t: 'She is pregnant, or may be pregnant', all: true },
+    { t: 'Vaginal bleeding that has not been explained', avoid: ['iud'], review: ['prog'] },
+    { t: 'Breast cancer now', avoid: ['hc', 'prog'] },
+    { t: 'A blood clot in the leg or lung, now or before', avoid: ['hc'], review: ['prog'] },
+    { t: 'Stroke or heart disease', avoid: ['hc'], review: ['prog'] },
+    { t: 'Known high blood pressure', avoid: ['hc'] },
+    { t: 'Migraine with aura (flashing lights or blurred sight before the headache)', avoid: ['hc'] },
+    { t: 'Severe liver disease, jaundice or a liver tumour', avoid: ['hc'], review: ['prog'] },
+    { t: 'Diabetes with damage to the kidneys, eyes or nerves', avoid: ['hc'], review: ['prog'] },
+    { t: 'Smokes and is 35 or older', avoid: ['hc'] },
+    { t: 'Breastfeeding a baby under 6 weeks old', avoid: ['hc'] },
+    { t: 'Breastfeeding a baby between 6 weeks and 6 months old', review: ['hc'] },
+    { t: 'Gave birth less than 6 weeks ago and is not breastfeeding', avoid: ['hc'] },
+    { t: 'Gave birth between 48 hours and 4 weeks ago', review: ['iud'] },
+    { t: 'Pelvic infection now, or discharge with pain or fever', avoid: ['iud'] },
+    { t: 'Infection after a recent birth, miscarriage or abortion', avoid: ['iud'] },
+    { t: 'Cancer of the cervix or womb waiting for treatment', avoid: ['iud'] },
+    { t: 'Womb shape is not normal, or fibroids that change the womb cavity', avoid: ['iud'] },
+    { t: 'Takes rifampicin, or medicine for fits (carbamazepine, phenytoin)', review: ['hc', 'pop', 'imp'] },
+    { t: 'HIV with advanced illness (WHO stage 3 or 4)', review: ['iud'] }
+  ];
+  const FP_SE = [{ t: 'Irregular bleeding or spotting' }, { t: 'No periods' }, { t: 'Nausea' }, { t: 'Weight change' }, { t: 'Mood changes' },
+    { t: 'Heavy bleeding that has not settled', alert: true }, { t: 'Pain, redness or pus where the implant or injection went in', alert: true }, { t: 'IUD strings cannot be felt or seen', alert: true },
+    { t: 'Severe headache or changes in sight', alert: true }, { t: 'Chest pain or a painful, swollen leg', alert: true }, { t: 'Pregnancy suspected', alert: true }, { t: 'Other' }];
+  const FP_COUNSEL = ['She chose the method herself, after hearing about the other methods', 'How the method works and how to use it', 'Common side effects and what to do about them', 'Warning signs: when to come back at once', 'When to come back for the next supply or injection', 'Condoms as well, for protection from STIs and HIV', 'Where to get emergency contraception if needed'];
+  const fpNote = (html, kind) => { const m = document.getElementById('fpMsg'); if (m) m.innerHTML = `<div class="${kind === 'ok' ? 'success' : 'error-inline'}">${html}</div>`; };
+  const fpShow = html => { const f = document.getElementById('fpForm'); f.innerHTML = html; f.style.display = 'block'; f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const fpClose = () => { const f = document.getElementById('fpForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } };
+  const fpPat = pid => fdPatients.find(p => p.patient_id === pid);
+  const fpMale = pid => (fpPat(pid) || {}).sex === 'male';
+  const fpEps = () => fpRecs.filter(r => String(r.record_id).startsWith('fp#'));
+  const fpKey = e => String(e.record_id).slice(3);
+  const fpVisitsOf = e => fpRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('fpv#' + fpKey(e) + '#')).sort((x, y) => String(x.record_id).localeCompare(String(y.record_id)));
+  const fpRefs = e => fpRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('fpr#' + fpKey(e) + '#')).sort((x, y) => String(x.record_id).localeCompare(String(y.record_id)));
+  const fpRef = e => fpRefs(e).slice(-1)[0];
+  const fpClosed = e => fpRecs.find(r => r.patient_id === e.patient_id && r.record_id === 'fpd#' + fpKey(e));
+  const fpActive = () => fpEps().filter(e => !fpClosed(e));
+  const fpDay = v => String(v.visit_at).slice(0, 10);
+  const fpPut = async item => (await getClient()).send(new PutItemCommand({ TableName: FP_TABLE, Item: g2(item), ConditionExpression: 'attribute_not_exists(record_id)' }));
+  const fpStamp = now => ldStamp(now);
+  const fpNow = () => new Date().toISOString();
+  const fpLocal = iso => new Date(new Date(iso).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  const fpAgeAt = (p, iso) => { if (!p || !p.date_of_birth) return null; const d = new Date(p.date_of_birth), t = new Date(iso); if (isNaN(d) || isNaN(t)) return null; return Math.floor((t - d) / (365.25 * FP_DAY)); };
+  async function fpRefresh() {
+    await refreshData();
+    fpRecs = await scanTable(FP_TABLE);
+    try { pnRecs = await scanTable(PN_TABLE); } catch (e) { pnRecs = []; }
+  }
+  async function fpNextReg(year) {
+    const r = await (await getClient()).send(new UpdateItemCommand({ TableName: FP_TABLE, Key: { patient_id: { S: 'COUNTER' }, record_id: { S: 'counter#' + year } }, UpdateExpression: 'ADD seq :one', ExpressionAttributeValues: { ':one': { N: '1' } }, ReturnValues: 'UPDATED_NEW' }));
+    const seq = parseInt(r.Attributes.seq.N, 10); return { year: String(year), seq, no: `FP-${year}-${String(seq).padStart(4, '0')}` };
+  }
+  // ---- Where she is now: current method, and when she is next due ----
+  function fpCurrent(e) {
+    let cur = null;
+    fpVisitsOf(e).forEach(v => { const m = FP_BY[v.method];
+      if (v.visit_type === VT_STOP) { cur = null; return; }
+      if (v.method_status === FP_ST[0] && m && !m.perm && m.k !== 'ec') cur = { m, v, since: cur && cur.m.k === m.k ? cur.since : v.visit_at };
+    });
+    return cur;
+  }
+  function fpPlanFor(cur, vs) {
+    const m = cur.m, v = cur.v, base = fpDay(v), later = vs.some(x => String(x.record_id) > String(v.record_id));
+    if (m.g === 'Pills') return { date: anAdd(base, (Number(v.qty) || 3) * 28), label: 'Pill resupply' };
+    if (m.days) return { date: anAdd(base, m.days), label: 'Next injection' };
+    if (m.years) { const first = !later && [VT_NEW, VT_CH].includes(v.visit_type); if (first) return { date: anAdd(base, 30), label: 'One-month check' };
+      return { date: v.removal_due || anAdd(fpDay({ visit_at: cur.since }), Math.round(m.years * 365)), label: m.g === 'IUD' ? 'IUD review or replacement due' : 'Implant removal or replacement due' }; }
+    if (m.g === 'Condoms') return { date: anAdd(base, 90), label: 'Condom resupply' };
+    return { date: anAdd(base, 30), label: m.k === 'lam' ? 'Review LAM (it protects for 6 months after the birth only)' : 'Review' };
+  }
+  function fpNext(e) {
+    const vs = fpVisitsOf(e), last = vs[vs.length - 1], cur = fpCurrent(e); let plan = null;
+    if (!last) plan = { date: String(e.registered_at).slice(0, 10), label: 'First visit' };
+    else if (cur) plan = fpPlanFor(cur, vs);
+    else if (last.method_status === FP_ST[3] && last.visit_type !== VT_STOP) plan = { date: anAdd(fpDay(last), 14), label: 'Start the method she chose' };
+    if (last && last.next_visit && last.next_visit > fpDay(last)) plan = { date: last.next_visit, label: plan ? plan.label : 'Follow-up visit' };
+    if (!plan) return null;
+    const td = today10(); return { ...plan, overdue: plan.date < td, today: plan.date === td, late: plan.date < td ? Math.round((new Date(td) - new Date(plan.date)) / FP_DAY) : 0 };
+  }
+  const fpLast = e => fpVisitsOf(e).slice(-1)[0];
+  const fpFlag = e => { const l = fpLast(e); return l && l.alerts ? l.alerts : ''; };
+  const fpMatch = e => { const q = fpQ.trim().toLowerCase(); if (!q) return true; const p = fpPat(e.patient_id) || {}; return [e.patient_name, e.client_id, e.fp_no, p.phone_number].some(x => String(x || '').toLowerCase().includes(q)); };
+  const fpNameCell = (e, extra) => `<a class="lnk" data-fpact="file|${esc(e.record_id)}"><b>${esc(e.patient_name || '—')}</b></a><br><span class="cid">${esc(e.client_id || '')}</span>${extra || ''}`;
+  const fpMethodTxt = e => { const c = fpCurrent(e); return c ? `${esc(c.m.t)}<div class="vit">since ${fmtDate(c.since)}</div>` : '<span class="vit">None now</span>'; };
+  // ---- What stops a method being given today (WHO medical eligibility criteria) ----
+  function fpScreen(m, conds, sys, dia) {
+    const out = []; if (!m || m.perm) return out;
+    const hit = (list, cls) => (list || []).some(c => (m.cls || []).includes(c) || (m.cls || []).some(x => x === c));
+    FP_COND.forEach(c => { if (!conds.includes(c.t)) return;
+      if (c.all) { if (m.k !== 'mc' && m.k !== 'fc' && m.k !== 'nat' && m.k !== 'lam') out.push({ level: 'avoid', msg: `${c.t}: do not start a method until pregnancy is ruled out` }); return; }
+      if (hit(c.avoid)) out.push({ level: 'avoid', msg: `${c.t}: ${m.t} is not suitable` }); else if (hit(c.review)) out.push({ level: 'review', msg: `${c.t}: a doctor should review before ${m.t}` }); });
+    if (sys !== null && dia !== null) { if (sys >= 140 || dia >= 90) { if ((m.cls || []).includes('hc')) out.push({ level: 'avoid', msg: `Blood pressure ${sys}/${dia}: ${m.t} is not suitable` }); }
+      if ((sys >= 160 || dia >= 100) && (m.cls || []).some(c => ['prog', 'hc'].includes(c))) out.push({ level: 'review', msg: `Blood pressure ${sys}/${dia}: a doctor should review before ${m.t}` }); }
+    return out;
+  }
+  // ---- Screen ----
+  function fpShellHtml() {
+    return `
+    <div class="fd-wrap">
+      <div id="fpMsg"></div>
+      <div class="data-card" id="fpForm" style="display:none;"></div>
+      <div class="ph-tabs">
+        <button class="ph-tab on" data-fptab="due">Due and overdue <span class="n amber" id="fpTabDue" style="display:none"></span></button>
+        <button class="ph-tab" data-fptab="active">Clients <span class="n green" id="fpTabAct" style="display:none"></span></button>
+        <button class="ph-tab" data-fptab="ref">Referrals</button>
+        <button class="ph-tab" data-fptab="register">Register</button>
+        <button class="ph-tab" data-fptab="rx">Prescriptions <span class="n amber" id="fpTabRx" style="display:none"></span></button>
+        <button class="ph-tab" data-fptab="find">Find a client</button>
+      </div>
+      <div id="fpSearchRow" class="fd-search" style="display:none;gap:10px;flex-wrap:wrap;align-items:center"><input id="fpSearch" type="search" placeholder="Search by name, client ID, family planning number or phone" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="fpSearchBtn" type="button">Search</button><button class="btn-sm ghost" id="fpClearBtn" type="button">Clear</button></div>
+      <div id="fpPaneDue">
+        <div class="data-card"><h4>Arrived today</h4><div class="vit" style="margin-bottom:8px">Checked in by the front desk for family planning.</div><div class="recent-scroll" style="min-height:0" id="fpWait"></div></div>
+        <div class="data-card"><h4>Sent from postnatal care</h4><div class="vit" style="margin-bottom:8px">Mothers the postnatal midwife referred here, or who chose a method to start later. Register them so their visits are tracked.</div><div class="recent-scroll" style="min-height:0" id="fpFromPn"></div></div>
+        <div class="data-card"><h4>Due today or overdue</h4><div class="vit" style="margin-bottom:8px">Pill resupply, injections, implant and IUD checks. Red means findings at the last visit need follow-up, or she is a month or more late.</div><div class="recent-scroll" id="fpDue"></div></div>
+        <div class="data-card"><h4>Coming up in the next 14 days</h4><div class="recent-scroll" style="min-height:0" id="fpSoon"></div></div>
+      </div>
+      <div id="fpPaneActive" style="display:none"><div class="data-card"><h4>Clients in family planning</h4><div class="recent-scroll" id="fpActive"></div></div></div>
+      <div id="fpPaneRef" style="display:none">
+        ${canFp ? `<div class="data-card"><h4>Refer a client</h4><div class="vit" style="margin-bottom:8px">Use this for a permanent method, a removal that cannot be done here, or a problem with the method. The letter carries her family planning history.</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div class="f" style="min-width:260px"><label>Client</label><select id="fpRefPick"><option value="">Choose…</option></select></div><button class="btn-sm b-rel" id="fpRefGo" type="button">Refer out</button></div></div>` : ''}
+        <div class="data-card"><h4>Referrals made</h4><div class="recent-scroll" id="fpRefList"></div></div></div>
+      <div id="fpPaneRegister" style="display:none"><div class="data-card"><h4>Family planning register</h4><div id="fpRegister"></div></div></div>
+      <div id="fpPaneRx" style="display:none"></div>
+      <div id="fpPaneFind" style="display:none"><div class="data-card"><h4>Find a client</h4>
+        <div class="fd-search"><input id="fpFind" type="search" placeholder="Search by name, phone or client ID (VMH-00001)" autocomplete="off"></div>
+        <div class="results" id="fpFindRes"></div></div></div>
+    </div>`;
+  }
+  function setFpTab(t) {
+    fpTab = t;
+    ['due', 'active', 'ref', 'register', 'rx', 'find'].forEach(k => { const p = document.getElementById('fpPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
+    document.querySelectorAll('[data-fptab]').forEach(b => b.classList.toggle('on', b.dataset.fptab === t));
+    if (t === 'rx') rxmOpen('family-planning');
+    const sr = document.getElementById('fpSearchRow'); if (sr) sr.style.display = (t === 'active' || (t === 'register' && fpRegView === 'list')) ? 'flex' : 'none';
+  }
+  const fpWaiting = () => fdVisits.filter(v => v.status === 'checked-in' && v.service === 'family-planning' && v.entered_at && new Date(v.entered_at).toDateString() === new Date().toDateString()).sort((a, b) => a.entered_at.localeCompare(b.entered_at))
+    .filter(v => { const e = fpActive().find(x => x.patient_id === v.patient_id); return !(e && fpVisitsOf(e).some(r => new Date(r.visit_at).toDateString() === new Date().toDateString())); });
+  // postnatal visits where the mother was referred here or said she will start later, and who is not yet registered here
+  const fpFromPn = () => { const seen = new Set(), out = []; pnRecs.filter(r => String(r.record_id).startsWith('pnv#') && [PN_FP_STATUS[2], PN_FP_STATUS[3]].includes(r.fp_status) && r.fp_method && r.fp_method !== PN_FP[0]).sort((a, b) => String(b.visit_at).localeCompare(String(a.visit_at))).forEach(r => {
+    if (seen.has(r.patient_id) || fpActive().some(e => e.patient_id === r.patient_id)) return; seen.add(r.patient_id); const ep = pnRecs.find(x => x.record_id === r.pn_id); out.push({ r, ep }); }); return out; };
+  function fpRow(e) {
+    const n = fpNext(e), fl = fpFlag(e), c = fpCurrent(e), late = n && n.late >= 28;
+    return `<tr class="rowbar ${fl || late ? 'red' : ''}"><td>${fpNameCell(e, `<div class="vit">${esc(e.fp_no || '')}</div>`)}</td><td>${fpMethodTxt(e)}</td>
+      <td>${n ? `<b>${esc(n.label)}</b><div class="vit" ${n.overdue ? 'style="color:#C62828"' : ''}>${anDate(n.date)}${n.overdue ? ' · ' + n.late + ' day' + (n.late === 1 ? '' : 's') + ' overdue' : n.today ? ' · today' : ''}</div>` : '<span class="vit">Nothing planned</span>'}</td>
+      <td>${fl ? `<div class="vit" style="color:#C62828">${esc(fl.slice(0, 90))}</div>` : '<span class="vit">—</span>'}</td>
+      <td style="white-space:nowrap">${canFp ? `<button class="btn-sm b-rel" data-fpact="visit|${esc(e.record_id)}">Record visit</button> · ` : ''}<a class="lnk" data-fpact="file|${esc(e.record_id)}">Open</a></td></tr>`;
+  }
+  function renderFpDue() {
+    const set = (id, n) => { const el = document.getElementById(id); if (!el) return; el.textContent = n; el.style.display = n ? '' : 'none'; };
+    const w = fpWaiting(), fp = fpFromPn(), act = fpActive(), td = today10(), end = anAdd(td, 14);
+    const due = act.map(e => ({ e, n: fpNext(e) })).filter(x => x.n && x.n.date <= td).sort((a, b) => a.n.date.localeCompare(b.n.date)), soon = act.map(e => ({ e, n: fpNext(e) })).filter(x => x.n && x.n.date > td && x.n.date <= end).sort((a, b) => a.n.date.localeCompare(b.n.date));
+    set('fpTabDue', due.length + w.length + fp.length); set('fpTabAct', act.length);
+    const head = '<thead><tr><th>Client</th><th>Method now</th><th>Next visit</th><th>Last findings</th><th></th></tr></thead>';
+    const b = document.getElementById('fpWait'); if (b) b.innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Arrived</th><th></th></tr></thead><tbody>${w.map(v => { const p = fpPat(v.patient_id) || {}, e = act.find(x => x.patient_id === v.patient_id); return `<tr class="rowbar red"><td><b>${esc(p.full_name || v.patient_name || '—')}</b><br><span class="cid">${esc(p.client_id || '')}</span></td><td>${fmtDate(v.entered_at)}</td><td>${canFp ? (e ? `<button class="btn-sm b-rel" data-fpact="visit|${esc(e.record_id)}">Record visit</button>` : `<button class="btn-sm b-rel" data-fpact="reg|p:${esc(v.patient_id)}">Register for family planning</button>`) : ''}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="3">Nobody is waiting.</td></tr>'}</tbody></table>`;
+    const a = document.getElementById('fpFromPn'); if (a) a.innerHTML = `<table class="data-table"><thead><tr><th>Mother</th><th>Seen in postnatal care</th><th>Method she chose</th><th></th></tr></thead><tbody>${fp.map(x => { const p = fpPat(x.r.patient_id) || {}; return `<tr class="rowbar"><td><b>${esc(p.full_name || (x.ep && x.ep.patient_name) || '—')}</b><br><span class="cid">${esc(p.client_id || '')}</span></td><td>${fmtDate(x.r.visit_at)}</td><td>${esc(x.r.fp_method)}<div class="vit">${esc(x.r.fp_status)}</div></td><td>${canFp ? `<button class="btn-sm b-rel" data-fpact="reg|p:${esc(x.r.patient_id)}">Register</button>` : ''}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="4">Nobody has been sent from postnatal care.</td></tr>'}</tbody></table>`;
+    const c = document.getElementById('fpDue'); if (c) c.innerHTML = `<table class="data-table">${head}<tbody>${due.map(x => fpRow(x.e)).join('') || '<tr class="empty-row"><td colspan="5">Nobody is due or overdue.</td></tr>'}</tbody></table>`;
+    const d2 = document.getElementById('fpSoon'); if (d2) d2.innerHTML = `<table class="data-table">${head}<tbody>${soon.map(x => fpRow(x.e)).join('') || '<tr class="empty-row"><td colspan="5">Nothing due in the next 14 days.</td></tr>'}</tbody></table>`;
+  }
+  function renderFpActive() {
+    const el = document.getElementById('fpActive'); if (!el) return;
+    const rows = fpActive().filter(fpMatch).sort((x, y) => (fpNext(x) ? fpNext(x).date : '9').localeCompare(fpNext(y) ? fpNext(y).date : '9'));
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Method now</th><th>Next visit</th><th>Last findings</th><th></th></tr></thead><tbody>${rows.map(e => fpRow(e)).join('') || `<tr class="empty-row"><td colspan="5">${fpQ ? 'No client matches your search.' : 'Nobody is registered yet.'}</td></tr>`}</tbody></table>`;
+  }
+  function fpFindRender() {
+    const q = val('fpFind').toLowerCase(), res = document.getElementById('fpFindRes'); if (!res) return; if (!q) { res.innerHTML = ''; return; }
+    const digits = q.replace(/\D/g, '');
+    const hits = fdPatients.filter(p => (p.full_name || '').toLowerCase().includes(q) || (p.client_id || '').toLowerCase().includes(q) || (digits.length >= 4 && canonPhone(p.phone_number).includes(canonPhone(q)))).slice(0, 15);
+    res.innerHTML = hits.map(p => { const act = fpActive().find(e => e.patient_id === p.patient_id), old = fpEps().filter(e => e.patient_id === p.patient_id && fpClosed(e)).length;
+      return `<div class="result-row" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border-bottom:1px solid #EFF3EC"><div><b>${esc(p.full_name)}</b> <span class="cid">${esc(p.client_id || '')}</span><div class="vit">${act ? 'In family planning (' + esc(act.fp_no || '') + ')' : 'Not registered for family planning'}${old ? ' · ' + old + ' earlier registration' + (old > 1 ? 's' : '') : ''}</div></div>
+        <div>${act ? `<a class="lnk" data-fpact="file|${esc(act.record_id)}">Open file</a>` : (canFp ? `<button class="btn-sm b-rel" data-fpact="reg|p:${esc(p.patient_id)}">Register for family planning</button>` : '<span class="vit">Not registered</span>')}</div></div>`; }).join('') || '<div class="vit" style="padding:10px">No client found. Register her at the front desk first.</div>';
+  }
+  function renderFpRefs() {
+    const pk = document.getElementById('fpRefPick'); if (pk && Number(pk.dataset.n || -1) !== fpActive().length) { pk.dataset.n = fpActive().length; const cur = pk.value; pk.innerHTML = '<option value="">Choose…</option>' + fpActive().map(e => `<option value="${esc(e.record_id)}">${esc(e.patient_name)} · ${esc(e.client_id || '')} · ${esc(e.fp_no || '')}</option>`).join(''); pk.value = cur; }
+    const rows = fpRecs.filter(r => String(r.record_id).startsWith('fpr#')).sort((x, y) => (y.left_at || '').localeCompare(x.left_at || '')), el = document.getElementById('fpRefList'); if (!el) return;
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Left</th><th>Client</th><th>To</th><th>Reason</th><th>Condition on leaving</th><th>By</th><th>Letter</th></tr></thead><tbody>${rows.map(r => { const e = fpEps().find(x => x.record_id === r.fp_id); if (!e) return ''; const nn = String(r.record_id).split('#').pop();
+      return `<tr class="rowbar ${r.urgency === 'Emergency' ? 'red' : ''}"><td>${fmtDate(r.left_at)}</td><td>${fpNameCell(e, `<div class="vit">${esc(e.fp_no || '')}</div>`)}</td><td>${esc(r.referred_to)}<div class="vit">${esc(r.urgency || '')} · ${esc(r.transport || '')}</div></td><td>${esc(r.reason)}</td><td class="vit">${esc(String(r.condition || '').slice(0, 120))}</td><td>${esc(r.entered_by || '')}</td><td style="white-space:nowrap">${refBtns('fp', e.record_id + '@' + nn)}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="7">No referrals yet.</td></tr>'}</tbody></table>`;
+  }
+  function fpRenderAll() { gxStrip(); renderFpDue(); renderFpActive(); renderFpRefs(); renderFpRegister(); }
+  // ---- Register for family planning ----
+  function fpRegForm(src) {
+    if (!canFp) return; src = String(src); const pid = src.slice(2); if (!pid) return;
+    if (fpActive().some(e => e.patient_id === pid)) return fpNote('She is already registered. Open her file.');
+    const p = fpPat(pid) || {}, male = p.sex === 'male', pe = pnRecs.filter(e => String(e.record_id).startsWith('pn#') && e.patient_id === pid).sort((a, b) => String(b.birth_at).localeCompare(String(a.birth_at)))[0], recent = pe && (Date.now() - new Date(pe.birth_at)) < 400 * FP_DAY;
+    gxArm('fpForm', 'fpreg', src, pid, p.full_name || '');
+    fpShow(`<div class="fd-form">${anBanner(pid, null)}<h5>Register for family planning</h5>
+      ${recent ? `<div class="notice" style="margin-bottom:8px">Born in ${esc(pe.birth_place || 'postnatal care')} on ${fmtDate(pe.birth_at)} (postnatal number ${esc(pe.pn_no || '')}). The birth date is copied from the postnatal record.</div>` : ''}
+      <div class="grid3">
+        <div class="f"><label>Where she came from <span class="req">*</span></label>${ldSel('fr_src', FP_SRC, recent ? FP_SRC[1] : FP_SRC[0])}</div>
+        <div class="f"><label>Why <span class="req">*</span></label>${ldSelBlank('fr_why', FP_WHY)}</div>
+        <div class="f"><label>Methods used before <span class="req">*</span></label>${ldSelBlank('fr_prev', FP_PREV)}</div>
+        <div class="f"><label>Number of births <span class="req">*</span> <span class="unit">${male ? 'children fathered' : 'including stillbirths'}</span></label><input id="fr_par" type="number" min="0" max="25"></div>
+        <div class="f"><label>Children alive <span class="req">*</span></label><input id="fr_liv" type="number" min="0" max="25"></div>
+        ${male ? '' : `<div class="f"><label>Date of last birth</label><input id="fr_lb" type="date" max="${today10()}" value="${recent ? String(pe.birth_at).slice(0, 10) : ''}"></div>
+        <div class="f"><label>Breastfeeding now <span class="req">*</span></label>${ldSelBlank('fr_bf', ['No', 'Yes'])}</div>`}
+        <div class="f"><label>HIV status</label>${ldSel('fr_hiv', ['Not known', 'Non-reactive', 'Reactive'], recent && pe.hiv ? pe.hiv : 'Not known')}</div>
+        <div class="f"><label>Partner</label>${ldSel('fr_pt', FP_PARTNER, FP_PARTNER[2])}</div></div>
+      <div class="f" style="margin-top:8px"><label>Method used before <span class="unit">name, if any</span></label><input id="fr_pm" placeholder="e.g. injectable, pills"></div>
+      <div class="f" style="margin-top:8px"><label>Notes</label><textarea id="fr_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="frSave">Register</button><button class="btn-sm ghost" id="fpCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('fpCancel').onclick = fpClose;
+    document.getElementById('frSave').onclick = async () => {
+      clearErrs(document.getElementById('fpForm')); const errs = [], par = anNum('fr_par'), liv = anNum('fr_liv');
+      if (!val('fr_why')) errs.push(['fr_why', 'Choose why.']); if (!val('fr_prev')) errs.push(['fr_prev', 'Say if she has used a method before.']);
+      if (par === null || par < 0 || par > 25) errs.push(['fr_par', 'Enter the number of births, 0 to 25.']); if (liv === null || liv < 0 || liv > 25) errs.push(['fr_liv', 'Enter the children alive, 0 to 25.']); else if (par !== null && liv > par + 1) errs.push(['fr_liv', 'Children alive cannot be more than the births (twins count as two).']);
+      if (!male && !val('fr_bf')) errs.push(['fr_bf', 'Say if she is breastfeeding.']); if (!male && val('fr_lb') && val('fr_lb') > today10()) errs.push(['fr_lb', 'The date cannot be in the future.']);
+      if (errs.length) return showErrs(errs);
+      const btn = document.getElementById('frSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const now = fpNow(), reg = await fpNextReg(new Date().getFullYear()), key = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        await fpPut({ patient_id: S(pid), record_id: S('fp#' + key), record_type: S('family-planning'), fp_no: S(reg.no), fp_year: S(reg.year), fp_seq: { N: String(reg.seq) }, client_id: S(p.client_id || ''), patient_name: S(p.full_name || ''), sex: S(p.sex || ''), registered_at: S(now), source: S(val('fr_src')), reason: S(val('fr_why')), prev_use: S(val('fr_prev')), prev_method: val('fr_pm').trim() ? S(val('fr_pm').trim()) : undefined,
+          parity: anN(par), living: anN(liv), last_birth: !male && val('fr_lb') ? S(val('fr_lb')) : undefined, breastfeeding: !male ? S(val('fr_bf')) : undefined, hiv: S(val('fr_hiv')), partner: S(val('fr_pt')), pn_id: recent && val('fr_src') === FP_SRC[1] ? S(pe.record_id) : undefined, notes: val('fr_note').trim() ? S(val('fr_note').trim()) : undefined, ...fpStamp(now) });
+        await fpRefresh(); fpClose(); fpRenderAll();
+        fpNote(`<b>${esc(p.full_name || '')}</b> registered for family planning (${esc(reg.no)}). <button class="btn-sm b-rel" data-fpact="visit|fp#${esc(key)}" style="margin-left:8px">Record her first visit now</button>`, 'ok');
+      } catch (e) { btn.disabled = false; btn.textContent = 'Register'; fpNote(`Could not save: ${esc(e.message)}`); }
+    };
+  }
+  // ---- Earlier visits, shown at the top of a new visit ----
+  const fpVisitLine = v => `${esc(v.method || '—')}${v.method_status ? ' <span class="vit">(' + esc(String(v.method_status).toLowerCase()) + ')</span>' : ''}${v.qty ? ', ' + esc(v.qty) + ' ' + esc((FP_BY[v.method] || {}).unit || '') : ''}${v.batch ? ', batch ' + esc(v.batch) : ''}${v.arm ? ', ' + esc(String(v.arm).toLowerCase()) : ''}`;
+  const fpCheckLine = v => `${v.sys ? 'BP ' + esc(v.sys) + '/' + esc(v.dia) : ''}${v.weight ? ', ' + esc(v.weight) + ' kg' : ''}${v.preg_test && v.preg_test !== 'Not done' ? ', pregnancy test ' + esc(String(v.preg_test).toLowerCase()) : ''}${v.side_effects ? '<div>' + esc(String(v.side_effects).split('|').join(', ')) + '</div>' : ''}`;
+  function fpHistoryHtml(e) {
+    const vs = fpVisitsOf(e).slice().reverse(); if (!vs.length) return '<div class="vit" style="margin-top:6px">No earlier visits.</div>';
+    const rows = vs.map(v => `<tr class="${v.alerts ? 'rowbar red' : ''}"><td>${fmtDate(v.visit_at)}</td><td>${esc(v.visit_type || '')}</td><td class="vit">${fpVisitLine(v)}</td><td class="vit">${fpCheckLine(v)}</td><td>${v.alerts ? `<span style="color:#C62828">${esc(v.alerts)}</span>` : ''}${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}</td></tr>`).join('');
+    return `<details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:600;color:var(--mid-green)">Previous visits (${vs.length})</summary><div class="recent-scroll" style="min-height:0;margin-top:6px"><table class="data-table" id="fpHist"><thead><tr><th>Date</th><th>Visit</th><th>Method</th><th>Checks</th><th>Findings and plan</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  }
+  // ---- A family planning visit ----
+  function fpVisitForm(rid) {
+    const e = fpEps().find(x => x.record_id === rid); if (!e || !canFp) return;
+    if (fpClosed(e)) return fpNote('Family planning for her has been closed.');
+    const male = fpMale(e.patient_id), p = fpPat(e.patient_id) || {}, cur = fpCurrent(e), n = fpNext(e), vs = fpVisitsOf(e), lastV = vs[vs.length - 1];
+    gxArm('fpForm', 'fpvisit', rid, e.patient_id, e.patient_name);
+    fpShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Family planning visit <span class="vit" style="font-weight:400">${esc(e.fp_no || '')}</span></h5>
+      <div class="vit">${cur ? `Method now: <b>${esc(cur.m.t)}</b> since ${fmtDate(cur.since)}.` : 'No method on file now.'}${n ? ` Next: ${esc(n.label)} on ${anDate(n.date)}${n.overdue ? ' (' + n.late + ' days overdue)' : ''}.` : ''}</div>
+      ${fpHistoryHtml(e)}
+      ${lastV && lastV.alerts ? `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#8E1C14;margin-top:6px">Findings at the last visit (${fmtDate(lastV.visit_at)}): ${esc(lastV.alerts)}</div>` : ''}
+      <div class="grid3" style="margin-top:8px"><div class="f"><label>Visit time <span class="req">*</span></label><input id="fv_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
+        <div class="f"><label>Visit type <span class="req">*</span></label>${ldSelBlank('fv_type', FP_VT)}</div></div>
+      <div id="fvLate"></div>
+      <h5>Checks</h5><div class="grid3">
+        <div class="f"><label>Blood pressure <span class="req">*</span></label><div style="display:flex;gap:8px"><input id="fv_sys" type="number" min="50" max="260"><input id="fv_dia" type="number" min="30" max="160"></div></div>
+        <div class="f"><label>Weight <span class="unit">kg</span> <span class="req">*</span></label><input id="fv_wt" type="number" step="0.1" min="25" max="250"></div>
+        ${male ? '' : `<div class="f"><label>Last period began <span class="unit">date, if known</span></label><input id="fv_lmp" type="date" max="${today10()}"></div>`}</div>
+      ${male ? '' : `<div id="fvPreg"><h5>Is she pregnant?</h5><div class="vit">Needed when starting or changing a method, or giving an injection. Tick every statement that is true. If none is true, do a pregnancy test.</div>
+        <div class="grid2" style="margin-top:6px">${FP_PQ.map(k => `<label class="chk"><input type="checkbox" name="fv_pq" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div>
+        <div class="grid3" style="margin-top:8px"><div class="f"><label>Pregnancy test</label>${ldSel('fv_pt', ['Not done', 'Negative', 'Positive'])}</div></div></div>
+      <div id="fvCond"><h5>Medical screening</h5><div class="vit">Does she have any of these now? Tick all that apply. No laboratory test is needed to start a method.</div>
+        <div class="grid2" style="margin-top:6px">${FP_COND.map(c => `<label class="chk"><input type="checkbox" name="fv_cd" value="${esc(c.t)}"> ${esc(c.t)}</label>`).join('')}</div>
+        <label class="chk" style="margin-top:8px"><input type="checkbox" id="fv_scr"> I asked her about each of these <span class="req">*</span></label></div>`}
+      <h5>Method</h5><div class="grid3">
+        <div class="f"><label>Method <span class="req" id="fvMreq">*</span></label>${ldSelBlank('fv_method', fpMethodsFor(male).map(m => m.t))}</div>
+        <div class="f" id="fvStW"><label>Outcome today <span class="req">*</span></label>${ldSelBlank('fv_status', FP_ST)}</div>
+        <div class="f" id="fvQtyW" style="display:none"><label id="fvQtyL">Quantity <span class="req">*</span></label><input id="fv_qty" type="number" min="1" max="500"><div class="vit" id="fvQtyH"></div></div>
+        <div class="f" id="fvBrandW" style="display:none"><label>Brand or product</label><input id="fv_brand"></div>
+        <div class="f" id="fvBatchW" style="display:none"><label>Batch number</label><input id="fv_batch"></div>
+        <div class="f" id="fvArmW" style="display:none"><label>Arm <span class="req">*</span></label>${ldSelBlank('fv_arm', ['Left upper arm', 'Right upper arm'])}</div>
+        <div class="f" id="fvWhyW" style="display:none"><label>Reason for stopping <span class="req">*</span></label>${ldSelBlank('fv_swhy', FP_STOP_WHY)}</div>
+        <div class="f" id="fvRemW" style="display:none"><label>Implant or IUD <span class="req">*</span></label>${ldSelBlank('fv_rem', ['Removed today', 'Referred for removal'])}</div></div>
+      <div id="fvInfo" class="vit" style="margin-top:6px"></div>
+      <div style="margin-top:10px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Any problems with the method?</label><div class="grid2" style="margin-top:6px">${FP_SE.map(s => `<label class="chk"><input type="checkbox" name="fv_se" value="${esc(s.t)}"> ${esc(s.t)}</label>`).join('')}</div></div>
+      <div style="margin-top:12px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Counselled on <span class="req">*</span></label><div class="vit">New method or change: the first six are required. Revisit: side effects, warning signs and return date.</div><div class="grid2" style="margin-top:6px">${FP_COUNSEL.map(k => `<label class="chk"><input type="checkbox" name="fv_cn" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div></div>
+      <div class="grid3" style="margin-top:8px"><div class="f"><label>Next visit <span class="unit">date</span></label><input id="fv_next" type="date" min="${today10()}"><div class="vit" id="fvNextH"></div></div></div>
+      <div class="f" style="margin-top:8px"><label>Notes and plan <span class="unit">required if anything needs action</span></label><textarea id="fv_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="fvSave">Save visit</button><button class="btn-sm ghost" id="fpCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('fpCancel').onclick = fpClose;
+    const $ = id => document.getElementById(id), show = (id, on) => { const el = $(id); if (el) el.style.display = on ? '' : 'none'; };
+    const sync = () => {
+      const type = val('fv_type'), m = FP_BY[val('fv_method')], st = val('fv_status'), given = st === FP_ST[0];
+      if (type === VT_EC && $('fv_method').value !== FP_M.find(x => x.k === 'ec').t) { $('fv_method').value = FP_M.find(x => x.k === 'ec').t; $('fv_status').value = FP_ST[0]; }
+      if (type === VT_STOP) { /* outcome not asked */ } show('fvStW', type !== VT_STOP); show('fvWhyW', type === VT_STOP); show('fvRemW', type === VT_STOP && !!m && !!m.larc);
+      show('fvMreq', type !== VT_CO);
+      const qty = given && type !== VT_STOP && m && (m.g === 'Pills' || m.g === 'Condoms' || m.k === 'ec'); show('fvQtyW', !!qty);
+      if (qty) { $('fvQtyL').innerHTML = `${m.g === 'Pills' ? 'Cycles given' : m.k === 'ec' ? 'Doses given' : 'Pieces given'} <span class="req">*</span>`; $('fvQtyH').textContent = m.g === 'Pills' ? 'Ghana protocol: 3 cycles for a new client, 7 to 13 for a continuing client.' : ''; }
+      show('fvBrandW', given && type !== VT_STOP && !!m && !m.perm); show('fvBatchW', given && type !== VT_STOP && !!m && (m.g === 'Injectables' || m.g === 'Implants' || m.g === 'IUD'));
+      show('fvArmW', given && type !== VT_STOP && !!m && m.g === 'Implants');
+      let info = ''; if (m && m.perm) info = 'Permanent methods are not done here. Choose “Referred for the method” and use the Referrals tab to send her with a letter.';
+      else if (m && m.larc && given) info = `Removal or replacement due about ${anDate(anAdd(String($('fv_at').value || '').slice(0, 10) || today10(), Math.round(m.years * 365)))}. The usual follow-up is one check after one month, and she should return at once if there is a problem.`;
+      else if (m && m.days && given) info = `Next injection due ${m.days / 7} weeks after today. She can be up to ${m.late / 7} weeks late and still be given it, after a pregnancy check.`;
+      $('fvInfo').textContent = info;
+      let hint = ''; if (m && given && type !== VT_STOP) { const pl = fpPlanFor({ m, v: { visit_at: String(ldIso('fv_at') || fpNow()), qty: anNum('fv_qty') || undefined, visit_type: type, record_id: 'zz', removal_due: '' }, since: ldIso('fv_at') || fpNow() }, []); if (pl) hint = `If left blank: ${pl.label} on ${anDate(pl.date)}.`; }
+      $('fvNextH').textContent = hint;
+      const L = $('fvLate'); if (L) { L.innerHTML = ''; const c = cur && m && cur.m.k === m.k ? cur : null; if (c && m.days && type === VT_REV) { const d = Math.round((Date.now() - new Date(c.v.visit_at)) / FP_DAY); if (d > m.days + m.late) L.innerHTML = `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#8E1C14;margin-top:6px">The last injection was ${d} days ago: more than ${m.late / 7} weeks late. Be sure she is not pregnant before giving it.</div>`; } }
+    };
+    ['fv_type', 'fv_method', 'fv_status', 'fv_at'].forEach(id => $(id).addEventListener('change', sync)); $('fv_qty').addEventListener('input', sync); sync();
+    $('fvSave').onclick = async () => {
+      clearErrs($('fpForm')); const errs = [], at = ldIso('fv_at'), type = val('fv_type'), m = FP_BY[val('fv_method')], st = type === VT_STOP ? 'Stopped' : val('fv_status'), given = st === FP_ST[0];
+      const sys = anNum('fv_sys'), dia = anNum('fv_dia'), wt = anNum('fv_wt'), qtyOn = given && m && (m.g === 'Pills' || m.g === 'Condoms' || m.k === 'ec'), qty = qtyOn ? anNum('fv_qty') : null, shown = given && type !== VT_STOP && m && !m.perm, batchOn = shown && ['Injectables', 'Implants', 'IUD'].includes(m.g), armOn = shown && m.g === 'Implants';
+      if (!at) errs.push(['fv_at', 'Enter the time.']); else if (new Date(at) > new Date(Date.now() + 60000)) errs.push(['fv_at', 'The time is in the future.']); else if (new Date(at) < new Date(e.registered_at) - 86400000) errs.push(['fv_at', 'The time is before she was registered.']);
+      if (!type) errs.push(['fv_type', 'Choose the visit type.']);
+      if (sys === null || dia === null || sys < 50 || sys > 260 || dia < 30 || dia > 160 || sys <= dia) errs.push([sys === null || sys < 50 || sys > 260 ? 'fv_sys' : 'fv_dia', 'Enter the blood pressure.']);
+      if (wt === null || wt < 25 || wt > 250) errs.push(['fv_wt', 'Enter the weight in kilograms.']);
+      if (type !== VT_CO && !m) errs.push(['fv_method', 'Choose the method.']);
+      if (type && type !== VT_STOP && type !== VT_CO && !st) errs.push(['fv_status', 'Choose the outcome today.']);
+      if (m && m.perm && st && st !== FP_ST[2] && type !== VT_STOP && type !== VT_CO) errs.push(['fv_status', 'A permanent method is not done here. Choose “Referred for the method”.']);
+      if (type === VT_NEW && cur && !errs.length) errs.push(['fv_type', `She is already using ${cur.m.t}. Choose “Changing method” or “Revisit”.`]);
+      if (type === VT_CH && !cur && !errs.length) errs.push(['fv_type', 'She has no current method on file. Choose “New acceptor” or “Revisit”.']);
+      if (type === VT_STOP && m && !cur && !errs.length) errs.push(['fv_method', 'She has no current method on file to stop.']);
+      if (type === VT_STOP && m && cur && cur.m.k !== m.k && !errs.length) errs.push(['fv_method', `Her current method is ${cur.m.t}. Choose that one to stop it.`]);
+      if (type === VT_STOP && !val('fv_swhy')) errs.push(['fv_swhy', 'Choose the reason for stopping.']); if (type === VT_STOP && m && m.larc && !val('fv_rem')) errs.push(['fv_rem', 'Say if it was removed today or she is referred.']);
+      if (qtyOn && qty === null) errs.push(['fv_qty', 'Enter how many were given.']);
+      if (qty !== null && m && m.g === 'Pills' && (qty < 1 || qty > 13 || !Number.isInteger(qty))) errs.push(['fv_qty', 'Cycles: a whole number from 1 to 13.']);
+      if (qty !== null && (qty < 1 || qty > 500)) errs.push(['fv_qty', 'Enter 1 to 500.']);
+      if (armOn && !val('fv_arm')) errs.push(['fv_arm', 'Say which arm.']);
+      if (val('fv_next') && val('fv_next') <= today10()) errs.push(['fv_next', 'The next visit must be after today.']);
+      const conds = male ? [] : [...document.querySelectorAll('input[name="fv_cd"]:checked')].map(c => c.value), pq = male ? [] : [...document.querySelectorAll('input[name="fv_pq"]:checked')].map(c => c.value), pt = male ? 'Not done' : val('fv_pt'), se = [...document.querySelectorAll('input[name="fv_se"]:checked')].map(c => c.value), cn = [...document.querySelectorAll('input[name="fv_cn"]:checked')].map(c => c.value);
+      const needsPreg = !male && m && !m.perm && [VT_NEW, VT_CH].includes(type) && given && (m.cls || []).length > 0 || (!male && type === VT_REV && given && m && m.days);
+      if (needsPreg && !pq.length && pt === 'Not done') errs.push(['fv_pt', 'Tick a statement that is true, or do a pregnancy test.']);
+      const screenNeeded = !male && type && ![VT_STOP, VT_EC, VT_CO].includes(type) && !!m; if (screenNeeded && !$('fv_scr').checked) errs.push(['fv_scr', 'Ask her about each condition, then tick the box.']);
+      const need = type === VT_NEW || type === VT_CH ? FP_COUNSEL.slice(0, 6) : (type === VT_REV || type === VT_FU) ? [FP_COUNSEL[2], FP_COUNSEL[3], FP_COUNSEL[4]] : [];
+      const miss = need.filter(k => !cn.includes(k)); if (miss.length) errs.push([document.querySelector('input[name="fv_cn"]'), 'Counselling is required: ' + miss.join('; ') + '.']);
+      const al = [], blocks = [];
+      if (!errs.length) {
+        if (pt === 'Positive') { al.push('Pregnancy test positive'); blocks.push('The pregnancy test is positive. Do not give a method. Refer her for antenatal care.'); }
+        if (!male && m && ![VT_STOP, VT_CO].includes(type)) { const sc = fpScreen(m, conds, sys, dia); sc.forEach(x => { al.push(x.msg); if (x.level === 'avoid' && given) blocks.push(x.msg); }); }
+        se.forEach(t => { if ((FP_SE.find(s => s.t === t) || {}).alert) al.push(t); });
+        if (type === VT_REV && given && m && m.days && cur && cur.m.k === m.k) { const d = Math.round((new Date(at) - new Date(cur.v.visit_at)) / FP_DAY); if (d > m.days + m.late) al.push(`Injection ${d - m.days} days late: pregnancy ruled out first`); }
+        if (blocks.length) { fpNote(`<b>The method cannot be given today.</b> ${esc(blocks.join('; '))}. Choose another method, set the outcome to “Referred for the method”, or “Will start later”.`); return showErrs([['fv_status', 'Not allowed: ' + blocks[0]]]); }
+        if (al.length && !val('fv_note').trim()) errs.push(['fv_note', 'Write what was done about: ' + al.join('; ') + '.']);
+      }
+      if (errs.length) return showErrs(errs);
+      const btn = $('fvSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const now = fpNow(), nth = vs.length + 1, age = fpAgeAt(p, at), rd = given && m && m.years ? anAdd(String(at).slice(0, 10), Math.round(m.years * 365)) : '';
+        await fpPut({ patient_id: S(e.patient_id), record_id: S(`fpv#${fpKey(e)}#${String(nth).padStart(2, '0')}`), record_type: S('family-planning-visit'), fp_id: S(e.record_id), n: { N: String(nth) }, visit_at: S(at), visit_type: S(type), age_years: age !== null ? anN(age) : undefined,
+          sys: anN(sys), dia: anN(dia), weight: anN(wt), lmp: val('fv_lmp') ? S(val('fv_lmp')) : undefined, preg_criteria: pq.length ? S(pq.join('|')) : undefined, preg_test: S(pt), conditions: conds.length ? S(conds.join('|')) : undefined,
+          method: m ? S(m.t) : undefined, method_status: st ? S(st) : undefined, qty: qty !== null ? anN(qty) : undefined, brand: shown && val('fv_brand').trim() ? S(val('fv_brand').trim()) : undefined, batch: batchOn && val('fv_batch').trim() ? S(val('fv_batch').trim()) : undefined, arm: armOn && val('fv_arm') ? S(val('fv_arm')) : undefined, removal_due: rd ? S(rd) : undefined,
+          stop_reason: type === VT_STOP ? S(val('fv_swhy')) : undefined, removal: type === VT_STOP && val('fv_rem') ? S(val('fv_rem')) : undefined, side_effects: se.length ? S(se.join('|')) : undefined, counselled: cn.length ? S(cn.join('|')) : undefined,
+          alerts: al.length ? S(al.join(' | ')) : undefined, next_visit: val('fv_next') ? S(val('fv_next')) : undefined, notes: val('fv_note').trim() ? S(val('fv_note').trim()) : undefined, ...fpStamp(now) });
+        await fpRefresh(); fpClose(); fpRenderAll();
+        fpNote(`Visit saved for <b>${esc(e.patient_name)}</b>${m ? ' (' + esc(m.t) + ', ' + esc(String(st).toLowerCase()) + ')' : ''}.${al.length ? ` <b>Findings to follow up: ${esc(al.join('; '))}.</b> <button class="btn-sm ghost" data-fpact="refer|${esc(e.record_id)}" style="margin-left:8px">Refer out</button>` : ''}${m && m.perm ? ` <button class="btn-sm b-rel" data-fpact="refer|${esc(e.record_id)}" style="margin-left:8px">Refer for ${esc(m.t.split(' (')[0].toLowerCase())}</button>` : ''}`, al.length ? '' : 'ok');
+      } catch (err) { btn.disabled = false; btn.textContent = 'Save visit'; fpNote(`Could not save: ${esc(err.message)}`); }
+    };
+  }
+  // ---- Refer out, and close ----
+  function fpReferForm(rid) {
+    const e = fpEps().find(x => x.record_id === rid); if (!e || !canFp) return;
+    gxArm('fpForm', 'fprefer', rid, e.patient_id, e.patient_name);
+    fpShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Refer to another facility</h5>
+      <div class="grid3"><div class="f"><label>Time leaving <span class="req">*</span></label><input id="frf_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
+        <div class="f"><label>Referred to <span class="req">*</span></label><input id="frf_to" placeholder="Hospital name"></div>
+        <div class="f"><label>Main reason <span class="req">*</span></label>${ldSelBlank('frf_why', FP_REF_WHY)}</div>
+        <div class="f"><label>Urgency <span class="req">*</span></label>${ldSel('frf_urg', ['Emergency', 'Urgent', 'Routine'], 'Routine')}</div>
+        <div class="f"><label>Transport <span class="req">*</span></label>${ldSelBlank('frf_tr', ['Ambulance', 'Private vehicle', 'Public transport', 'Other'])}</div>
+        <div class="f"><label>Receiving facility phoned ahead</label>${ldSel('frf_call', ['Yes', 'No'], 'No')}</div></div>
+      <div class="f" style="margin-top:8px"><label>Condition on leaving <span class="req">*</span></label><textarea id="frf_cond" rows="2" placeholder="Blood pressure, weight, what the problem is"></textarea></div>
+      <div class="f" style="margin-top:8px"><label>Treatment given before leaving</label><textarea id="frf_tx" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="frfSave">Save referral</button><button class="btn-sm ghost" id="fpCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time. The letter carries her family planning history.</div></div>`);
+    document.getElementById('fpCancel').onclick = fpClose;
+    document.getElementById('frfSave').onclick = async () => {
+      clearErrs(document.getElementById('fpForm')); const errs = [], at = ldIso('frf_at');
+      if (!at) errs.push(['frf_at', 'Enter the time.']); if (!val('frf_to').trim()) errs.push(['frf_to', 'Say where she is being referred.']); if (!val('frf_why')) errs.push(['frf_why', 'Choose the reason.']); if (!val('frf_tr')) errs.push(['frf_tr', 'Choose the transport.']); if (!val('frf_cond').trim()) errs.push(['frf_cond', 'Write the condition on leaving.']);
+      if (errs.length) return showErrs(errs);
+      const b = document.getElementById('frfSave'); b.disabled = true; b.textContent = 'Saving…';
+      try { const n = fpRefs(e).length + 1, to = val('frf_to').trim();
+        await fpPut({ patient_id: S(e.patient_id), record_id: S(`fpr#${fpKey(e)}#${String(n).padStart(2, '0')}`), record_type: S('referral'), fp_id: S(e.record_id), left_at: S(at), referred_to: S(to), urgency: S(val('frf_urg')), reason: S(val('frf_why')), transport: S(val('frf_tr')), phoned_ahead: S(val('frf_call')), condition: S(val('frf_cond')), treatment: val('frf_tx') ? S(val('frf_tx')) : undefined, ...fpStamp(fpNow()) });
+        await fpRefresh(); fpClose(); fpRenderAll(); fpNote(`<b>${esc(e.patient_name)}</b> referred to ${esc(to)}.<div style="margin-top:8px">${refBtns('fp', e.record_id)} <span class="vit">Send it with her. It carries her family planning history.</span></div>`, 'ok'); }
+      catch (err) { b.disabled = false; b.textContent = 'Save referral'; fpNote(`Could not save the referral: ${esc(err.message)}`); }
+    };
+  }
+  function fpCloseForm(rid) {
+    const e = fpEps().find(x => x.record_id === rid); if (!e || !canFp) return;
+    if (fpClosed(e)) return fpNote('Family planning for her is already closed.');
+    gxArm('fpForm', 'fpclose', rid, e.patient_id, e.patient_name); const nx = fpNext(e), cur = fpCurrent(e);
+    fpShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Close family planning</h5>
+      ${cur ? `<div class="notice" style="margin-bottom:8px">She still has a method on file: ${esc(cur.m.t)}.${nx ? ' ' + esc(nx.label) + ' is planned for ' + anDate(nx.date) + '.' : ''} If she has stopped it, record a “Stopping or removal” visit first.</div>` : ''}
+      <div class="grid3"><div class="f"><label>Reason <span class="req">*</span></label>${ldSelBlank('fc_why', FP_CLOSE)}</div></div>
+      <div class="f" style="margin-top:8px"><label>Notes <span class="unit">required for every reason except moved away</span></label><textarea id="fc_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="fcSave">Close</button><button class="btn-sm ghost" id="fpCancel">Cancel</button></div><div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('fpCancel').onclick = fpClose;
+    document.getElementById('fcSave').onclick = async () => {
+      clearErrs(document.getElementById('fpForm')); const errs = [], why = val('fc_why'); if (!why) errs.push(['fc_why', 'Choose the reason.']); else if (why !== FP_CLOSE[4] && !val('fc_note').trim()) errs.push(['fc_note', 'Write a short note.']);
+      if (errs.length) return showErrs(errs);
+      const b = document.getElementById('fcSave'); b.disabled = true;
+      try { await fpPut({ patient_id: S(e.patient_id), record_id: S('fpd#' + fpKey(e)), record_type: S('family-planning-close'), fp_id: S(e.record_id), reason: S(why), closed_at: S(fpNow()), notes: val('fc_note').trim() ? S(val('fc_note').trim()) : undefined, ...fpStamp(fpNow()) });
+        await fpRefresh(); fpClose(); fpRenderAll(); fpNote(`Family planning closed for <b>${esc(e.patient_name)}</b>.`, 'ok'); }
+      catch (err) { b.disabled = false; fpNote(`Could not save: ${esc(err.message)}`); }
+    };
+  }
+  // ---- The client's family planning file ----
+  function fpFile(rid) {
+    const e = fpEps().find(x => x.record_id === rid); if (!e) return;
+    const vs = fpVisitsOf(e), cl = fpClosed(e), rfs = fpRefs(e), nx = fpNext(e), cur = fpCurrent(e), kv = (k, v) => v !== undefined && v !== '' && v !== null ? `<div><span style="color:#777">${k}</span> ${esc(v)}</div>` : '';
+    const rxn = fpRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('rxn#' + fpKey(e) + '#'));
+    const vRows = vs.map(v => ({ t: String(v.visit_at || ''), h: `<tr class="rowbar ${v.alerts ? 'red' : ''}"><td>${fmtDate(v.visit_at)}</td><td>${esc(v.visit_type || '')}</td><td class="vit">${fpVisitLine(v)}${v.stop_reason ? '<div>Reason: ' + esc(v.stop_reason) + (v.removal ? ' (' + esc(v.removal.toLowerCase()) + ')' : '') + '</div>' : ''}${v.removal_due ? '<div>Removal due ' + anDate(v.removal_due) + '</div>' : ''}</td><td class="vit">${fpCheckLine(v)}</td><td>${v.alerts ? `<div style="color:#C62828;font-size:12.5px"><b>${esc(v.alerts)}</b></div>` : ''}${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}</td><td>${esc(v.entered_by || '')}</td></tr>` }));
+    const rRows = rxn.map(x => ({ t: String(x.entered_at || ''), h: `<tr style="background:#F3F8F0"><td>${fmtDate(x.entered_at)}</td><td colspan="4"><b>Prescription ${esc(x.rx_no || '')}</b> sent to the pharmacy: ${esc(x.meds || '')}${x.notes ? ' <span class="vit">(' + esc(x.notes) + ')</span>' : ''}</td><td>${esc(x.entered_by || '')}</td></tr>` }));
+    const rows = vRows.concat(rRows).sort((x, y) => y.t.localeCompare(x.t)).map(x => x.h).join('');
+    fpShow(`<div class="fd-form">${anBanner(e.patient_id, null)}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b>${esc(e.fp_no || '')}</b> <span class="st ${cl ? 'wait' : 'done'}">${cl ? 'Closed' : 'In family planning'}</span>
+        ${canFp && !cl ? `<button class="btn-sm b-rel" data-fpact="visit|${esc(e.record_id)}">Record visit</button><button class="btn-sm ghost" data-fpact="refer|${esc(e.record_id)}">Refer out</button><button class="btn-sm ghost" data-fpact="close|${esc(e.record_id)}">Close family planning</button>` : ''}
+        ${rfs.length ? refBtns('fp', e.record_id) : ''}<button class="btn-sm ghost" id="fpCancel" style="margin-left:auto">Close file</button></div>
+      ${!cl ? `<div class="vit">${cur ? `Method now: <b>${esc(cur.m.t)}</b> since ${fmtDate(cur.since)}. ` : 'No method now. '}${nx ? `Next: <b>${esc(nx.label)}</b> on ${anDate(nx.date)}${nx.overdue ? ' <span style="color:#C62828">(' + nx.late + ' days overdue)</span>' : ''}` : ''}</div>` : ''}
+      <h5>Registration</h5><div class="grid3" style="font-size:13.5px;line-height:1.7"><div>${kv('Registered', fmtDate(e.registered_at))}${kv('Came from', e.source)}${kv('Reason', e.reason)}${kv('Methods used before', e.prev_use)}${kv('Method before', e.prev_method)}</div>
+        <div>${kv('Births', e.parity)}${kv('Children alive', e.living)}${kv('Last birth', e.last_birth ? anDate(e.last_birth) : '')}${kv('Breastfeeding', e.breastfeeding)}</div><div>${kv('HIV status', e.hiv)}${kv('Partner', e.partner)}${kv('Notes', e.notes)}</div></div>
+      <div class="stamp" style="margin-top:6px">Registered by ${esc(e.entered_by || '')} · ${fmtDate(e.entered_at)}</div>
+      <h5>Visits</h5><div class="recent-scroll" style="min-height:0"><table class="data-table"><thead><tr><th>Date</th><th>Visit</th><th>Method</th><th>Checks</th><th>Findings and plan</th><th>By</th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="6">No visits yet.</td></tr>'}</tbody></table></div>
+      ${rfs.map(r => `<h5>Referral</h5><div class="notice">Referred to <b>${esc(r.referred_to)}</b> at ${fmtDate(r.left_at)} (${esc(r.urgency || '')}): ${esc(r.reason)}. ${esc(r.transport)}. Phoned ahead: ${esc(r.phoned_ahead)}.<br>Condition: ${esc(r.condition)}${r.treatment ? '<br>Treatment: ' + esc(r.treatment) : ''}<div class="vit">${esc(r.entered_by || '')} · ${fmtDate(r.entered_at)}</div></div>`).join('')}
+      <h5>Prescriptions</h5><div id="fpRxBox" class="vit">Loading…</div>
+      ${cl ? `<h5>✔ Closed</h5><div style="font-size:13.5px;line-height:1.7">${kv('Reason', cl.reason)}${kv('Closed', fmtDate(cl.closed_at))}${kv('Notes', cl.notes)}</div><div class="stamp">${esc(cl.entered_by || '')} · ${fmtDate(cl.entered_at)}</div>` : ''}
+      </div>`);
+    document.getElementById('fpCancel').onclick = fpClose;
+    rxmHistory('fpRxBox', e.patient_id);
+  }
+  function fpOpen(mode, id) {
+    document.getElementById('fpMsg').innerHTML = '';
+    if (mode === 'reg') return fpRegForm(id); if (mode === 'file') return fpFile(id); if (mode === 'visit') return fpVisitForm(id); if (mode === 'refer') return fpReferForm(id); if (mode === 'close') return fpCloseForm(id);
+  }
+  // ---- Referral letter pages for a family planning client ----
+  function fpLetterSections(e, vs, sections) {
+    const cur = fpCurrent(e);
+    sections.push({ h: 'Family planning at this clinic', kv: [['Family planning number', e.fp_no], ['Registered', fmtDate(e.registered_at)], ['Came from', e.source], ['Births', e.parity], ['Children alive', e.living], ['Last birth', e.last_birth ? anDate(e.last_birth) : ''], ['Breastfeeding', e.breastfeeding], ['HIV status', e.hiv], ['Method now', cur ? cur.m.t + ' (since ' + fmtDate(cur.since) + ')' : 'None'], ['Methods used before', e.prev_use]].filter(k => k[1] !== undefined && k[1] !== '' && k[1] !== null) });
+    if (vs.length) sections.push({ h: 'Family planning visits', head: ['Date', 'Visit', 'Method', 'Checks', 'Findings and plan'], widths: [22, 34, 48, 32, 46],
+      body: vs.map(v => ({ flag: !!v.alerts, c: [refD(v.visit_at), v.visit_type || '', [v.method, v.method_status, v.qty ? v.qty + ' ' + ((FP_BY[v.method] || {}).unit || '') : '', v.batch ? 'batch ' + v.batch : '', v.arm || ''].filter(Boolean).join(', '),
+        [v.sys ? 'BP ' + v.sys + '/' + v.dia : '', v.weight ? v.weight + ' kg' : '', v.preg_test && v.preg_test !== 'Not done' ? 'pregnancy test ' + String(v.preg_test).toLowerCase() : ''].filter(Boolean).join(', '), [v.alerts, v.notes].filter(Boolean).join('. ')] })) });
+  }
+  // ---- Register and tally (monthly counts: new acceptors and revisits by method, age, couple-years of protection) ----
+  const fpAllVisits = () => fpRecs.filter(r => String(r.record_id).startsWith('fpv#'));
+  const fpEpOf = v => fpEps().find(e => e.record_id === v.fp_id);
+  const FP_AGES = [['10 to 14', 10, 14], ['15 to 19', 15, 19], ['20 to 24', 20, 24], ['25 to 34', 25, 34], ['35 to 49', 35, 49], ['50 and over', 50, 150]];
+  function fpIndicators() {
+    const eps = fpEps(), refs = fpRecs.filter(r => String(r.record_id).startsWith('fpr#')), vis = fpAllVisits().map(v => ({ v, e: fpEpOf(v), m: FP_BY[v.method] })).filter(x => x.e);
+    const D = x => String(x.v.visit_at).slice(0, 10), given = x => x.v.method_status === FP_ST[0] && x.m && !x.m.perm, isNew = x => x.v.visit_type === VT_NEW && given(x), isRev = x => x.v.visit_type === VT_REV && given(x);
+    const row = (id, label, items, dateOf, wOf) => ({ id, label, dates: items.map(dateOf), w: wOf ? items.map(wOf) : undefined }), vrow = (id, label, f) => row(id, label, vis.filter(f), D), grp = (name, items) => items.map(i => ({ group: name, ...i }));
+    const age = x => x.v.age_years !== undefined && x.v.age_years !== '' ? Number(x.v.age_years) : null, regRow = (id, label, f) => row(id, label, eps.filter(f), e => String(e.registered_at).slice(0, 10));
+    const units = x => (x.m.g === 'Pills' || x.m.g === 'Condoms' || x.m.k === 'ec') ? (Number(x.v.qty) || 1) : 1;
+    const methRows = pre => FP_M.filter(m => !m.perm && m.k !== 'ec').map(m => vrow(pre + m.k, '  ' + m.t, x => (pre === 'n_' ? isNew(x) : isRev(x)) && x.m.k === m.k));
+    const cypRows = ['Pills', 'Injectables', 'Implants', 'IUD', 'Condoms', 'Emergency'].map(g => { const items = vis.filter(x => given(x) && x.m.g === g && x.m.cyp); return row('cyp_' + g, '  ' + (g === 'Emergency' ? 'Emergency contraception' : g), items, D, x => units(x) * x.m.cyp); });
+    return [
+      ...grp('Clients', [regRow('reg', 'New family planning registrations', () => true), regRow('regA', '  of which aged 10 to 19', e => { const a = fpAgeAt(fpPat(e.patient_id), e.registered_at); return a !== null && a >= 10 && a <= 19; }), regRow('regP', '  of which sent from postnatal care here', e => e.source === FP_SRC[1]), regRow('regM', '  of which men', e => e.sex === 'male')]),
+      ...grp('Visits', [vrow('v', 'All family planning visits', () => true), vrow('vn', 'New acceptors (a method given at a new-acceptor visit)', isNew), vrow('vne', '  of which first time ever using a method', x => isNew(x) && x.e.prev_use === FP_PREV[0]), vrow('vr', 'Revisits with a method given (resupply or next injection)', isRev), vrow('vf', 'Follow-up checks', x => x.v.visit_type === VT_FU), vrow('vc', 'Changed method', x => x.v.visit_type === VT_CH && given(x)), vrow('vx', 'Stopped or had the method removed', x => x.v.visit_type === VT_STOP), vrow('vec', 'Emergency contraception given', x => x.v.visit_type === VT_EC && given(x)), vrow('vco', 'Counselling only, no method', x => x.v.visit_type === VT_CO)]),
+      ...grp('New acceptors by method', methRows('n_')), ...grp('Revisits by method', methRows('r_')),
+      ...grp('Age of new acceptors', FP_AGES.map(([t, lo, hi]) => vrow('a' + lo, '  ' + t + ' years', x => isNew(x) && age(x) !== null && age(x) >= lo && age(x) <= hi)).concat([vrow('aN', '  Age not recorded', x => isNew(x) && age(x) === null)])),
+      ...grp('Mothers starting after a birth or abortion', [vrow('pp', 'New acceptors sent from postnatal care here', x => isNew(x) && x.e.source === FP_SRC[1]), vrow('pa', 'New acceptors after a miscarriage or abortion', x => isNew(x) && x.e.source === FP_SRC[3]), vrow('pc', 'New acceptors from the antenatal clinic here', x => isNew(x) && x.e.source === FP_SRC[2])]),
+      ...grp('Problems, removals and referrals', [vrow('rmI', 'Implants removed here', x => x.v.visit_type === VT_STOP && x.m && x.m.g === 'Implants' && x.v.removal === 'Removed today'), vrow('rmU', 'IUDs removed here', x => x.v.visit_type === VT_STOP && x.m && x.m.g === 'IUD' && x.v.removal === 'Removed today'), vrow('stS', 'Stopped because of side effects', x => x.v.visit_type === VT_STOP && x.v.stop_reason === FP_STOP_WHY[1]), vrow('prg', 'Pregnancy suspected or positive test while using a method', x => String(x.v.side_effects || '').includes('Pregnancy suspected') || x.v.preg_test === 'Positive'), vrow('sef', 'Visits with a warning sign or complication', x => !!x.v.alerts),
+        row('rfp', 'Referred for a permanent method (visit outcome)', vis.filter(x => x.m && x.m.perm && x.v.method_status === FP_ST[2]), D), row('rf', 'Referrals made (letters)', refs, r => String(r.left_at).slice(0, 10))]),
+      ...grp('Couple-years of protection (CYP) from what was issued', cypRows)
+    ];
+  }
+  const FP_RATES = [{ label: 'Adolescents (10 to 19) % of new acceptors', num: ['a10', 'a15'], den: 'vn' }, { label: 'Implant or IUD % of new acceptors', num: ['n_jad', 'n_imp', 'n_iud'], den: 'vn' }, { label: 'Sent from postnatal care % of new acceptors', num: ['pp'], den: 'vn' }];
+  function fpTallyCols() {
+    if (fpRegPeriod === 'quarterly') return [0, 1, 2, 3].map(q => ({ label: 'Q' + (q + 1), key: d => d.slice(0, 4) === fpRegYear && Math.floor((Number(d.slice(5, 7)) - 1) / 3) === q }));
+    if (fpRegPeriod === 'yearly') { const ys = new Set([fpRegYear]); fpIndicators().forEach(i => i.dates.forEach(d => ys.add(d.slice(0, 4)))); return [...ys].sort().map(y => ({ label: y, key: d => d.slice(0, 4) === y })); }
+    return AN_MONTHS.map((m, i) => ({ label: m, key: d => d.slice(0, 4) === fpRegYear && Number(d.slice(5, 7)) === i + 1 }));
+  }
+  function fpTallyData() {
+    const cols = fpTallyCols(), f1 = v => Math.round(v * 10) / 10, rows = fpIndicators().map(i => { const cyp = String(i.id).startsWith('cyp_'), counts = cols.map(c => { let s = 0; i.dates.forEach((d, k) => { if (c.key(d)) s += i.w ? i.w[k] : 1; }); return cyp ? s : s; }); return { ...i, raw: counts, counts: cyp ? counts.map(f1) : counts, total: f1(counts.reduce((a, b) => a + b, 0)) }; }), by = id => rows.find(r => r.id === id) || { counts: cols.map(() => 0), total: 0 };
+    const cy = rows.filter(r => String(r.id).startsWith('cyp_')); rows.push({ group: cy.length ? cy[0].group : 'Couple-years of protection (CYP) from what was issued', id: 'cyp_all', label: 'Total CYP', counts: cols.map((c, i) => f1(cy.reduce((s, r) => s + r.raw[i], 0))), total: f1(cy.reduce((s, r) => s + r.raw.reduce((x, y) => x + y, 0), 0)) });
+    FP_RATES.forEach(r => { const f = (n, d) => d ? Math.round(n * 1000 / d) / 10 + '%' : '—'; rows.push({ group: 'Rates (same period)', id: 'rate_' + r.den + r.num.join(''), label: r.label, rate: true, counts: cols.map((c, i) => f(r.num.reduce((s, id) => s + by(id).counts[i], 0), by(r.den).counts[i])), total: f(r.num.reduce((s, id) => s + by(id).total, 0), by(r.den).total) }); });
+    return { cols, rows };
+  }
+  function fpRegList() {
+    return fpEps().filter(e => (fpRegYear === 'all' || String(e.registered_at).slice(0, 4) === fpRegYear) && fpMatch(e)).sort((a, b) => (a.fp_year || '').localeCompare(b.fp_year || '') || (Number(a.fp_seq) || 0) - (Number(b.fp_seq) || 0)).map(e => {
+      const vs = fpVisitsOf(e), cl = fpClosed(e), p = fpPat(e.patient_id) || {}, c = fpCurrent(e), n = fpNext(e), age = fpAgeAt(p, fpNow());
+      return { e, no: e.fp_no || '', name: e.patient_name, reg: String(e.registered_at).slice(0, 10), age, source: e.source || '', method: c ? c.m.t : 'None', since: c ? String(c.since).slice(0, 10) : '', next: n ? n.date : '', visits: vs.length, status: cl ? 'Closed: ' + cl.reason : 'In family planning' };
+    });
+  }
+  function renderFpRegister() {
+    const el = document.getElementById('fpRegister'); if (!el) return;
+    const years = new Set([String(new Date().getFullYear()), fpRegYear === 'all' ? '' : fpRegYear]); fpEps().forEach(e => years.add(String(e.registered_at).slice(0, 4))); years.delete('');
+    const yo = [...years].sort().reverse().map(y => `<option value="${y}" ${y === fpRegYear ? 'selected' : ''}>${y}</option>`).join('');
+    const bar = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><button class="btn-sm ${fpRegView === 'list' ? '' : 'ghost'}" data-fpreg="list">Register</button><button class="btn-sm ${fpRegView === 'tally' ? '' : 'ghost'}" data-fpreg="tally">Tally report</button>
+      <select id="fpRegYear" style="padding:7px 10px">${fpRegView === 'list' ? `<option value="all" ${fpRegYear === 'all' ? 'selected' : ''}>All years</option>` : ''}${yo}</select>
+      ${fpRegView === 'tally' ? `<select id="fpRegPeriod" style="padding:7px 10px">${['monthly', 'quarterly', 'yearly'].map(p => `<option value="${p}" ${p === fpRegPeriod ? 'selected' : ''}>${p[0].toUpperCase() + p.slice(1)}</option>`).join('')}</select>` : ''}</div>`;
+    let body;
+    if (fpRegView === 'list') {
+      const rows = fpRegList();
+      body = `<div class="vit" style="margin-bottom:8px">Every client registered for family planning, in register order. <b>${rows.length}</b> ${rows.length === 1 ? 'entry' : 'entries'}${fpRegYear === 'all' ? '' : ' for ' + esc(fpRegYear)}.</div><div class="recent-scroll"><table class="data-table" id="fpRegTable"><thead><tr><th>Number</th><th>Registered</th><th>Client</th><th>Age</th><th>Came from</th><th>Method now</th><th>Next visit</th><th>Visits</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${esc(r.no)}</b></td><td>${anDate(r.reg)}</td><td>${fpNameCell(r.e)}</td><td>${r.age !== null ? r.age : '—'}</td><td class="vit">${esc(r.source)}</td><td class="vit">${esc(r.method)}${r.since ? '<div>since ' + anDate(r.since) + '</div>' : ''}</td><td>${r.next ? anDate(r.next) : '—'}</td><td>${r.visits}</td><td class="vit">${esc(r.status)}</td></tr>`).join('') || '<tr class="empty-row"><td colspan="9">No entries.</td></tr>'}</tbody></table></div>`;
+    } else {
+      const d = fpTallyData(); let last = '';
+      body = `<div class="vit" style="margin-bottom:8px">Counts for ${fpRegPeriod === 'yearly' ? 'each year' : esc(fpRegYear)}: registrations, new acceptors and revisits by method, age of new acceptors, and couple-years of protection (CYP = quantity issued × a standard conversion factor). Check the row names and the conversion factors against your current DHIMS2 form before copying numbers across. Visits are counted on the visit date.</div><div class="recent-scroll"><table class="data-table" id="fpTallyTable"><thead><tr><th>Indicator</th>${d.cols.map(c => `<th style="text-align:right">${esc(c.label)}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead><tbody>${d.rows.map(r => { const head = r.group !== last ? `<tr><td colspan="${d.cols.length + 2}" style="background:#EFF5EC;font-weight:700;color:var(--forest)">${esc(r.group)}</td></tr>` : ''; last = r.group; return head + `<tr><td style="white-space:pre">${esc(r.label)}</td>${r.counts.map(c => `<td style="text-align:right">${esc(c)}</td>`).join('')}<td style="text-align:right"><b>${esc(r.total)}</b></td></tr>`; }).join('')}</tbody></table></div>`;
+    }
+    el.innerHTML = bar + body + `<div class="vit" style="margin-top:10px">Downloading or printing the register will follow the same approval rule as the other registers.</div>`;
+  }
+  async function fpAutoRefresh() {
+    if (fpTimer) clearInterval(fpTimer);
+    fpTimer = setInterval(async () => {
+      if (!document.getElementById('fpPaneDue') || !document.getElementById('detailView').classList.contains('active')) { clearInterval(fpTimer); fpTimer = null; return; }
+      const f = document.getElementById('fpForm'); if (f && f.style.display !== 'none') return;
+      try { await fpRefresh(); fpRenderAll(); if (fpTab === 'rx') await rxmTick('family-planning'); } catch (e) { /* try again next time */ }
+    }, 45000);
+  }
+  async function loadFamilyPlanningData() {
+    const liveEl = document.getElementById('liveContent'); liveEl.style.display = 'block';
+    liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
+    try {
+      await fpRefresh(); liveEl.innerHTML = fpShellHtml();
+      if (!liveEl.dataset.boundF) {
+        liveEl.addEventListener('click', e => {
+          const tb = e.target.closest('[data-fptab]'); if (tb) { setFpTab(tb.dataset.fptab); return; }
+          const rg = e.target.closest('[data-fpreg]'); if (rg) { fpRegView = rg.dataset.fpreg; if (fpRegView === 'tally' && fpRegYear === 'all') fpRegYear = String(new Date().getFullYear()); renderFpRegister(); setFpTab('register'); return; }
+          const a = e.target.closest('[data-fpact]'); if (a) { e.preventDefault(); const k = a.dataset.fpact, i = k.indexOf('|'); fpOpen(k.slice(0, i), k.slice(i + 1)); }
+        });
+        liveEl.addEventListener('change', e => { if (e.target.id === 'fpRegYear') { fpRegYear = e.target.value; renderFpRegister(); } else if (e.target.id === 'fpRegPeriod') { fpRegPeriod = e.target.value; renderFpRegister(); } });
+        liveEl.dataset.boundF = '1';
+      }
+      const run = () => { fpQ = document.getElementById('fpSearch').value; renderFpActive(); renderFpRegister(); };
+      fpQ = ''; document.getElementById('fpSearch').addEventListener('input', run); document.getElementById('fpSearchBtn').addEventListener('click', run); document.getElementById('fpClearBtn').addEventListener('click', () => { document.getElementById('fpSearch').value = ''; run(); });
+      document.getElementById('fpFind').addEventListener('input', fpFindRender);
+      const rg = document.getElementById('fpRefGo'); if (rg) rg.onclick = () => { const v = val('fpRefPick'); if (!v) return showErrs([['fpRefPick', 'Choose the client.']]); fpOpen('refer', v); };
+      fpTab = 'due'; setFpTab('due'); fpRenderAll(); fpAutoRefresh();
+    } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load family planning data: ${esc(err.message)}</div>`; }
+  }
+
   // Every panel that opens inside a department gets a "Back" button at the top, so nobody has to go back to the department list.
   const BACK_MAP = { phForm: 'phCancel', lbForm: 'lbCancel', clWork: 'clClose', clRxReply: 'rqClose', clResult: 'clResultClose', fdProfileCard: 'fdProfileClose', fdFormCard: 'fdCancel', bgForm: 'bgCancel', anForm: 'anCancel', ldForm: 'ldCancel' };
   function addBackBars() {
@@ -6950,6 +7503,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       if (dept.slug === 'antenatal') loadAntenatalData();
       if (dept.slug === 'labour-delivery') loadLabourData();
       if (dept.slug === 'postnatal') loadPostnatalData();
+      if (dept.slug === 'family-planning') loadFamilyPlanningData();
     } else {
       liveEl.style.display = 'none';
       placeholderEl.style.display = 'block';
@@ -6987,6 +7541,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     canLd = groups.includes('labour-delivery') && !groups.includes('admin');
     canLdIn = canLd && groups.includes('labour-delivery-incharge');
     canPn = groups.includes('postnatal') && !groups.includes('admin');
+    canFp = groups.includes('family-planning') && !groups.includes('admin');
     renderDeptGrid(groups);
   }
 
