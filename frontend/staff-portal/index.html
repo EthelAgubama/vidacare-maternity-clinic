@@ -1026,14 +1026,14 @@
         ? `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · <span class="st urgent">Sample rejected</span> ${esc(r.reject_reason || '')}</span>
       <button class="btn-sm" data-result="${esc(r.request_id)}">See details</button></div>`
         : `<div class="labs-in-row"><span><a class="lnk" data-copen="${esc(r.patient_id)}">${esc(r.patient_name)}</a> <span class="cid">${esc(r.client_id || '')}</span> · ${esc(r.test)} · ${r.result_flag === 'critical' ? '<span class="st f-critical">CRITICAL</span> ' : ''}${r.amended_at ? '<b>corrected</b> ' + fmtDate(r.amended_at) : 'released ' + fmtDate(r.released_at)}</span>
-      <button class="btn-sm" data-result="${esc(r.request_id)}">View result</button></div>`).join('')}</div>`;
+      ${labLeftHtml(r)}<button class="btn-sm" data-result="${esc(r.request_id)}">View result</button></div>`).join('')}</div>`;
   }
 
   function queueTags(pid) {
     const tags = [];
     if (fdDrafts.some(d => d.patient_id === pid && !d.cleared_at)) tags.push('<span class="st wait">Draft notes</span>');
     const mine = clLab.filter(r => r.patient_id === pid);
-    if (mine.some(r => r.status === 'released' && !r.seen_at)) tags.push('<span class="st done">Labs ready</span>');
+    if (mine.some(r => r.status === 'released' && !r.seen_at)) { tags.push('<span class="st done">Labs ready</span>'); if (mine.some(r => r.status === 'released' && labLeft(r).length)) tags.push('<span class="st wait">More labs still pending</span>'); }
     else if (mine.some(r => !['released', 'rejected'].includes(r.status) && (r.requested_at || '').slice(0, 10) === new Date().toISOString().slice(0, 10))) tags.push('<span class="st f-abnormal">Waiting for labs</span>');
     const todayIso = new Date().toISOString().slice(0, 10);
     if (clRx.some(r => r.patient_id === pid && r.status === 'query')) tags.push('<span class="st rej">Pharmacy query</span>');
@@ -1072,7 +1072,7 @@
   }
 
   function labStatus(r) {
-    if (r.status === 'released') return `<span class="st done">Results in</span> <a class="lnk" data-result="${esc(r.request_id)}">View result</a>`;
+    if (r.status === 'released') return `<span class="st done">Results in</span> <a class="lnk" data-result="${esc(r.request_id)}">View result</a> ${labLeftHtml(r)}`;
     if (r.status === 'rejected') return `<span class="st urgent">Sample rejected</span> <a class="lnk" data-result="${esc(r.request_id)}">Details</a>`;
     if (r.status === 'received') return '<span class="st wait">Sample received</span>';
     if (r.status === 'in-progress' || r.status === 'entered') return '<span class="st wait">In progress</span>';
@@ -2038,13 +2038,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   }
 
   function renderLabQueue() {
-    const rows = pending().filter(labMatch).map(r => `<tr class="rowbar red">
-      <td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '—')}</span>
-        <span style="color:#777;font-size:12px"> ${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''}</span></td>
-      <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}</td>
-      <td>${labStatusBadge(r)}</td>
-      <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td>
-      <td style="white-space:nowrap">${queueButtons(r)}</td></tr>`).join('');
+    const rows = labQueueRows();
     document.getElementById('lbQueue').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Test</th><th>Status</th><th>Requested by</th><th></th></tr></thead>
       <tbody>${rows || `<tr class="empty-row"><td colspan="5">${labQ ? 'No waiting test matches your search.' : 'No tests are waiting. New requests from clinicians appear here.'}</td></tr>`}</tbody></table>`;
     const byWhen = (a, b) => (b.released_at || b.rejected_at || '').localeCompare(a.released_at || a.rejected_at || '');
@@ -2199,28 +2193,30 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
   }
 
   // action: draft | submit (needs a second person to verify) | release (only lab staff on duty, or a correction)
-  async function saveLabResult(action) {
-    const r = clLab.find(x => x.request_id === labSel); if (!r) return;
+  async function saveLabResult(action, o) {
+    o = o || {}; const pre = o.pre || '', quiet = !!o.quiet; const r = o.r || clLab.find(x => x.request_id === labSel); if (!r) return false;
+    const lgE = m => { if (quiet) o.err = r.test + ': ' + m; else labErr(m); }, lgO = html => { if (!quiet) labOk(html); }, lgC = () => { if (!quiet) labClose(); };
     const amend = labMode === 'amend';
     const panel = panelFor(r.test);
     const list = [], missing = [], bad = [];
     panel.p.forEach((p, i) => {
-      mark('lp_' + i, false);
-      const v = val('lp_' + i);
-      if (!v) { if (p.req) missing.push(i); return; }
+      mark(pre + 'lp_' + i, false);
+      const v = val(pre + 'lp_' + i);
+      if (!v) { if (p.req) missing.push(i); return false; }
       if (p.t === 'num' && !(parseFloat(v) >= 0)) bad.push(i);
       list.push({ k: p.k, n: p.n, v, u: p.unit || '', r: refText(p, r.sex), f: flagOf(p, v, r.sex) });
     });
     const areason = amend ? val('lb_areason') : '';
     if (amend) mark('lb_areason', !areason);
     const worst = list.reduce((a, x) => SEV[x.f] > SEV[a] ? x.f : a, '');
-    const crit = val('lb_crit');
-    if (bad.length) { bad.forEach(i => mark('lp_' + i, true)); labErr('Results cannot be negative or empty numbers. Please correct the highlighted fields.'); return; }
-    if (!list.length) { labErr('Please enter at least one result.'); return; }
-    if (action !== 'draft' && missing.length) { missing.forEach(i => mark('lp_' + i, true)); labErr('Please fill the highlighted required results first.'); return; }
-    if (amend && !areason) { labErr('Please give the reason for the correction.'); return; }
-    if (action === 'release' && worst === 'critical' && !crit) { mark('lb_crit', true); labErr('This is a critical result. Please record who was informed.'); return; }
-    const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
+    const crit = val(pre + 'lb_crit');
+    if (bad.length) { bad.forEach(i => mark(pre + 'lp_' + i, true)); lgE('Results cannot be negative or empty numbers. Please correct the highlighted fields.'); return false; }
+    if (!list.length) { lgE('Please enter at least one result.'); return false; }
+    if (action !== 'draft' && missing.length) { missing.forEach(i => mark(pre + 'lp_' + i, true)); lgE('Please fill the highlighted required results first.'); return false; }
+    if (amend && !areason) { lgE('Please give the reason for the correction.'); return false; }
+    if (action === 'release' && worst === 'critical' && !crit) { mark(pre + 'lb_crit', true); lgE('This is a critical result. Please record who was informed.'); return false; }
+    if (o.dry) return true;
+    const btns = quiet ? [] : [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
     try {
       const client = await getClient();
       const now = new Date().toISOString();
@@ -2239,7 +2235,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
         params_json: S(JSON.stringify(list)),
         result_value: single ? S(list[0].v) : undefined, unit: single ? S(list[0].u) : undefined, reference_range: single ? S(list[0].r) : undefined,
         result_text: single ? undefined : S(summary),
-        flag: S(worst), comment: S(val('lb_comment')), sample_id: S(r.sample_id), sample_type: S(r.sample_type),
+        flag: S(worst), comment: S(val(pre + 'lb_comment')), sample_id: S(r.sample_id), sample_type: S(r.sample_type),
         entered_at: S(old ? old.entered_at : now), entered_by: S(old ? old.entered_by : staffName()), entered_by_username: S(old ? old.entered_by_username : staffUser()),
         verified_by: old ? S(old.verified_by) : undefined, verified_by_username: old ? S(old.verified_by_username) : undefined, verified_at: old ? S(old.verified_at) : undefined,
         self_verified: old ? S(old.self_verified) : (action === 'release' ? S('yes') : undefined),
@@ -2252,24 +2248,25 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
         await labUpdate(r, ['amended_at = :t', 'amended_by = :b', 'amend_reason = :r', 'result_version = :n', 'result_flag = :f'],
           { ':t': { S: now }, ':b': { S: staffName() }, ':r': { S: areason }, ':n': { S: String(ver + 1) }, ':f': { S: worst } }, 'seen_at, seen_by');
         Object.assign(r, { amended_at: now, amended_by: staffName(), amend_reason: areason, result_flag: worst }); delete r.seen_at; delete r.seen_by;
-        labClose(); labOk(`Correction saved for ${esc(r.test)} (${esc(r.patient_name)}). The clinician will see "Labs in!" again, marked as corrected.`);
+        lgC(); lgO(`Correction saved for ${esc(r.test)} (${esc(r.patient_name)}). The clinician will see "Labs in!" again, marked as corrected.`);
       } else if (action === 'release') {
         await labUpdate(r, ['#s = :s', 'released_at = :t', 'released_by = :b', 'released_by_username = :u', 'entered_by_username = :u', 'result_flag = :f', 'self_verified = :y'],
           { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() }, ':f': { S: worst }, ':y': { S: 'yes' } }, CLEAR_RETURN);
         Object.assign(r, { status: 'released', released_at: now, released_by: staffName(), result_flag: worst, entered_by_username: staffUser() });
-        labClose(); labOk(`Released: ${esc(r.test)} for ${esc(r.patient_name)}. The clinician will see "Labs in!". Recorded as released without a second verifier.`);
+        lgC(); lgO(`Released: ${esc(r.test)} for ${esc(r.patient_name)}. The clinician will see "Labs in!". Recorded as released without a second verifier.`);
       } else if (action === 'submit') {
         await labUpdate(r, ['#s = :s', 'entered_at = :t', 'entered_by = :b', 'entered_by_username = :u', 'result_flag = :f'],
           { ':s': { S: 'entered' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() }, ':f': { S: worst } }, CLEAR_RETURN);
         Object.assign(r, { status: 'entered', entered_by: staffName(), entered_by_username: staffUser(), result_flag: worst }); delete r.return_reason;
-        labClose(); labOk(`Submitted: ${esc(r.test)} for ${esc(r.patient_name)} is waiting for another lab staff member to verify it.`);
+        lgC(); lgO(`Submitted: ${esc(r.test)} for ${esc(r.patient_name)} is waiting for another lab staff member to verify it.`);
       } else {
         await labUpdate(r, ['#s = :s'], { ':s': { S: 'in-progress' } });
         r.status = 'in-progress';
-        labClose(); labOk(`Draft saved for ${esc(r.test)} (${esc(r.patient_name)}). It has not been released.`);
+        lgC(); lgO(`Draft saved for ${esc(r.test)} (${esc(r.patient_name)}). It has not been released.`);
       }
+      return true;
     } catch (err) {
-      labErr('Could not save: ' + esc(err.message)); btns.forEach(b => b.disabled = false);
+      lgE('Could not save: ' + esc(err.message)); btns.forEach(b => b.disabled = false); return false;
     }
   }
 
@@ -2350,6 +2347,7 @@ ${m.comment ? `<p><b>Comment:</b> ${esc(m.comment)}</p>` : ''}${m.critical ? `<p
         liveEl.addEventListener('click', e => {
           const tb = e.target.closest('[data-lbtab]'); if (tb) { setLabTab(tb.dataset.lbtab); return; }
           const a = e.target.closest('[data-lbact]'); if (a) { e.preventDefault(); const [m, id] = a.dataset.lbact.split('|'); if (m !== 'amend') setLabTab('wait'); openLabForm(id, m); return; }
+          const lgb = e.target.closest('[data-lgact]'); if (lgb) { e.preventDefault(); setLabTab('wait'); const [m, k] = lgb.dataset.lgact.split('|'); lgOpen(m, k); return; }
           const v = e.target.closest('[data-lbview]'); if (v) { e.preventDefault(); viewLabResult(v.dataset.lbview); }
         });
         liveEl.dataset.boundL = '1';
@@ -8303,6 +8301,186 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     const d = ldD10(l.birth_at || (n && n.date_of_birth)); if (l.bcg === 'Given') set('cr_pd_BCG', d); if (l.opv0 === 'Given') set('cr_pd_OPV0', d);
     const w2 = document.getElementById('cr_bw'); const grid = w2 && w2.closest('.grid3'); if (grid) grid.insertAdjacentHTML('beforebegin', '<div class="notice" style="margin:6px 0">Filled in from the delivery record: where born, birth weight, and the vaccines given at birth. Check them, then register.</div>');
   }
+
+  // ================= Lab: one card per person per request =================
+  // Tests asked for together (same group_id) show as one card. One receive step, one results sheet, one verify sheet.
+  const LG_CODE = { 'Blood (EDTA)': 'EDT', 'Blood (plain)': 'BLD', 'Blood (fluoride)': 'FLU', 'Urine': 'URI', 'Stool': 'STL', 'Swab': 'SWB', 'Other': 'OTH' };
+  let lgSecs = [];
+  const lgKey = r => r.group_id || r.request_id;
+  const lgTests = k => clLab.filter(r => lgKey(r) === k && !['released', 'rejected'].includes(r.status));
+  const lgIsRecv = r => ['received', 'in-progress', 'entered'].includes(r.status);
+  const lgSid = (k, type) => (LG_CODE[type] || 'OTH') + '-' + new Date().toISOString().slice(2, 10).replace(/-/g, '') + '-' + String(k).replace(/-/g, '').slice(0, 6).toUpperCase();
+  function lgGroups() {
+    const map = new Map();
+    pending().forEach(r => { const k = lgKey(r); if (!map.has(k)) map.set(k, []); map.get(k).push(r); });
+    return [...map.entries()].map(([k, tests]) => ({ k, tests }));
+  }
+  function lgSingleRow(r) {
+    return `<tr class="rowbar red">
+      <td><strong>${esc(r.patient_name || '—')}</strong><br><span class="cid">${esc(r.client_id || '—')}</span>
+        <span style="color:#777;font-size:12px"> ${esc(r.sex || '')}${r.date_of_birth ? ' · ' + esc(ageOf(r.date_of_birth)) : ''}</span></td>
+      <td>${esc(r.test)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${r.clinical_notes ? `<div class="vit">${esc(r.clinical_notes)}</div>` : ''}</td>
+      <td>${labStatusBadge(r)}</td>
+      <td>${esc(r.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(r.requested_at)}</span></td>
+      <td style="white-space:nowrap">${queueButtons(r)}</td></tr>`;
+  }
+  const lgMini = r => r.status === 'entered' ? '<span class="st f-abnormal">to verify</span>' : r.status === 'in-progress' ? `<span class="st wait">${r.return_reason ? 'returned' : 'draft'}</span>` : r.status === 'received' ? '<span class="st wait">received</span>' : '<span class="st rej">to receive</span>';
+  const lgDoneSibs = g => clLab.filter(r => lgKey(r) === g.k && ['released', 'rejected'].includes(r.status));
+  function lgGroupRow(g) {
+    const t0 = g.tests[0], urgent = g.tests.some(x => x.urgency === 'urgent'), k = esc(g.k);
+    const nR = g.tests.filter(r => !lgIsRecv(r)).length, nE = g.tests.filter(r => r.status === 'received' || r.status === 'in-progress').length, nV = g.tests.filter(r => r.status === 'entered').length;
+    const notes = [...new Set(g.tests.map(r => r.clinical_notes).filter(Boolean))];
+    const btn = canLab ? [nR ? `<button class="btn-sm b-recv" data-lgact="recv|${k}">Receive samples (${nR})</button>` : '', nE ? `<button class="btn-sm b-enter" data-lgact="enter|${k}">Enter results (${nE})</button>` : '', nV ? `<button class="btn-sm b-rel" data-lgact="ver|${k}">Verify (${nV})</button>` : ''].filter(Boolean).join('<br>') : '';
+    return `<tr class="rowbar red" data-lgrow="${k}">
+      <td><strong>${esc(t0.patient_name || '—')}</strong><br><span class="cid">${esc(t0.client_id || '—')}</span>
+        <span style="color:#777;font-size:12px"> ${esc(t0.sex || '')}${t0.date_of_birth ? ' · ' + esc(ageOf(t0.date_of_birth)) : ''}</span></td>
+      <td>${g.tests.map(r => `<div style="padding:3px 0;border-bottom:1px dashed #E3E8DF"><b>${esc(r.test)}</b> ${lgMini(r)}${r.urgency === 'urgent' ? ' <span class="st urgent">urgent</span>' : ''}${canLab ? ` <a class="lnk" data-lbact="reject|${esc(r.request_id)}" style="font-size:12px;margin-left:6px">Reject</a>` : ''}</div>`).join('')}${lgDoneSibs(g).length ? `<div class="vit" style="margin-top:4px">Already done on this request: ${esc(lgDoneSibs(g).map(r => r.test + (r.status === 'rejected' ? ' (rejected)' : ' (released)')).join(', '))}</div>` : ''}${notes.length ? `<div class="vit">${esc(notes.join(' · '))}</div>` : ''}</td>
+      <td>${nR ? `<span class="st rej">${nR} to receive</span> ` : ''}${nE ? `<span class="st wait">${nE} to enter</span> ` : ''}${nV ? `<span class="st f-abnormal">${nV} to verify</span>` : ''}<div class="vit">${g.tests.length} waiting${lgDoneSibs(g).length ? ', ' + lgDoneSibs(g).length + ' done' : ''}, one request</div></td>
+      <td>${esc(t0.requested_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(t0.requested_at)}</span></td>
+      <td style="white-space:nowrap">${btn}</td></tr>`;
+  }
+  function labQueueRows() {
+    const gs = lgGroups().filter(g => g.tests.some(labMatch));
+    gs.sort((a, b) => (b.tests.some(x => x.urgency === 'urgent') ? 1 : 0) - (a.tests.some(x => x.urgency === 'urgent') ? 1 : 0) || (a.tests[0].requested_at || '').localeCompare(b.tests[0].requested_at || ''));
+    return gs.map(g => g.tests.length === 1 && !lgDoneSibs(g).length ? lgSingleRow(g.tests[0]) : lgGroupRow(g)).join('');
+  }
+  function lgBanner(ts) {
+    const t0 = ts[0];
+    return `<div class="client-banner"><div><strong>${esc(t0.patient_name)}</strong> <span class="cid">${esc(t0.client_id || '')}</span> — ${ts.length} test${ts.length > 1 ? 's' : ''}
+      <div style="font-size:12.5px;color:#555">${esc(t0.sex || '')}${t0.date_of_birth ? ' · ' + esc(ageOf(t0.date_of_birth)) : ''} · requested by ${esc(t0.requested_by || '—')} at ${fmtDate(t0.requested_at)}${ts.some(x => x.urgency === 'urgent') ? ' · <b>URGENT</b>' : ''}${t0.clinical_notes ? ' · Notes: ' + esc(t0.clinical_notes) : ''}</div></div>
+      <button class="btn-sm ghost" id="lbCancel">Close</button></div>`;
+  }
+  function lgShow(ts, body) {
+    delete gxArmed.lbForm; labSel = null;
+    document.getElementById('lbMsg').innerHTML = '';
+    const card = document.getElementById('lbForm'); card.innerHTML = lgBanner(ts) + body; card.style.display = 'block';
+    document.getElementById('lbCancel').onclick = () => { card.style.display = 'none'; };
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  async function lgOpen(mode, k) {
+    if (!canLab) return;
+    const ts = lgTests(k); if (!ts.length) return;
+    if (mode === 'recv') return lgReceive(k, ts);
+    if (mode === 'enter') return lgEnter(k, ts);
+    if (mode === 'ver') return lgVerify(k, ts);
+  }
+  // ---- one receive for the whole request ----
+  function lgReceive(k, all) {
+    const ts = all.filter(r => !lgIsRecv(r)); if (!ts.length) return labErr('Every sample on this request is already received.');
+    lgShow(all, `<div class="fd-form"><div class="vit" style="margin-bottom:8px">Tick each sample that actually reached the lab. Tests on the same kind of sample share one sample ID. Leave a test unticked if its sample was not collected: it stays waiting.</div>
+      <table class="data-table"><thead><tr><th>Test</th><th>Sample type</th><th>Sample ID</th></tr></thead><tbody>${ts.map((r, i) => `<tr><td><label class="chk"><input type="checkbox" id="lr_ok_${i}" checked> <b>${esc(r.test)}</b></label></td><td><select id="lr_ty_${i}">${opt(SAMPLE_TYPES, 'Select')}</select></td><td><input id="lr_id_${i}"></td></tr>`).join('')}</tbody></table>
+      ${stampLine()}<div style="margin-top:14px"><button class="btn-sm b-recv" id="lgRecvSave">Confirm samples received</button></div></div>`);
+    ts.forEach((r, i) => {
+      const ty = document.getElementById('lr_ty_' + i), id = document.getElementById('lr_id_' + i);
+      ty.value = r.sample_type || panelFor(r.test).sample; id.value = r.sample_id || lgSid(k, ty.value); id.dataset.auto = id.value;
+      ty.addEventListener('change', () => { if (id.value === id.dataset.auto || !id.value) { id.value = ty.value ? lgSid(k, ty.value) : ''; id.dataset.auto = id.value; } });
+    });
+    document.getElementById('lgRecvSave').onclick = async () => {
+      const pick = ts.map((r, i) => ({ r, i })).filter(x => document.getElementById('lr_ok_' + x.i).checked);
+      clearErrs(document.getElementById('lbForm'));
+      if (!pick.length) return labErr('Tick at least one sample that was received.');
+      const miss = pick.filter(x => !val('lr_ty_' + x.i)); if (miss.length) { miss.forEach(x => mark('lr_ty_' + x.i, true)); return labErr('Choose the sample type for each ticked test.'); }
+      const btn = document.getElementById('lgRecvSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      const now = new Date().toISOString(), done = [];
+      try {
+        for (const x of pick) {
+          const type = val('lr_ty_' + x.i), sid = val('lr_id_' + x.i) || lgSid(k, type);
+          await labUpdate(x.r, ['#s = :s', 'sample_id = :i', 'sample_type = :y', 'received_at = :t', 'received_by = :b', 'received_by_username = :u'], { ':s': { S: 'received' }, ':i': { S: sid }, ':y': { S: type }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } });
+          Object.assign(x.r, { status: 'received', sample_id: sid, sample_type: type, received_at: now, received_by: staffName() }); done.push(x.r.test);
+        }
+        labClose(); labOk(`Received ${done.length} of ${ts.length} sample${ts.length > 1 ? 's' : ''} for ${esc(ts[0].patient_name)}: ${esc(done.join(', '))}. Received by ${esc(staffName())} at ${fmtDate(now)}.${done.length < ts.length ? ' The others are still waiting for a sample.' : ''}`);
+      } catch (err) { labErr('Could not save: ' + esc(err.message) + (done.length ? ` (already saved: ${esc(done.join(', '))})` : '')); btn.disabled = false; btn.textContent = 'Confirm samples received'; }
+    };
+  }
+  // ---- one results sheet ----
+  async function lgEnter(k, all) {
+    const ts = all.filter(r => r.status === 'received' || r.status === 'in-progress'); if (!ts.length) return labErr('Receive the samples first.');
+    labMode = 'result';
+    const olds = await Promise.all(ts.map(r => r.status === 'in-progress' ? fetchResult(r).catch(() => null) : null));
+    lgSecs = ts.map((r, n) => ({ r, n, pre: 'g' + n + '_', panel: panelFor(r.test) }));
+    const sec = (s, x) => `<div class="data-card" style="margin:12px 0;padding:12px" data-lgsec="${esc(s.r.request_id)}"><h5 style="margin:0 0 6px">${esc(s.r.test)} <span class="vit">${esc(s.r.sample_id || '')} · ${esc(s.r.sample_type || '')}</span></h5>
+      ${s.r.return_reason ? `<div class="notice"><b>Returned for correction</b> by ${esc(s.r.returned_by || '')}: ${esc(s.r.return_reason)}</div>` : ''}
+      <table class="data-table pt"><thead><tr><th>Parameter</th><th style="width:28%">Result</th><th>Unit</th><th>Reference</th><th>Flag</th><th>Previous</th></tr></thead><tbody>${s.panel.p.map((p, i) => {
+        const inp = p.t === 'sel' ? `<select id="${s.pre}lp_${i}">${opt(p.options, '—')}</select>` : `<input id="${s.pre}lp_${i}" type="${p.t === 'num' ? 'number' : 'text'}"${p.t === 'num' ? ' step="any" min="0"' : ''}>`;
+        return `<tr><td>${esc(p.n)}${p.req ? ' <span class="req">*</span>' : ''}</td><td>${inp}</td><td>${esc(p.unit || '')}</td><td>${esc(refText(p, s.r.sex))}</td><td id="${s.pre}lf_${i}"></td><td id="${s.pre}lpv_${i}" style="color:#777;font-size:12.5px"></td></tr>`; }).join('')}</tbody></table>
+      <div class="f" style="margin-top:8px"><label>Comment for the clinician</label><input id="${s.pre}lb_comment" placeholder="Optional"></div>
+      <div id="${s.pre}crit" class="notice" style="display:none"><b>Critical value.</b> Please tell the clinician before releasing.<div class="f" style="margin-top:8px"><label>Who was informed, and how <span class="req">*</span></label><input id="${s.pre}lb_crit" placeholder="e.g. Dr Kofi, by phone at 14:20"></div></div></div>`;
+    lgShow(all, `<div class="fd-form"><div class="vit" style="margin-bottom:4px">All tests for this request are on this one sheet. Fill the ones that are ready. A test left completely empty is skipped and stays waiting, so you can come back to it.</div>
+      ${lgSecs.map(s => sec(s)).join('')}
+      <label class="chk" style="margin-top:6px"><input type="checkbox" id="lg_solo"> I am the only lab staff on duty (release without a second person verifying)</label>
+      ${stampLine()}<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm ghost" id="lgDraft">Save drafts</button><button class="btn-sm b-enter" id="lgGo">Submit for verification</button></div></div>`);
+    const solo = () => !!document.getElementById('lg_solo').checked;
+    const syncCrit = s => { const worst = s.panel.p.reduce((a, p, i) => { const f = flagOf(p, val(s.pre + 'lp_' + i), s.r.sex); return SEV[f] > SEV[a] ? f : a; }, ''); document.getElementById(s.pre + 'crit').style.display = (worst === 'critical' && solo()) ? 'block' : 'none'; };
+    lgSecs.forEach((s, n) => {
+      const old = olds[n] ? parseParams(olds[n]) : [];
+      s.panel.p.forEach((p, i) => {
+        const el = document.getElementById(s.pre + 'lp_' + i), o = old.find(q => q.k === p.k); if (o) el.value = o.v;
+        const upd = () => { document.getElementById(s.pre + 'lf_' + i).innerHTML = flagBadge(flagOf(p, val(s.pre + 'lp_' + i), s.r.sex)); syncCrit(s); };
+        el.addEventListener('input', upd); el.addEventListener('change', upd); upd();
+      });
+      if (olds[n] && olds[n].comment) document.getElementById(s.pre + 'lb_comment').value = olds[n].comment;
+      prevResults(s.r, 1).then(pv => { if (pv[0]) s.panel.p.forEach((p, i) => { const q = pv[0].by.find(z => z.k === p.k), c = document.getElementById(s.pre + 'lpv_' + i); if (q && c) c.textContent = `${q.v} (${shortDate(pv[0].when)})`; }); }).catch(() => {});
+    });
+    document.getElementById('lg_solo').addEventListener('change', () => { const b = document.getElementById('lgGo'); b.textContent = solo() ? 'Release to clinician' : 'Submit for verification'; b.className = 'btn-sm ' + (solo() ? 'b-rel' : 'b-enter'); lgSecs.forEach(syncCrit); });
+    document.getElementById('lgDraft').onclick = () => lgSave('draft');
+    document.getElementById('lgGo').onclick = () => lgSave(solo() ? 'release' : 'submit');
+  }
+  async function lgSave(action) {
+    clearErrs(document.getElementById('lbForm'));
+    const active = lgSecs.filter(s => s.panel.p.some((p, i) => val(s.pre + 'lp_' + i)));
+    if (!active.length) return labErr('Enter at least one result.');
+    for (const s of active) { const o = { r: s.r, pre: s.pre, quiet: true, dry: true }; if (!(await saveLabResult(action, o))) { labErr(esc(o.err || 'Please check the highlighted fields.')); const first = document.querySelector('#lbForm .bad'); if (first) first.scrollIntoView({ block: 'center' }); return; } }
+    const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
+    const out = { release: [], submit: [], draft: [] }, fail = [];
+    for (const s of active) { const o = { r: s.r, pre: s.pre, quiet: true }; if (await saveLabResult(action, o)) out[action].push(s.r.test); else fail.push(o.err || s.r.test); }
+    const name = esc(lgSecs[0].r.patient_name), skipped = lgSecs.filter(s => !active.includes(s)).map(s => s.r.test);
+    if (fail.length) { btns.forEach(b => b.disabled = false); labErr(`Some tests could not be saved: ${esc(fail.join('; '))}. The others were saved.`); renderLabQueue(); return; }
+    labClose();
+    labOk(`${name}: ${out.release.length ? `released ${esc(out.release.join(', '))}. The clinician will see "Labs in!" for ${out.release.length > 1 ? 'these' : 'this'}.` : ''}${out.submit.length ? ` Submitted for verification: ${esc(out.submit.join(', '))}.` : ''}${out.draft.length ? ` Drafts saved: ${esc(out.draft.join(', '))}.` : ''}${skipped.length ? ` Still waiting for results: ${esc(skipped.join(', '))}.` : ''}`);
+  }
+  // ---- one verify sheet ----
+  async function lgVerify(k, all) {
+    const ts = all.filter(r => r.status === 'entered'); if (!ts.length) return labErr('Nothing is waiting to be verified on this request.');
+    const xs = await Promise.all(ts.map(r => fetchResult(r).catch(() => null)));
+    const items = ts.map((r, i) => ({ r, x: xs[i], i, mine: r.entered_by_username === staffUser() }));
+    lgShow(all, `<div class="fd-form"><div class="vit" style="margin-bottom:6px">Check each test. Tests you leave as they are will be verified and released. Tick <b>Return</b> on a test that is wrong, and it goes back to the person who entered it.</div>
+      ${items.map(it => `<div class="data-card" style="margin:12px 0;padding:12px"><h5 style="margin:0 0 6px">${esc(it.r.test)} <span class="vit">entered by ${esc(it.r.entered_by || '—')} · ${esc(it.r.sample_id || '')}</span></h5>
+        ${it.x ? paramsTableHtml(parseParams(it.x), []) : '<div class="notice">The result record was not found.</div>'}${it.x && it.x.comment ? `<div class="vit">Comment: ${esc(it.x.comment)}</div>` : ''}
+        ${it.mine ? '<div class="notice">You entered this result, so a different lab staff member must verify it.</div>'
+          : `${it.x && it.x.flag === 'critical' ? `<div class="notice"><b>Critical value.</b> Please tell the clinician before releasing.<div class="f" style="margin-top:8px"><label>Who was informed, and how <span class="req">*</span></label><input id="lv_crit_${it.i}" placeholder="e.g. Dr Kofi, by phone at 14:20"></div></div>` : ''}
+          <label class="chk"><input type="checkbox" id="lv_ret_${it.i}"> Return this test for correction</label>`}</div>`).join('')}
+      <div class="f" id="lvWhyBox" style="display:none"><label>Why is it being returned? <span class="req">*</span></label><input id="lv_why" placeholder="Needed for the tests being returned"></div>
+      ${stampLine()}<div style="margin-top:14px"><button class="btn-sm b-rel" id="lgVerSave">${items.every(i => i.mine) ? 'Nothing to verify' : 'Save decisions'}</button></div></div>`);
+    const syncWhy = () => { document.getElementById('lvWhyBox').style.display = items.some(it => !it.mine && document.getElementById('lv_ret_' + it.i).checked) ? '' : 'none'; };
+    items.forEach(it => { const c = document.getElementById('lv_ret_' + it.i); if (c) c.addEventListener('change', syncWhy); });
+    document.getElementById('lgVerSave').onclick = async () => {
+      clearErrs(document.getElementById('lbForm'));
+      const todo = items.filter(it => !it.mine); if (!todo.length) return labErr('A different lab staff member must verify these results.');
+      const rets = todo.filter(it => document.getElementById('lv_ret_' + it.i).checked), oks = todo.filter(it => !rets.includes(it));
+      const errs = [];
+      if (rets.length && !val('lv_why')) errs.push(['lv_why', 'Say why the test is being returned.']);
+      oks.forEach(it => { if (it.x && it.x.flag === 'critical' && !val('lv_crit_' + it.i)) errs.push(['lv_crit_' + it.i, 'Record who was informed of the critical value.']); if (!it.x) errs.push(['lgVerSave', `The result record for ${it.r.test} was not found.`]); });
+      if (errs.length) return showErrs(errs);
+      const btns = [...document.querySelectorAll('#lbForm .fd-form button')]; btns.forEach(b => b.disabled = true);
+      const now = new Date().toISOString(), rel = [], back = [];
+      try {
+        for (const it of oks) {
+          const crit = it.x.flag === 'critical' ? val('lv_crit_' + it.i) : '';
+          await (await getClient()).send(new PutItemCommand({ TableName: RESULTS_TABLE, Item: toItem({ ...it.x, verified_by: staffName(), verified_by_username: staffUser(), verified_at: now, ...(it.x.flag === 'critical' ? { critical_informed: crit, critical_informed_at: now } : {}) }) }));
+          await labUpdate(it.r, ['#s = :s', 'released_at = :t', 'released_by = :b', 'released_by_username = :u', 'verified_by = :b'], { ':s': { S: 'released' }, ':t': { S: now }, ':b': { S: staffName() }, ':u': { S: staffUser() } });
+          Object.assign(it.r, { status: 'released', released_at: now, released_by: staffName(), verified_by: staffName() }); rel.push(it.r.test);
+        }
+        for (const it of rets) {
+          await labUpdate(it.r, ['#s = :s', 'return_reason = :r', 'returned_by = :b', 'returned_at = :t'], { ':s': { S: 'in-progress' }, ':r': { S: val('lv_why') }, ':b': { S: staffName() }, ':t': { S: now } });
+          Object.assign(it.r, { status: 'in-progress', return_reason: val('lv_why'), returned_by: staffName(), returned_at: now }); back.push(it.r.test);
+        }
+        labClose(); labOk(`${esc(ts[0].patient_name)}: ${rel.length ? `verified and released ${esc(rel.join(', '))}.` : ''}${back.length ? ` Returned for correction: ${esc(back.join(', '))}.` : ''}`);
+      } catch (err) { labErr('Could not save: ' + esc(err.message) + (rel.concat(back).length ? ` (already saved: ${esc(rel.concat(back).join(', '))})` : '')); btns.forEach(b => b.disabled = false); }
+    };
+  }
+  // Clinician side: a released result says if more from the same request are still pending
+  const labLeft = r => r.group_id ? clLab.filter(x => x.group_id === r.group_id && x.request_id !== r.request_id && !['released', 'rejected'].includes(x.status)) : [];
+  const labLeftHtml = r => { const l = labLeft(r); return l.length ? `<span class="st wait" title="Still with the lab">${l.length} more still pending: ${esc(l.map(x => x.test).join(', '))}</span> ` : ''; };
 
   // Every panel that opens inside a department gets a "Back" button at the top, so nobody has to go back to the department list.
   const BACK_MAP = { phForm: 'phCancel', lbForm: 'lbCancel', clWork: 'clClose', clRxReply: 'rqClose', clResult: 'clResultClose', fdProfileCard: 'fdProfileClose', fdFormCard: 'fdCancel', bgForm: 'bgCancel', anForm: 'anCancel', ldForm: 'ldCancel' };
