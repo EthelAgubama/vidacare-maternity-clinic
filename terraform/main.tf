@@ -350,7 +350,8 @@ module "iam_antenatal" {
     { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
     { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
     { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
-    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] }
+    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] },
+    { sid = "ReferralsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.referral_access.arn] }
   ]
 }
 
@@ -382,7 +383,8 @@ module "iam_postnatal" {
     { sid = "AntenatalRead", actions = local.read_actions, resource_arns = ["${aws_dynamodb_table.antenatal_records.arn}", "${aws_dynamodb_table.antenatal_records.arn}/index/*"] },
     { sid = "LabRequestsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] },
     { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
-    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] }
+    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
+    { sid = "ReferralsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.referral_access.arn] }
   ]
 }
 
@@ -411,7 +413,8 @@ module "iam_child_welfare" {
     { sid = "PostnatalRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.postnatal_records.arn] },
     { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
     { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
-    { sid = "NewbornNoticesRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.newborn_notices.arn] }
+    { sid = "NewbornNoticesRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.newborn_notices.arn] },
+    { sid = "ReferralsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.referral_access.arn] }
   ]
 }
 
@@ -478,13 +481,10 @@ module "iam_procurement" {
 module "iam_clinicians" {
   source          = "./modules/iam"
   department_name = "clinicians"
+  # Clinicians have no direct access to the midwife-department record tables.
+  # They will see those records only through a referral check (not built yet).
   policy_statements = [
     { sid = "PatientRecordsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.patient_records.arn] },
-    { sid = "AntenatalRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.antenatal_records.arn}", "${aws_dynamodb_table.antenatal_records.arn}/index/*"] },
-    { sid = "PostnatalRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.postnatal_records.arn}", "${aws_dynamodb_table.postnatal_records.arn}/index/*"] },
-    { sid = "FamilyPlanningRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.family_planning_records.arn}", "${aws_dynamodb_table.family_planning_records.arn}/index/*"] },
-    { sid = "ChildWelfareRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.child_welfare_records.arn}", "${aws_dynamodb_table.child_welfare_records.arn}/index/*"] },
-    { sid = "LabourDeliveryRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.labour_delivery_records.arn}", "${aws_dynamodb_table.labour_delivery_records.arn}/index/*"] },
     { sid = "LabRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
     { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
     { sid = "VisitsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
@@ -505,6 +505,7 @@ module "iam_admin" {
       aws_dynamodb_table.child_welfare_records.arn,
       aws_dynamodb_table.labour_delivery_records.arn,
       aws_dynamodb_table.newborn_notices.arn,
+      aws_dynamodb_table.referral_access.arn,
       aws_dynamodb_table.lab_results.arn,
       aws_dynamodb_table.pharmacy_inventory.arn,
       aws_dynamodb_table.billing.arn,
