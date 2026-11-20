@@ -3992,7 +3992,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
         <td><b>${anGaTxt(ga)}</b><div class="vit">${anTri(ga)}</div></td><td>${anDueTxt(pg)}</td><td class="vit">G${esc(pg.gravida || '?')} P${esc(pg.para || '0')}${pg.abortions && pg.abortions !== '0' ? ' A' + esc(pg.abortions) : ''}</td>
         <td class="vit">${pg.last_visit_date ? anDate(pg.last_visit_date) : 'Booking only'}</td>
         <td>${na ? (missed ? `<span class="st rej">Missed ${anDate(na)}</span>` : anDate(na)) : '<span class="vit">None set</span>'}</td><td>${anRiskBadge(r)}</td>
-        <td style="white-space:nowrap">${canAnc ? `<button class="btn-sm ${anMyDraft(pg) ? 'b-recv' : 'b-rel'}" data-anact="visit|${esc(pg.record_id)}">${anMyDraft(pg) ? 'Resume visit' : 'Record visit'}</button> · ${anCanLab() ? `<a class="lnk" data-anact="labreq|${esc(pg.record_id)}">Request labs</a> · ` : ''}<a class="lnk" data-anact="scanreq|${esc(pg.record_id)}">Request scan</a> · ` : ''}<a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a></td></tr>`; }).join('');
+        <td style="white-space:nowrap">${canAnc ? `<button class="btn-sm ${anMyDraft(pg) ? 'b-recv' : 'b-rel'}" data-anact="visit|${esc(pg.record_id)}">${anMyDraft(pg) ? 'Resume visit' : 'Record visit'}</button> · ${anCanLab() ? `<a class="lnk" data-anact="labreq|${esc(pg.record_id)}">Request labs</a> · ` : ''}<a class="lnk" data-anact="scanreq|${esc(pg.record_id)}">Request scan</a> · <a class="lnk" data-rcref="antenatal|${esc(pg.patient_id)}|${esc(pg.record_id)}">Refer to clinician</a> · ` : ''}<a class="lnk" data-anact="file|${esc(pg.record_id)}">Open file</a></td></tr>`; }).join('');
     document.getElementById('anMothers').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Gestation</th><th>Due date</th><th>G / P / A</th><th>Last visit</th><th>Next appointment</th><th>Flags</th><th></th></tr></thead><tbody>${rows || `<tr class="empty-row"><td colspan="8">${anQ ? 'No client matches your search.' : 'No pregnancies booked yet. Use Today or Find a client to book one.'}</td></tr>`}</tbody></table>`;
   }
   function renderAnDue() {
@@ -4785,7 +4785,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v54';
+  const PORTAL_VERSION = 'v61';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -5257,6 +5257,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
         <div class="f" id="av_refwrap2" style="display:none"><label>Reason <span class="req">*</span></label><input id="av_refwhy"></div>
         <div class="f"><label>Next appointment</label><input id="av_next" type="date" min="${t}" value="${sug.date}"><div class="vit" style="margin-top:3px">Suggested ${anDate(sug.date)}${sug.weeks ? ` (${sug.weeks} weeks)` : ''}. Clear it if she is being referred and will not return here.</div></div>
       </div>
+      ${rcBlock()}
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="avSave">Save visit</button><button class="btn-sm ghost" id="avDraft" type="button">Save draft</button>${anCanLab() ? '<button class="btn-sm ghost" id="avLabs" type="button">Save draft and request labs</button>' : ''}<button class="btn-sm ghost" id="anCancel">Cancel</button></div>
       <div class="stamp">Recorded with your name and the time. A saved visit cannot be edited; add a new visit to correct it.</div></div>`);
     document.getElementById('anCancel').onclick = anClose; anNutriWire();
@@ -5295,6 +5296,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     if (yes && !val('av_refwhy')) errs.push(['av_refwhy', 'Give the reason for the referral.']);
     if (val('av_next') && val('av_next') < t) errs.push(['av_next', 'The next appointment cannot be in the past.']);
     if (!val('av_next') && !yes) errs.push(['av_next', 'Set the next appointment, or choose to refer her.']);
+    rcCheck(errs);
     if (errs.length) return showErrs(errs);
     const btn = document.getElementById('avSave'); btn.disabled = true; btn.textContent = 'Saving…';
     try {
@@ -5317,6 +5319,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       } catch (e) { await anRefresh(); anClose(); anRenderAll(); return anNote(`The visit was saved, but the client's summary line could not be updated: ${esc(e.message)}. Open her file to check.`); }
       await anClearDraft(pg);
       await anRefresh(); anClose(); anRenderAll();
+      rcAfterVisit('antenatal', pg.patient_id, rid);
       const val_ref = item.referred_to ? item.referred_to.S : ''; const r = anRisk(anPregs.find(x => x.record_id === rid));
       anNote(`Visit saved for <b>${esc(pg.patient_name)}</b>${Number.isFinite(ga) ? ' at ' + anGaTxt(ga) : ''}. ${nextAppt ? 'Next appointment ' + anDate(nextAppt) + '.' : 'No next appointment set.'}${r.hi.length ? ` <b>Check: ${esc(r.hi.join('; '))}</b>` : ''}${item.referred_to ? `<div style="margin-top:8px"><b>Referred to ${esc(val_ref)}.</b> ${refBtns('an', item.record_id.S)}</div>` : ''}`, r.hi.length ? '' : 'ok');
     } catch (err) { btn.disabled = false; btn.textContent = 'Save visit'; anNote(`Could not save the visit: ${esc(err.message)}`); }
@@ -5340,7 +5343,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     const visRows = [...visArr.map((h, i) => ({ t: String(vis[i].entered_at || ''), h })), ...rxNotes.map(x => ({ t: String(x.entered_at || ''), h: `<tr style="background:#F3F8F0"><td>${anDate(String(x.entered_at || '').slice(0, 10))}</td><td colspan="5"><b>Prescription ${esc(x.rx_no || '')}</b> sent to the pharmacy: ${esc(x.meds || '')}${x.notes ? ' <span class="vit">(' + esc(x.notes) + ')</span>' : ''}</td><td></td><td>${esc(x.entered_by || '')}<div class="vit">${fmtDate(x.entered_at)}</div></td></tr>` }))].sort((p, q) => q.t.localeCompare(p.t)).map(x => x.h).join('');
     anShow(`<div class="fd-form">${anBanner(pg.patient_id, pg)}
       <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px">${anRiskBadge(r)} ${active ? '<span class="st done">Open pregnancy</span>' : `<span class="st wait">Closed: ${esc(pg.outcome || '')}</span>`}
-        ${active && canAnc ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button>${anCanLab() ? `<button class="btn-sm ghost" data-anact="labreq|${esc(pg.record_id)}">Request labs</button>` : ''}<button class="btn-sm ghost" data-anact="scanreq|${esc(pg.record_id)}">Request scan</button><button class="btn-sm ghost" data-anact="tests|${esc(pg.record_id)}">Update test results</button><button class="btn-sm ghost" data-anact="mch|${esc(pg.record_id)}">Record book details</button><button class="btn-sm ghost" data-anact="edd|${esc(pg.record_id)}">${pg.edd ? 'Change due date' : 'Set due date'}</button><button class="btn-sm ghost" data-anact="close|${esc(pg.record_id)}">Close pregnancy</button>` : ''}
+        ${active && canAnc ? `<button class="btn-sm b-rel" data-anact="visit|${esc(pg.record_id)}">Record visit</button>${anCanLab() ? `<button class="btn-sm ghost" data-anact="labreq|${esc(pg.record_id)}">Request labs</button>` : ''}<button class="btn-sm ghost" data-anact="scanreq|${esc(pg.record_id)}">Request scan</button><button class="btn-sm ghost" data-rcref="antenatal|${esc(pg.patient_id)}|${esc(pg.record_id)}">Refer to clinician</button><button class="btn-sm ghost" data-anact="tests|${esc(pg.record_id)}">Update test results</button><button class="btn-sm ghost" data-anact="mch|${esc(pg.record_id)}">Record book details</button><button class="btn-sm ghost" data-anact="edd|${esc(pg.record_id)}">${pg.edd ? 'Change due date' : 'Set due date'}</button><button class="btn-sm ghost" data-anact="close|${esc(pg.record_id)}">Close pregnancy</button>` : ''}
         ${(() => { const rv = vis.find(v => v.referred_to); return rv ? refBtns('an', rv.record_id) : ''; })()}
         <button class="btn-sm ghost" id="anCancel" style="margin-left:auto">Close file</button></div>
       <div class="vit">Flags are reminders to check from what was recorded. They do not replace your judgement.</div>${anRiskList(r)}
