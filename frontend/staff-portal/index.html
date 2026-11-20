@@ -551,7 +551,7 @@
         <button class="ph-tab" data-fdtab="new">Recently registered</button>
         <button class="ph-tab" data-fdtab="book">Online bookings <span class="n amber" id="fdTabBook" style="display:none"></span></button>
       </div>
-      <div id="fdPaneFind"><div class="data-card">
+      <div id="fdPaneFind"><div id="fdNbCard"></div><div class="data-card">
         <h4>Find a client</h4>
         <div class="fd-search">
           <input id="fdSearch" type="search" placeholder="Search by name, phone, client ID (VMH-00001) or ID number" autocomplete="off">
@@ -621,7 +621,7 @@
       <td>${esc(v.entered_by || '—')}<br><span style="color:#777;font-size:11.5px">${fmtDate(v.entered_at)}</span></td></tr>`;
     }).join('');
     document.getElementById('fdRecentVisits').innerHTML = `<table class="data-table"><thead><tr><th>Client</th><th>Service</th><th>Status</th><th>Entered by</th></tr></thead><tbody>${vr || '<tr class="empty-row"><td colspan="4">No visits yet.</td></tr>'}</tbody></table>`;
-    renderBookings(); renderFdTabs();
+    renderBookings(); renderFdTabs(); renderNb();
   }
 
   function renderResults(q) {
@@ -729,7 +729,7 @@
     card.innerHTML = `
       <div class="client-banner">
         <div><strong style="font-size:17px">${esc(p.full_name)}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div>
-        <div style="display:flex;gap:8px">${canWrite ? '<button class="btn-sm" id="fdProfileVisit">Start new visit</button>' : ''}<button class="btn-sm ghost" id="fdProfileClose">Close</button></div>
+        <div style="display:flex;gap:8px">${canWrite ? '<button class="btn-sm" id="fdProfileVisit">Start new visit</button><button class="btn-sm ghost" id="fdProfileEdit">Update client details</button>' : ''}<button class="btn-sm ghost" id="fdProfileClose">Close</button></div>
       </div>
       <h4>Client details</h4>
       <div class="kv">
@@ -740,7 +740,7 @@
         ${kv('Emergency contact', [p.emergency_contact_name, p.emergency_contact_relationship && `(${p.emergency_contact_relationship})`].filter(Boolean).join(' '))}
         ${kv('Emergency phone', p.emergency_contact_phone)}
         ${kv('Blood group', p.blood_group)}${kv('Genotype', p.genotype)}${kv('Allergies', p.allergies)}
-        ${kv('Registered by', `${p.entered_by || 'Online booking'} · ${fmtDate(p.entered_at || p.created_at)}`)}
+        ${kv('Registered by', `${p.entered_by || 'Online booking'} · ${fmtDate(p.entered_at || p.created_at)}`)}${nbLogHtml(p)}
       </div>
       <h4 style="margin-top:24px">Visit history (${visits.length})</h4>
       <div class="recent-scroll" style="max-height:none;min-height:0">
@@ -751,12 +751,13 @@
     document.getElementById('fdProfileClose').onclick = () => { card.style.display = 'none'; };
     const vb = document.getElementById('fdProfileVisit');
     if (vb) vb.onclick = () => { card.style.display = 'none'; openForm(p); };
+    const eb = document.getElementById('fdProfileEdit'); if (eb) eb.onclick = () => fdEditForm(p.patient_id);
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
-  function openForm(patient, prefillName) {
+  function openForm(patient, prefillName, nb) {
     if (!canWrite) { document.getElementById('fdMsg').innerHTML = '<div class="notice">You have read-only access here, so you can view records but not register clients or save visits.</div>'; return; }
-    fdSelected = patient || null;
+    fdSelected = patient || null; fdNb = (!patient && nb) || null;
     document.getElementById('fdMsg').innerHTML = '';
     document.getElementById('fdProfileCard').style.display = 'none';
     const card = document.getElementById('fdFormCard');
@@ -771,9 +772,10 @@
       <div class="fd-form">${patient ? '' : demographicsHtml(prefillName || '')}${vitalsHtml()}
       <div id="fdDup"></div>
       <div class="stamp">Will be recorded as entered by <strong>${esc(staffName())}</strong> (${esc(staffUser())}).</div>
-      <div style="margin-top:16px"><button class="btn-sm" id="fdSave">${patient ? 'Save visit' : 'Register &amp; save visit'}</button></div></div>`;
-    document.getElementById('fdCancel').onclick = () => { card.style.display = 'none'; fdSelected = null; };
+      <div style="margin-top:16px"><button class="btn-sm" id="fdSave">${patient ? 'Save visit' : 'Register &amp; save visit'}</button>${fdNb ? ' <button class="btn-sm ghost" id="fdSaveOnly">Register only (no visit today)</button>' : ''}</div></div>`;
+    document.getElementById('fdCancel').onclick = () => { card.style.display = 'none'; fdSelected = null; fdNb = null; };
     document.getElementById('fdSave').onclick = () => saveForm(false);
+    if (fdNb) { nbPrefill(fdNb); document.getElementById('fdSaveOnly').onclick = () => saveForm(false, true); }
     card.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
@@ -797,7 +799,7 @@
 
   function validate() {
     let ok = true;
-    const need = ['v_service'];
+    const need = fdRegOnly ? [] : ['v_service'];
     if (!fdSelected) need.push('r_full_name', 'r_date_of_birth', 'r_sex', 'r_address', 'r_emergency_contact_name', 'r_emergency_contact_relationship');
     need.forEach(id => { const bad = !val(id); mark(id, bad); if (bad) ok = false; });
     if (!fdSelected) {
@@ -811,7 +813,8 @@
 
   const normPhone = p => { p = p.replace(/[\s-]/g, ''); if (p.startsWith('+2330')) return '+233' + p.slice(5); if (p.startsWith('+')) return p; if (p.startsWith('233')) return '+' + p; if (p.startsWith('0')) return '+233' + p.slice(1); return '+233' + p; };
 
-  async function saveForm(confirmedNew) {
+  async function saveForm(confirmedNew, regOnly) {
+    fdRegOnly = !!regOnly;
     const msg = document.getElementById('fdMsg');
     msg.innerHTML = '';
     if (!validate()) { msg.innerHTML = '<div class="error-inline">Please complete the highlighted fields.</div>'; return; }
@@ -826,16 +829,20 @@
       if (!patient) {
         const phone = normPhone(val('r_phone_number'));
         const idn = val('r_id_number').toLowerCase();
-        const dups = fdPatients.filter(p => canonPhone(p.phone_number) === canonPhone(phone) || (idn && (p.id_number || '').toLowerCase() === idn));
-        if (dups.length && !confirmedNew) {
-          document.getElementById('fdDup').innerHTML = `<div class="notice"><strong>Possible existing client:</strong> ${dups.slice(0, 3).map(d => `${esc(d.full_name)} (${esc(d.client_id || 'no ID')}, ${esc(d.phone_number)})`).join('; ')}.
-            <button class="btn-sm ghost" id="fdUseExisting">Use existing client</button>
-            <button class="btn-sm ghost" id="fdConfirmNew">This is a different person</button></div>`;
-          document.getElementById('fdUseExisting').onclick = () => openForm(dups[0]);
-          document.getElementById('fdConfirmNew').onclick = () => saveForm(true);
+        const dups = fdNb ? [] : fdPatients.filter(p => canonPhone(p.phone_number) === canonPhone(phone) || (idn && (p.id_number || '').toLowerCase() === idn));
+        const nbd = fdNb ? [] : nbAwaiting().filter(n => n.mother_phone && canonPhone(n.mother_phone) === canonPhone(phone));
+        if ((dups.length || nbd.length) && !confirmedNew) {
+          const parts = [];
+          if (nbd.length) parts.push(`<div><strong>A baby born here is waiting for this phone number:</strong> ${nbd.slice(0, 3).map(n => `${esc(n.baby_name)} (born ${esc(n.date_of_birth || '—')})`).join('; ')}. If this is that baby, use the notice so nothing is typed twice. <button class="btn-sm ghost" id="fdUseNb">Use the newborn notice</button></div>`);
+          if (dups.length) parts.push(`<div style="margin-top:6px"><strong>Possible existing client:</strong> ${dups.slice(0, 3).map(d => `${esc(d.full_name)} (${esc(d.client_id || 'no ID')}, ${esc(d.phone_number)})`).join('; ')}. <button class="btn-sm ghost" id="fdUseExisting">Use existing client</button></div>`);
+          document.getElementById('fdDup').innerHTML = `<div class="notice">${parts.join('')}<div style="margin-top:8px"><button class="btn-sm ghost" id="fdConfirmNew">This is a different person</button></div></div>`;
+          document.getElementById('fdUseNb')?.addEventListener('click', () => openForm(null, nbd[0].baby_name, nbd[0]));
+          document.getElementById('fdUseExisting')?.addEventListener('click', () => openForm(dups[0]));
+          document.getElementById('fdConfirmNew').onclick = () => saveForm(true, regOnly);
           btn.disabled = false; btn.textContent = 'Register & save visit';
           return;
         }
+        if (fdNb) await nbCheckStillAwaiting(fdNb);
         const clientId = await nextClientId();
         patient = g({
           patient_id: S(uuid()), record_type: S('profile'), client_id: S(clientId),
@@ -850,6 +857,7 @@
         });
         await client.send(new PutItemCommand({ TableName: TABLE, Item: patient, ConditionExpression: 'attribute_not_exists(patient_id)' }));
         patient = unmarshal(patient);
+        if (fdNb) await nbMarkRegistered(fdNb, patient);
       } else if (!patient.client_id) {
         // online-booked client without an ID yet: assign one now
         const clientId = await nextClientId();
@@ -871,14 +879,16 @@
         muac_cm: num('v_muac'), head_circumference_cm: num('v_head'), fundal_height_cm: num('v_fundal'),
         status: S('checked-in'), entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser())
       });
-      await client.send(new PutItemCommand({ TableName: TABLE, Item: visit }));
+      if (!regOnly) await client.send(new PutItemCommand({ TableName: TABLE, Item: visit }));
 
       document.getElementById('fdFormCard').style.display = 'none';
       document.getElementById('fdSearch').value = ''; document.getElementById('fdResults').innerHTML = '';
       msg.innerHTML = `<div class="success">Saved: ${esc(patient.full_name)} (${esc(patient.client_id)}) checked in for ${esc(SERVICE_LABEL[val('v_service')] || '')} — entered by ${esc(staffName())} at ${fmtDate(now)}.</div>`;
       fdSelected = null;
       if (!fdPatients.some(x => x.patient_id === patient.patient_id)) fdPatients.unshift(patient);
-      fdVisits.unshift(unmarshal(visit));
+      if (!regOnly) fdVisits.unshift(unmarshal(visit));
+      if (regOnly) msg.innerHTML = `<div class="success">Registered: ${esc(patient.full_name)} (${esc(patient.client_id)}) — no visit started. Entered by ${esc(staffName())} at ${fmtDate(now)}.${esc(nbWarn)}</div>`; else if (nbWarn) msg.innerHTML += `<div class="notice">${esc(nbWarn)}</div>`;
+      fdNb = null; fdRegOnly = false;
       renderRecent();
       refreshData().then(renderRecent).catch(() => {});
     } catch (err) {
@@ -894,11 +904,12 @@
     try {
       await refreshData();
       try { fdBookings = await scanTable(VIS_TABLE); } catch (e) { fdBookings = null; }
+      await nbLoad();
       liveEl.innerHTML = shellHtml(); fdTab = 'find';
       document.getElementById('fdSearch').addEventListener('input', e => renderResults(e.target.value));
       document.getElementById('fdNew')?.addEventListener('click', () => openForm(null, document.getElementById('fdSearch').value));
       renderRecent();
-      if (!liveEl.dataset.bound) liveEl.addEventListener('click', e => { const tb = e.target.closest('[data-fdtab]'); if (tb) { setFdTab(tb.dataset.fdtab); return; } const a = e.target.closest('[data-open]'); if (a) { e.preventDefault(); openClient(a.dataset.open); } });
+      if (!liveEl.dataset.bound) liveEl.addEventListener('click', e => { const nr = e.target.closest('[data-nbreg]'); if (nr) { nbOpen(nr.dataset.nbreg); return; } const nd = e.target.closest('[data-nbdismiss]'); if (nd) { e.preventDefault(); nbDismiss(nd.dataset.nbdismiss, nd); return; } const tb = e.target.closest('[data-fdtab]'); if (tb) { setFdTab(tb.dataset.fdtab); return; } const a = e.target.closest('[data-open]'); if (a) { e.preventDefault(); openClient(a.dataset.open); } });
       liveEl.dataset.bound = '1';
     } catch (err) {
       liveEl.innerHTML = `<div class="error-inline">Could not load data: ${esc(err.message)}</div>`;
@@ -4775,7 +4786,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v52';
+  const PORTAL_VERSION = 'v54';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -6026,20 +6037,21 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
         cord_clamping: S(val('dl_cord')), cct: S(val('dl_cct')), massage: S(val('dl_mass')), placenta: S(val('dl_plac')), placenta_at: val('dl_placat') ? S(ldIso('dl_placat')) : undefined, ebl: anN(ebl), pph: pph ? S(pph) : undefined, bp_sys: anN(sys), bp_dia: anN(dia), pulse: anN(pul), fundus: S(val('dl_fund')),
         complications: comps.length ? S(comps.join('|')) : undefined, treatment: val('dl_tx') ? S(val('dl_tx')) : undefined, maternal_outcome: S(died ? 'Died' : 'Alive'), death_at: died ? S(ldIso('dl_dat')) : undefined, death_cause: died ? S(val('dl_dcause')) : undefined,
         babies_n: anN(nb), ga_birth: Number.isFinite(gaB) ? anN(gaB) : undefined, preterm: preterm ? S('yes') : undefined, ...ldStamp(now) });
-      const notes = [];
+      const notes = []; let nbSent = 0;
       for (const b of babies) {
         const P = b.P, g = k => val(P + k), no = a.adm_no ? `${a.adm_no}-${ldLetters[b.i - 1]}` : '';
         await ldPut({ patient_id: S(a.patient_id), record_id: S(`baby#${key}#${b.i}`), record_type: S('newborn'), adm_id: S(a.record_id), baby_no: no ? S(no) : undefined, mother_name: S(a.patient_name), birth_at: S(at), outcome: S(b.out), sex: S(g('sex')), weight: anN(b.wt),
           lbw: b.wt < 2500 ? S('yes') : undefined, length_cm: anNum(P + 'len') !== null ? anN(anNum(P + 'len')) : undefined, head_cm: anNum(P + 'hc') !== null ? anN(anNum(P + 'hc')) : undefined, preterm: preterm ? S('yes') : undefined, ga_birth: Number.isFinite(gaB) ? anN(gaB) : undefined,
           ...(b.live ? { apgar1: anN(anNum(P + 'ap1')), apgar5: anN(anNum(P + 'ap5')), resus: S(g('res')), skin_to_skin: S(g('sk')), breastfed_1h: S(g('bf')), vitamin_k: S(g('vk')), eye_care: S(g('eye')), cord_care: S(g('cord')), bcg: S(g('bcg')), opv0: S(g('opv')), hepb0: S(g('hepb')), arv: g('arv') ? S(g('arv')) : undefined, hbv_vaccine: g('hbvac') ? S(g('hbvac')) : undefined, birth_notification: document.getElementById(P + 'notif').checked ? S('yes') : undefined } : {}),
           anomaly: g('anom') === 'Yes' ? S(g('anomt')) : undefined, notes: g('note') ? S(g('note')) : undefined, ...ldStamp(now) });
+        if (b.live) { try { await nbPutNotice(a, b.i, babies.length, key, at, g('sex')); nbSent++; } catch (e) { notes.push(`Could not send baby ${ldLetters[b.i - 1]}'s notice to the front desk (${e.message}). Ask the front desk to register the baby.`); } }
         if (b.live && (b.wt < 2000 || preterm)) notes.push(`Baby ${ldLetters[b.i - 1]} is small${preterm ? ' and preterm' : ''}: start kangaroo mother care and consider referral.`);
         if (b.live && anNum(P + 'ap5') < 7) notes.push(`Baby ${ldLetters[b.i - 1]} has a low Apgar score at 5 minutes: close observation.`);
         if (!b.live) notes.push(`Baby ${ldLetters[b.i - 1]}: ${b.out.toLowerCase()} recorded. Support the mother and report it.`);
       }
       if (pph) notes.push(`Blood loss ${ebl} mL: ${pph === 'severe' ? 'severe ' : ''}postpartum haemorrhage.`); if (/3rd|4th/.test(val('dl_tear'))) notes.push('3rd or 4th degree tear: refer for repair.'); if (died) notes.push('Maternal death: report to the District Health Directorate and start the audit.');
       await ldRefresh(); ldClose(); ldRenderAll(); setLdTab('post');
-      ldNote(`Birth recorded for <b>${esc(a.patient_name)}</b>. She is now on the ward.${notes.length ? ' <b>' + esc(notes.join(' ')) + '</b>' : ''}`, notes.length ? '' : 'ok');
+      ldNote(`Birth recorded for <b>${esc(a.patient_name)}</b>. She is now on the ward.${nbSent ? ' The front desk can now register the ' + (nbSent > 1 ? 'babies' : 'baby') + '.' : ''}${notes.length ? ' <b>' + esc(notes.join(' ')) + '</b>' : ''}`, notes.length ? '' : 'ok');
     } catch (err) { btn.disabled = false; btn.textContent = 'Save the birth'; await ldRefresh().catch(() => {}); ldRenderAll(); ldNote(`Could not save the whole record: ${esc(err.message)}. Open her file to check what was saved before trying again.`); }
   }
 
@@ -7576,7 +7588,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   const cwPut = async item => (await getClient()).send(new PutItemCommand({ TableName: CW_TABLE, Item: g2(item), ConditionExpression: 'attribute_not_exists(record_id)' }));
   const cwStamp = now => ldStamp(now);
   const cwJ = (s, d) => { try { return JSON.parse(s || ''); } catch (x) { return d; } };
-  async function cwRefresh() { await refreshData(); cwRecs = await scanTable(CW_TABLE); }
+  async function cwRefresh() { await refreshData(); cwRecs = await scanTable(CW_TABLE); cwRecs.forEach(r => { if (String(r.record_id).startsWith('cw#')) { const pp = cwPat(r.patient_id); if (pp && pp.full_name) r.patient_name = pp.full_name; } }); await nbLoad(); await nbFetchLd(); }
   async function cwNextReg(year) {
     const r = await (await getClient()).send(new UpdateItemCommand({ TableName: CW_TABLE, Key: { patient_id: { S: 'COUNTER' }, record_id: { S: 'counter#' + year } }, UpdateExpression: 'ADD seq :one', ExpressionAttributeValues: { ':one': { N: '1' } }, ReturnValues: 'UPDATED_NEW' }));
     const seq = parseInt(r.Attributes.seq.N, 10); return { year: String(year), seq, no: `CWC-${year}-${String(seq).padStart(4, '0')}` };
@@ -7635,6 +7647,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       </div>
       <div id="cwSearchRow" class="fd-search" style="display:none;gap:10px;flex-wrap:wrap;align-items:center"><input id="cwSearch" type="search" placeholder="Search by child, client ID, clinic number, caregiver or phone" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="cwSearchBtn" type="button">Search</button><button class="btn-sm ghost" id="cwClearBtn" type="button">Clear</button></div>
       <div id="cwPaneDue">
+        <div id="cwBorn"></div>
         <div class="data-card"><h4>Arrived today</h4><div class="vit" style="margin-bottom:8px">Checked in by the front desk for the child welfare clinic.</div><div class="recent-scroll" style="min-height:0" id="cwWait"></div></div>
         <div class="data-card"><h4>Vaccines, vitamin A, deworming and weighing due</h4><div class="vit" style="margin-bottom:8px">Red means findings at the last visit need follow-up, or a vaccine is more than 4 weeks late.</div><div class="recent-scroll" id="cwDue"></div></div>
         <div class="data-card"><h4>Coming up in the next 14 days</h4><div class="recent-scroll" style="min-height:0" id="cwSoon"></div></div>
@@ -7696,7 +7709,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     el.innerHTML = `<table class="data-table"><thead><tr><th>Left</th><th>Child</th><th>To</th><th>Reason</th><th>Condition on leaving</th><th>By</th><th>Letter</th></tr></thead><tbody>${rows.map(r => { const e = cwEps().find(x => x.record_id === r.cw_id); if (!e) return ''; const nn = String(r.record_id).split('#').pop();
       return `<tr class="rowbar ${r.urgency === 'Emergency' ? 'red' : ''}"><td>${fmtDate(r.left_at)}</td><td>${cwNameCell(e, `<div class="vit">${esc(e.cw_no || '')}</div>`)}</td><td>${esc(r.referred_to)}<div class="vit">${esc(r.urgency || '')} · ${esc(r.transport || '')}</div></td><td>${esc(r.reason)}</td><td class="vit">${esc(String(r.condition || '').slice(0, 120))}</td><td>${esc(r.entered_by || '')}</td><td style="white-space:nowrap">${refBtns('cw', e.record_id + '@' + nn)}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="7">No referrals yet.</td></tr>'}</tbody></table>`;
   }
-  function cwRenderAll() { gxStrip(); renderCwDue(); renderCwActive(); renderCwRefs(); renderCwRegister(); }
+  function cwRenderAll() { gxStrip(); renderCwBorn(); renderCwDue(); renderCwActive(); renderCwRefs(); renderCwRegister(); }
   // ---- Register a child ----
   function cwRegForm(src) {
     if (!canCw) return; src = String(src); const pid = src.slice(2); if (!pid) return;
@@ -7721,7 +7734,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       <div class="f" style="margin-top:8px"><label>Notes</label><textarea id="cr_note" rows="2"></textarea></div>
       <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="crSave">Register</button><button class="btn-sm ghost" id="cwCancel">Cancel</button></div>
       <div class="stamp">Recorded with your name and the time.</div></div>`);
-    document.getElementById('cwCancel').onclick = cwClose;
+    document.getElementById('cwCancel').onclick = cwClose; nbPrefillCw(pid);
     document.getElementById('cr_hiv').addEventListener('change', () => { document.getElementById('crHivNote').style.display = val('cr_hiv') === CW_HIV[2] ? '' : 'none'; });
     document.getElementById('crSave').onclick = async () => {
       clearErrs(document.getElementById('cwForm')); const errs = [], bw = wtG(val('cr_bw')), prior = {};
@@ -7743,7 +7756,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     };
   }
   // ---- Earlier visits and the vaccine card ----
-  const cwVisitLine = v => `${v.weight ? esc(v.weight) + ' kg' : ''}${v.z_wfa !== undefined && v.z_wfa !== '' ? ' <span class="vit">(z ' + esc(v.z_wfa) + ')</span>' : ''}${v.length ? ', ' + esc(v.length) + ' cm' : ''}${v.muac ? ', arm ' + esc(v.muac) + ' cm' : ''}${v.zone ? '<div>' + esc(String(v.zone).split(' (')[0]) + '</div>' : ''}${v.feeding ? '<div>' + esc(v.feeding) + '</div>' : ''}${v.meals !== undefined && v.meals !== '' ? '<div>' + esc(v.meals) + ' meals a day' + (v.fg_n !== undefined ? ', ' + esc(v.fg_n) + ' of 8 food groups' : '') + '</div>' : ''}${v.bf_n !== undefined && v.bf_n !== '' ? '<div>' + esc(v.bf_n) + ' breastfeeds a day</div>' : ''}${v.wl_note ? '<div style="color:#C62828">Weight: ' + esc(v.wl_note) + '</div>' : ''}`;
+  const cwVisitLine = v => `${v.weight ? esc(v.weight) + ' kg' : ''}${v.z_wfa !== undefined && v.z_wfa !== '' ? ' <span class="vit">(z ' + esc(v.z_wfa) + ')</span>' : ''}${v.length ? ', ' + esc(v.length) + ' cm' : ''}${v.muac ? ', arm ' + esc(v.muac) + ' cm' : ''}${v.zone ? '<div>' + esc(String(v.zone).split(' (')[0]) + '</div>' : ''}${v.feeding ? '<div>' + esc(v.feeding) + '</div>' : ''}${v.meals !== undefined && v.meals !== '' ? '<div>' + esc(v.meals) + ' meals a day' + (v.fg_n !== undefined ? ', ' + esc(v.fg_n) + ' of 8 food groups' : '') + '</div>' : ''}${v.bf_n !== undefined && v.bf_n !== '' ? '<div>' + esc(v.bf_n) + ' breastfeeds a day</div>' : ''}${v.vitals_src ? '<div class="vit">Measured at the front desk</div>' : ''}${v.wl_note ? '<div style="color:#C62828">Weight: ' + esc(v.wl_note) + '</div>' : ''}`;
   const cwVaccLine = v => `${String(v.vacc || '').split('|').filter(Boolean).map(k => esc((CW_VBY[k] || { t: k }).t)).join(', ')}${v.vita === 'Given today' ? (v.vacc ? '; ' : '') + 'Vitamin A' : ''}${v.worm === 'Given today' ? '; Deworming' : ''}` || '—';
   function cwHistoryHtml(e) {
     const vs = cwVisitsOf(e).slice().reverse(); if (!vs.length) return '<div class="vit" style="margin-top:6px">No earlier visits.</div>';
@@ -7770,7 +7783,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       ${cwHistoryHtml(e)}
       ${lastV && lastV.alerts ? `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#8E1C14;margin-top:6px">Findings at the last visit (${fmtDate(lastV.visit_at)}): ${esc(lastV.alerts)}</div>` : ''}
       <div class="grid3" style="margin-top:8px"><div class="f"><label>Visit time <span class="req">*</span></label><input id="cv_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div></div>
-      <h5>Growth</h5><div class="grid3">
+      <h5>Growth</h5><div id="cvFd" class="notice" style="display:none;margin-bottom:8px;background:#EAF4E4;border-color:#9CCB8B;color:#1B4D1B"></div><div class="grid3">
         <div class="f"><label>Weight <span class="unit">kg or g, e.g. 5.6 or 5600</span> <span class="req">*</span></label><input id="cv_wt" class="wtin" inputmode="decimal"></div>
         <div class="f"><label>${age < 730 ? 'Length' : 'Height'} <span class="unit">cm</span></label><input id="cv_len" type="number" step="0.1" min="30" max="130"></div>
         ${age < 730 ? '<div class="f"><label>Head size <span class="unit">cm</span></label><input id="cv_head" type="number" step="0.1" min="25" max="60"></div>' : ''}
@@ -7810,6 +7823,11 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       if (z.wfa !== null) { sel.value = cwZoneOf(z.wfa); sel.disabled = true; } else { sel.value = ''; sel.disabled = wt !== null; }
       cb.innerHTML = cwChartSvg(e, vs, wt ? { age: ageD, v: wt } : null, 'wfa') + (len || vs.some(v => v.length) ? cwChartSvg(e, vs, len ? { age: ageD, v: len } : null, 'lhfa') : '');
     };
+    // Measurements already taken at the front desk today are filled in, so they are not taken or typed twice.
+    const fdv = fdVisits.filter(v => v.patient_id === e.patient_id && v.service === 'child-welfare' && v.entered_at && new Date(v.entered_at).toDateString() === new Date().toDateString() && !vs.some(r => String(r.entered_at || '') > String(v.entered_at))).sort((a, b) => String(b.entered_at).localeCompare(String(a.entered_at)))[0]; let fromFd = null;
+    if (fdv) { const have = x => x !== undefined && x !== null && x !== '', put = (id, v) => { if (have(v) && $(id)) { $(id).value = v; return true; } return false; }, used = [];
+      if (put('cv_wt', fdv.weight_kg)) used.push('weight ' + fdv.weight_kg + ' kg'); if (put('cv_len', fdv.height_cm)) used.push((age < 730 ? 'length ' : 'height ') + fdv.height_cm + ' cm'); if (put('cv_head', fdv.head_circumference_cm)) used.push('head ' + fdv.head_circumference_cm + ' cm'); if (put('cv_muac', fdv.muac_cm)) used.push('arm band ' + fdv.muac_cm + ' cm'); if (put('cv_temp', fdv.temperature_c)) used.push('temperature ' + fdv.temperature_c + ' °C'); if (put('cv_rr', fdv.resp_rate)) used.push('breathing ' + fdv.resp_rate + ' a minute');
+      if (used.length) { fromFd = fdv; $('cvFd').style.display = ''; $('cvFd').innerHTML = `<b>Already measured at the front desk</b> by ${esc(fdv.entered_by || '')} at ${esc(new Date(fdv.entered_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }))}: ${esc(used.join(', '))}. These are filled in below, so you do not need to weigh or measure again. Change a box only if the value was wrong.`; if ($('cv_wt').value) $('cv_wt').dispatchEvent(new Event('input', { bubbles: true })); } }
     ['cv_wt', 'cv_len', 'cv_at'].forEach(i => $(i).addEventListener('input', updGrowth)); updGrowth();
     const syncFeed = () => { const eating = eatsNow || (hasComp && val('cv_comp') === 'Yes, started'); ['cvMealW', 'cvFgW'].forEach(i => { const el = $(i); if (el) el.style.display = age >= 183 && eating ? '' : 'none'; }); const n = document.querySelectorAll('input[name="cv_fg"]:checked').length + (val('cv_bfc') === 'Yes' ? 1 : 0); if ($('cvFgN')) $('cvFgN').textContent = `${n} of 8 food groups so far (at least 5 are needed)`; };
     ['cv_comp', 'cv_bfc'].forEach(i => { if ($(i)) $(i).addEventListener('change', syncFeed); }); document.querySelectorAll('input[name="cv_fg"]').forEach(c => c.addEventListener('change', syncFeed)); syncFeed();
@@ -7859,7 +7877,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       try {
         const now = cwNow(), nth = vs.length + 1, bt = {}; vx.forEach(k => { const b = val('cv_bt_' + k).trim(); if (b) bt[k] = b; });
         await cwPut({ patient_id: S(e.patient_id), record_id: S(`cwv#${cwKey(e)}#${String(nth).padStart(2, '0')}`), record_type: S('child-welfare-visit'), cw_id: S(e.record_id), n: { N: String(nth) }, visit_at: S(at), age_days: anN(ageAt),
-          weight: anN(wt), length: len !== null ? anN(len) : undefined, head: head !== null ? anN(head) : undefined, muac: muac !== null ? anN(muac) : undefined, oedema: S(val('cv_oed')), zone: S(zone), z_wfa: zz.wfa !== null ? anN(cwR2(zz.wfa)) : undefined, z_hfa: zz.hfa !== null ? anN(cwR2(zz.hfa)) : undefined, z_wfh: zz.wfh !== null ? anN(cwR2(zz.wfh)) : undefined, feeding: S(fd.text), bf_n: fd.bfn !== null ? anN(fd.bfn) : undefined, bf_att: fd.att ? S(fd.att) : undefined, comp: fd.comp ? S(fd.comp) : undefined, bf_cont: age >= 183 && fd.bfc ? S(fd.bfc) : undefined, meals: fd.meals !== null ? anN(fd.meals) : undefined, fgroups: fd.fg.length ? S(fd.fg.join('|')) : undefined, fg_n: fgN !== null ? anN(fgN) : undefined, meal_ok: mealOk ? S(mealOk) : undefined, junk: fd.junk ? S(fd.junk) : undefined, wl_note: wlKind && val('cv_wl').trim() ? S(val('cv_wl').trim()) : undefined, temp: tmp !== null ? anN(tmp) : undefined, rr: rr !== null ? anN(rr) : undefined, net: $('cv_net') ? S(val('cv_net')) : undefined, dev: S(val('cv_dev')),
+          weight: anN(wt), length: len !== null ? anN(len) : undefined, head: head !== null ? anN(head) : undefined, muac: muac !== null ? anN(muac) : undefined, oedema: S(val('cv_oed')), zone: S(zone), z_wfa: zz.wfa !== null ? anN(cwR2(zz.wfa)) : undefined, z_hfa: zz.hfa !== null ? anN(cwR2(zz.hfa)) : undefined, z_wfh: zz.wfh !== null ? anN(cwR2(zz.wfh)) : undefined, feeding: S(fd.text), bf_n: fd.bfn !== null ? anN(fd.bfn) : undefined, bf_att: fd.att ? S(fd.att) : undefined, comp: fd.comp ? S(fd.comp) : undefined, bf_cont: age >= 183 && fd.bfc ? S(fd.bfc) : undefined, meals: fd.meals !== null ? anN(fd.meals) : undefined, vitals_src: fromFd && fromFd.weight_kg !== undefined && String(fromFd.weight_kg) === String(wt) ? S('Front desk: ' + (fromFd.entered_by || '') + ', ' + fromFd.entered_at) : undefined, fgroups: fd.fg.length ? S(fd.fg.join('|')) : undefined, fg_n: fgN !== null ? anN(fgN) : undefined, meal_ok: mealOk ? S(mealOk) : undefined, junk: fd.junk ? S(fd.junk) : undefined, wl_note: wlKind && val('cv_wl').trim() ? S(val('cv_wl').trim()) : undefined, temp: tmp !== null ? anN(tmp) : undefined, rr: rr !== null ? anN(rr) : undefined, net: $('cv_net') ? S(val('cv_net')) : undefined, dev: S(val('cv_dev')),
           danger: dg.length ? S(dg.join('|')) : undefined, illness: il.length ? S(il.join('|')) : undefined, vacc: vx.length ? S(vx.join('|')) : undefined, vacc_batch: Object.keys(bt).length ? S(JSON.stringify(bt)) : undefined, vacc_why: dueNow.length && vx.length < dueNow.length ? S(val('cv_why')) : undefined,
           vita: $('cv_vita') ? S(val('cv_vita')) : undefined, vita_dose: $('cv_vita') && val('cv_vita') === 'Given today' ? S(age < 365 ? '100,000 IU' : '200,000 IU') : undefined, worm: $('cv_worm') ? S(val('cv_worm')) : undefined, counselled: cn.length ? S(cn.join('|')) : undefined,
           alerts: al.length ? S(al.join(' | ')) : undefined, next_visit: val('cv_next') ? S(val('cv_next')) : undefined, notes: val('cv_note').trim() ? S(val('cv_note').trim()) : undefined, ...cwStamp(now) });
@@ -8141,6 +8159,149 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       const rg = document.getElementById('cwRefGo'); if (rg) rg.onclick = () => { const v = val('cwRefPick'); if (!v) return showErrs([['cwRefPick', 'Choose the child.']]); cwOpen('refer', v); };
       cwTab = 'due'; setCwTab('due'); cwRenderAll(); cwAutoRefresh();
     } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load child welfare data: ${esc(err.message)}</div>`; }
+  }
+
+  // ================= Newborn notices (Labour & Delivery -> Front desk -> Child Welfare) =================
+  // A notice holds ONLY: baby name, sex, date of birth, mother's phone, status; plus two pointers the screens use.
+  const NB_TABLE = 'vidacare-newborn-notices';
+  let nbRecs = [], nbOk = false, nbLd = {}, fdNb = null, fdRegOnly = false, nbWarn = '';
+  async function nbLoad() {
+    try {
+      const c = await getClient(); let items = [], key;
+      do { const r = await c.send(new ScanCommand({ TableName: NB_TABLE, ExclusiveStartKey: key, ConsistentRead: true })); items = items.concat(r.Items || []); key = r.LastEvaluatedKey; } while (key);
+      nbRecs = items.map(unmarshal).sort((a, b) => (b.created_at || '').localeCompare(a.created_at || '')); nbOk = true;
+    } catch (e) { nbRecs = []; nbOk = false; }
+  }
+  const nbAwaiting = () => nbRecs.filter(n => n.status === 'awaiting');
+  const nbIdFor = babyRid => String(babyRid).replace(/^baby#/, '').replace('#', '-');
+  // Labour & Delivery: one notice per baby born alive. A failure here must never stop the delivery record.
+  async function nbPutNotice(a, i, total, key, at, sexTxt) {
+    const mom = (typeof fdPatients !== 'undefined' ? fdPatients : []).find(p => p.patient_id === a.patient_id) || {};
+    const suffix = total > 1 ? ` (${total === 2 ? 'twin' : 'baby'} ${ldLetters[i - 1]})` : '';
+    const sx = /^f/i.test(sexTxt || '') ? 'female' : /^m/i.test(sexTxt || '') ? 'male' : '';
+    const now = ldNow(), rid = `baby#${key}#${i}`;
+    const item = { notice_id: S(nbIdFor(rid)), baby_name: S(`Baby of ${a.patient_name}${suffix}`), sex: sx ? S(sx) : undefined, date_of_birth: S(ldD10(at)), mother_phone: mom.phone_number ? S(mom.phone_number) : undefined,
+      status: S('awaiting'), mother_patient_id: S(a.patient_id), baby_record_id: S(rid), created_at: S(now), created_by: S(staffName()), created_by_username: S(staffUser()) };
+    await (await getClient()).send(new PutItemCommand({ TableName: NB_TABLE, Item: Object.fromEntries(Object.entries(item).filter(([, v]) => v !== undefined)), ConditionExpression: 'attribute_not_exists(notice_id)' }));
+  }
+  // ---- Front desk ----
+  function renderNb() {
+    const el = document.getElementById('fdNbCard'); if (!el) return;
+    const rows = nbOk ? nbAwaiting() : []; if (!rows.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="data-card" style="border-left:4px solid #C98A1B"><h4>Newborns born here, not yet registered (${rows.length})</h4>
+      <div class="vit" style="margin-bottom:8px">Sent by Labour &amp; Delivery. Register the baby from here and nothing is typed twice. When the mother comes back and the baby has been named, search her phone number, open the baby and choose <b>Update client details</b>.</div>
+      <table class="data-table"><thead><tr><th>Baby</th><th>Sex</th><th>Date of birth</th><th>Mother's phone</th><th></th></tr></thead><tbody>${rows.map(n => `<tr class="rowbar red"><td><b>${esc(n.baby_name)}</b></td><td>${esc(n.sex || '—')}</td><td>${esc(n.date_of_birth || '—')}</td><td>${esc(n.mother_phone || '—')}</td>
+        <td>${canWrite ? `<button class="btn-sm b-rel" data-nbreg="${esc(n.notice_id)}">Register</button> <a class="lnk" data-nbdismiss="${esc(n.notice_id)}" style="font-size:12px;margin-left:8px">Not needed</a>` : ''}</td></tr>`).join('')}</tbody></table></div>`;
+  }
+  function nbOpen(id) { const n = nbRecs.find(x => x.notice_id === id); if (!n || n.status !== 'awaiting') return; openForm(null, n.baby_name, n); }
+  async function nbDismiss(id, el) {
+    const n = nbRecs.find(x => x.notice_id === id); if (!n || !canWrite) return;
+    if (el && el.dataset.sure !== '1') { el.dataset.sure = '1'; el.textContent = 'Sure? Click again to remove'; setTimeout(() => { if (el.isConnected) { el.dataset.sure = ''; el.textContent = 'Not needed'; } }, 4000); return; }
+    try {
+      await (await getClient()).send(new UpdateItemCommand({ TableName: NB_TABLE, Key: { notice_id: { S: id } }, UpdateExpression: 'SET #s = :d, dismissed_at = :t, dismissed_by = :b', ConditionExpression: '#s = :a', ExpressionAttributeNames: { '#s': 'status' }, ExpressionAttributeValues: { ':d': { S: 'dismissed' }, ':a': { S: 'awaiting' }, ':t': { S: new Date().toISOString() }, ':b': { S: staffName() } } }));
+      n.status = 'dismissed'; renderNb();
+    } catch (e) { const m = document.getElementById('fdMsg'); if (m) m.innerHTML = `<div class="error-inline">Could not remove the notice: ${esc(e.message)}</div>`; }
+  }
+  function nbPrefill(nb) {
+    const set = (id, v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
+    const mom = nb.mother_patient_id ? fdPatients.find(p => p.patient_id === nb.mother_patient_id) : null;
+    set('r_date_of_birth', nb.date_of_birth); set('r_sex', nb.sex); set('r_phone_number', nb.mother_phone); set('r_emergency_contact_phone', nb.mother_phone);
+    set('r_emergency_contact_name', mom ? mom.full_name : String(nb.baby_name || '').replace(/^Baby of /, '').replace(/ \((twin|baby) [A-Z]\)$/, ''));
+    set('r_emergency_contact_relationship', 'Parent'); set('r_address', mom && mom.address);
+    const h = document.querySelector('#fdFormCard h4'); if (h) h.textContent = 'Register newborn';
+    const f = document.querySelector('#fdFormCard .fd-form'); if (f) f.insertAdjacentHTML('afterbegin', '<div class="notice" style="margin-bottom:8px">From the Labour &amp; Delivery notice: name, sex, date of birth and mother\'s phone are filled in. Check the address, then register. Use <b>Register only</b> if the baby has not come to be seen today.</div>');
+  }
+  async function nbCheckStillAwaiting(nb) {
+    const r = await (await getClient()).send(new GetItemCommand({ TableName: NB_TABLE, Key: { notice_id: { S: nb.notice_id } }, ConsistentRead: true }));
+    const cur = r.Item ? unmarshal(r.Item) : null;
+    if (!cur || cur.status !== 'awaiting') { if (cur) Object.assign(nb, cur); renderNb(); throw new Error(cur && cur.status === 'registered' ? `This baby was already registered${cur.client_id ? ' as ' + cur.client_id : ''}. Search for the baby instead.` : 'This notice is no longer open.'); }
+  }
+  async function nbMarkRegistered(nb, patient) {
+    nbWarn = '';
+    try {
+      const now = new Date().toISOString();
+      await (await getClient()).send(new UpdateItemCommand({ TableName: NB_TABLE, Key: { notice_id: { S: nb.notice_id } }, UpdateExpression: 'SET #s = :r, baby_patient_id = :p, client_id = :c, registered_at = :t, registered_by = :b', ConditionExpression: '#s = :a', ExpressionAttributeNames: { '#s': 'status' },
+        ExpressionAttributeValues: { ':r': { S: 'registered' }, ':a': { S: 'awaiting' }, ':p': { S: patient.patient_id }, ':c': { S: patient.client_id || '' }, ':t': { S: now }, ':b': { S: staffName() } } }));
+      Object.assign(nb, { status: 'registered', baby_patient_id: patient.patient_id, client_id: patient.client_id, registered_at: now });
+    } catch (e) { nbWarn = ` The baby is registered, but the notice could not be closed (${e.message}).`; }
+  }
+  // ---- Update client details (rename, correct date of birth, sex, phone, address) with a saved history ----
+  const nbLog = p => { try { return JSON.parse(p.edit_log || '[]'); } catch (e) { return []; } };
+  function nbLogHtml(p) {
+    const L = nbLog(p); if (!L.length) return '';
+    return `<div style="grid-column:1/-1"><span>Changes made later</span>${L.slice(-6).reverse().map(l => `${esc(fmtDate(l.at))} by ${esc(l.by)}: ${l.ch.map(c => `${esc(c.f)} <i>${esc(c.from || '—')}</i> → <b>${esc(c.to || '—')}</b>`).join('; ')}${l.why ? ` (${esc(l.why)})` : ''}`).join('<br>')}</div>`;
+  }
+  function fdEditForm(pid) {
+    const p = fdPatients.find(x => x.patient_id === pid); if (!p || !canWrite) return;
+    document.getElementById('fdProfileCard').style.display = 'none';
+    const card = document.getElementById('fdFormCard'); card.style.display = 'block';
+    const sexes = [['female', 'Female'], ['male', 'Male']];
+    card.innerHTML = `<h4>Update client details</h4><div class="client-banner"><div><strong>${esc(p.full_name)}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID yet')}</span></div><button class="btn-sm ghost" id="fdEdCancel">Cancel</button></div>
+      <div class="fd-form"><div class="vit" style="margin-bottom:8px">Use this when a baby has been named, or something was entered wrongly. The client keeps the same record and number, so nothing is registered twice. Every change is saved with your name.</div>
+      <div class="grid2">
+        <div class="f"><label>Full name <span class="req">*</span></label><input id="ed_name" value="${esc(p.full_name)}"></div>
+        <div class="f"><label>Date of birth <span class="req">*</span></label><input id="ed_dob" type="date" value="${esc(p.date_of_birth || '')}" max="${new Date().toISOString().slice(0, 10)}"></div>
+        <div class="f"><label>Sex <span class="req">*</span></label><select id="ed_sex">${opt(sexes, 'Select')}</select></div>
+        <div class="f"><label>Phone number <span class="req">*</span></label><input id="ed_phone" type="tel" value="${esc(p.phone_number || '')}" inputmode="numeric"></div>
+        <div class="f"><label>Address</label><input id="ed_addr" value="${esc(p.address || '')}"></div>
+        <div class="f"><label>Reason <span class="unit">(needed if date of birth, sex or phone changes)</span></label><input id="ed_why" placeholder="e.g. baby named, wrong date entered"></div>
+      </div><div id="fdEdMsg"></div><div class="stamp">Will be recorded as changed by <strong>${esc(staffName())}</strong> (${esc(staffUser())}).</div>
+      <div style="margin-top:14px"><button class="btn-sm" id="fdEdSave">Save changes</button></div></div>`;
+    document.getElementById('ed_sex').value = p.sex || '';
+    document.getElementById('fdEdCancel').onclick = () => { card.style.display = 'none'; openClient(pid); };
+    document.getElementById('fdEdSave').onclick = () => fdEditSave(pid);
+    card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  async function fdEditSave(pid) {
+    const p = fdPatients.find(x => x.patient_id === pid); if (!p) return;
+    clearErrs(document.getElementById('fdFormCard'));
+    const nv = { full_name: val('ed_name').replace(/\s+/g, ' '), date_of_birth: val('ed_dob'), sex: val('ed_sex'), phone_number: val('ed_phone'), address: val('ed_addr') }, errs = [];
+    if (!nv.full_name) errs.push(['ed_name', 'Enter the name.']); if (!nv.date_of_birth) errs.push(['ed_dob', 'Enter the date of birth.']); else if (nv.date_of_birth > new Date().toISOString().slice(0, 10)) errs.push(['ed_dob', 'The date of birth cannot be in the future.']);
+    if (!nv.sex) errs.push(['ed_sex', 'Choose the sex.']);
+    const ph = nv.phone_number ? normPhone(nv.phone_number) : ''; if (!/^\+\d{9,15}$/.test(ph) || (ph.startsWith('+233') && ph.length !== 13)) errs.push(['ed_phone', 'Enter a valid phone number.']); else nv.phone_number = ph;
+    const lab = { full_name: 'Name', date_of_birth: 'Date of birth', sex: 'Sex', phone_number: 'Phone', address: 'Address' }, ch = Object.keys(lab).filter(k => (nv[k] || '') !== (p[k] || '')).map(k => ({ f: lab[k], k, from: p[k] || '', to: nv[k] || '' }));
+    const why = val('ed_why');
+    if (!errs.length && !ch.length) errs.push(['ed_name', 'Nothing has been changed.']);
+    if (!errs.length && ch.some(c => ['date_of_birth', 'sex', 'phone_number'].includes(c.k)) && !why) errs.push(['ed_why', 'Say why the date of birth, sex or phone is changing.']);
+    if (errs.length) return showErrs(errs);
+    const btn = document.getElementById('fdEdSave'); btn.disabled = true; btn.textContent = 'Saving…';
+    try {
+      const now = new Date().toISOString(), log = nbLog(p).concat([{ at: now, by: staffName(), why, ch: ch.map(c => ({ f: c.f, from: c.from, to: c.to })) }]).slice(-20);
+      const sets = [], vals = { ':u': { S: now }, ':ub': { S: staffName() }, ':uu': { S: staffUser() }, ':l': { S: JSON.stringify(log) } }, names = {};
+      ch.forEach((c, i) => { if (c.to) { names['#f' + i] = c.k; sets.push(`#f${i} = :v${i}`); vals[':v' + i] = { S: c.to }; } });
+      await (await getClient()).send(new UpdateItemCommand({ TableName: TABLE, Key: { patient_id: { S: pid }, record_type: { S: p.record_type || 'profile' } }, UpdateExpression: 'SET ' + sets.concat(['updated_at = :u', 'updated_by = :ub', 'updated_by_username = :uu', 'edit_log = :l']).join(', '), ExpressionAttributeNames: names, ExpressionAttributeValues: vals, ConditionExpression: 'attribute_exists(patient_id)' }));
+      ch.forEach(c => { if (c.to) p[c.k] = c.to; }); Object.assign(p, { updated_at: now, updated_by: staffName(), edit_log: JSON.stringify(log) });
+      let warn = '';
+      for (const n of nbRecs.filter(x => x.baby_patient_id === pid)) { try { await (await getClient()).send(new UpdateItemCommand({ TableName: NB_TABLE, Key: { notice_id: { S: n.notice_id } }, UpdateExpression: 'SET baby_name = :n, date_of_birth = :d, sex = :x', ExpressionAttributeValues: { ':n': { S: p.full_name }, ':d': { S: p.date_of_birth }, ':x': { S: p.sex } } })); Object.assign(n, { baby_name: p.full_name, date_of_birth: p.date_of_birth, sex: p.sex }); } catch (e) { warn = ' (the newborn notice could not be updated, which does not matter now)'; } }
+      document.getElementById('fdFormCard').style.display = 'none'; renderRecent(); openClient(pid);
+      document.getElementById('fdMsg').innerHTML = `<div class="success">Updated ${esc(p.full_name)}: ${ch.map(c => esc(c.f)).join(', ')} changed by ${esc(staffName())} at ${esc(fmtDate(now))}.${warn}</div>`;
+    } catch (e) { btn.disabled = false; btn.textContent = 'Save changes'; const m = document.getElementById('fdEdMsg'); if (m) m.innerHTML = `<div class="error-inline">Could not save: ${esc(e.message)}</div>`; }
+  }
+  // ---- Child Welfare ----
+  async function nbFetchLd() {
+    const have = new Set((typeof cwRecs !== 'undefined' ? cwRecs : []).filter(r => String(r.record_id).startsWith('cw#')).map(r => r.patient_id));
+    for (const n of nbRecs.filter(x => x.status === 'registered' && x.baby_patient_id && !have.has(x.baby_patient_id) && x.mother_patient_id && x.baby_record_id && !nbLd[x.notice_id])) {
+      try { const r = await (await getClient()).send(new GetItemCommand({ TableName: LD_TABLE, Key: { patient_id: { S: n.mother_patient_id }, record_id: { S: n.baby_record_id } } })); if (r.Item) nbLd[n.notice_id] = unmarshal(r.Item); } catch (e) { /* no access: the form is just not prefilled */ }
+    }
+  }
+  function renderCwBorn() {
+    const el = document.getElementById('cwBorn'); if (!el) return;
+    const have = new Set(cwEps().map(e => e.patient_id));
+    const rows = nbOk ? nbRecs.filter(n => (n.status === 'awaiting') || (n.status === 'registered' && n.baby_patient_id && !have.has(n.baby_patient_id))) : [];
+    if (!rows.length) { el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="data-card" style="border-left:4px solid #2E7D5B"><h4>Born here, to register (${rows.length})</h4>
+      <div class="vit" style="margin-bottom:8px">Babies born live in Labour &amp; Delivery. Birth weight and the vaccines given at birth come from the delivery record, so you do not type them again. A baby can be registered here once the front desk has registered the baby.</div>
+      <table class="data-table"><thead><tr><th>Baby</th><th>Born</th><th>Birth weight</th><th>Given at birth</th><th></th></tr></thead><tbody>${rows.map(n => { const l = nbLd[n.notice_id] || {}, p = n.baby_patient_id ? cwPat(n.baby_patient_id) : null, vx = [l.bcg === 'Given' ? 'BCG' : '', l.opv0 === 'Given' ? 'OPV 0' : '', l.hepb0 === 'Given' ? 'Hep B 0' : ''].filter(Boolean).join(', ');
+        return `<tr class="rowbar ${n.status === 'registered' ? 'green' : ''}"><td><b>${esc((p && p.full_name) || n.baby_name)}</b></td><td>${esc(n.date_of_birth || '—')}</td><td>${l.weight ? esc(wtTxt(Number(l.weight))) : '—'}</td><td>${esc(vx || '—')}</td>
+        <td>${n.status === 'registered' ? (canCw ? `<button class="btn-sm b-rel" data-cwact="reg|p:${esc(n.baby_patient_id)}">Register for the clinic</button>` : '') : '<span class="vit">Waiting for the front desk to register the baby</span>'}</td></tr>`; }).join('')}</tbody></table></div>`;
+  }
+  function nbPrefillCw(pid) {
+    const n = nbRecs.find(x => x.baby_patient_id === pid && x.status === 'registered'), l = n && nbLd[n.notice_id]; if (!l) return;
+    const set = (id, v) => { const e = document.getElementById(id); if (e && v) e.value = v; };
+    set('cr_pl', 'This clinic'); set('cr_rel', 'Mother'); if (l.ga_birth) set('cr_pre', l.preterm === 'yes' ? 'Yes' : 'No');
+    if (l.weight) { const w = document.getElementById('cr_bw'); if (w) { w.value = String(l.weight); w.dispatchEvent(new Event('input', { bubbles: true })); } }
+    const d = ldD10(l.birth_at || (n && n.date_of_birth)); if (l.bcg === 'Given') set('cr_pd_BCG', d); if (l.opv0 === 'Given') set('cr_pd_OPV0', d);
+    const w2 = document.getElementById('cr_bw'); const grid = w2 && w2.closest('.grid3'); if (grid) grid.insertAdjacentHTML('beforebegin', '<div class="notice" style="margin:6px 0">Filled in from the delivery record: where born, birth weight, and the vaccines given at birth. Check them, then register.</div>');
   }
 
   // Every panel that opens inside a department gets a "Back" button at the top, so nobody has to go back to the department list.

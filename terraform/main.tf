@@ -181,6 +181,21 @@ resource "aws_dynamodb_table" "child_welfare_records" {
   tags = { Project = "VidaCare" }
 }
 
+# Newborn notices: a tiny hand-off list. One row per baby born live here, holding only the
+# baby's name, sex, date of birth and the mother's phone (plus pointers the clinic screens use).
+resource "aws_dynamodb_table" "newborn_notices" {
+  name         = "vidacare-newborn-notices"
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "notice_id"
+
+  attribute {
+    name = "notice_id"
+    type = "S"
+  }
+
+  tags = { Project = "VidaCare" }
+}
+
 resource "aws_dynamodb_table" "labour_delivery_records" {
   name         = "vidacare-labour-delivery-records"
   billing_mode = "PAY_PER_REQUEST"
@@ -319,7 +334,8 @@ module "iam_front_desk" {
     { sid = "PatientRecordsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.patient_records.arn] },
     { sid = "BillingRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.billing.arn] },
     { sid = "VisitsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
-    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] }
+    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] },
+    { sid = "NewbornNoticesRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.newborn_notices.arn] }
   ]
 }
 
@@ -349,7 +365,8 @@ module "iam_labour_delivery" {
     { sid = "LabRequestsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.lab_requests.arn] },
     { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
     { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
-    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] }
+    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
+    { sid = "NewbornNoticesRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.newborn_notices.arn] }
   ]
 }
 
@@ -393,7 +410,8 @@ module "iam_child_welfare" {
     { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] },
     { sid = "PostnatalRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.postnatal_records.arn] },
     { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
-    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] }
+    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] },
+    { sid = "NewbornNoticesRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.newborn_notices.arn] }
   ]
 }
 
@@ -486,6 +504,7 @@ module "iam_admin" {
       aws_dynamodb_table.family_planning_records.arn,
       aws_dynamodb_table.child_welfare_records.arn,
       aws_dynamodb_table.labour_delivery_records.arn,
+      aws_dynamodb_table.newborn_notices.arn,
       aws_dynamodb_table.lab_results.arn,
       aws_dynamodb_table.pharmacy_inventory.arn,
       aws_dynamodb_table.billing.arn,
