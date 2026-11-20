@@ -390,7 +390,10 @@ module "iam_child_welfare" {
     { sid = "ChildWelfareRW", actions = local.rw_actions, resource_arns = ["${aws_dynamodb_table.child_welfare_records.arn}", "${aws_dynamodb_table.child_welfare_records.arn}/index/*"] },
     { sid = "LabRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.lab_results.arn] },
     { sid = "VisitsRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.visits.arn] },
-    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] }
+    { sid = "LabourDeliveryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.labour_delivery_records.arn] },
+    { sid = "PostnatalRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.postnatal_records.arn] },
+    { sid = "PrescriptionsRW", actions = local.rw_actions, resource_arns = [aws_dynamodb_table.prescriptions.arn] },
+    { sid = "InventoryRead", actions = local.read_actions, resource_arns = [aws_dynamodb_table.pharmacy_inventory.arn] }
   ]
 }
 

@@ -350,7 +350,7 @@
     { slug: "antenatal",        name: "Antenatal",        icon: "🤰", live: true },
     { slug: "postnatal",        name: "Postnatal",        icon: "👶", live: true },
     { slug: "family-planning",  name: "Family Planning",  icon: "👨‍👩‍👧", live: true },
-    { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒", live: false },
+    { slug: "child-welfare",    name: "Child Welfare",    icon: "🧒", live: true },
     { slug: "labour-delivery",  name: "Labour & Delivery",icon: "🚨", live: true },
     { slug: "lab",              name: "Lab",               icon: "🔬", live: true },
     { slug: "pharmacy",         name: "Pharmacy",          icon: "💊", live: true },
@@ -4526,18 +4526,24 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
       { t: 'Ibuprofen', n: 'Ibuprofen', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '3 days', q: 9, i: 'After food. Avoid if blood pressure is high.' },
       { t: 'Amoxicillin', n: 'Amoxicillin', r: 1, d: '1 capsule (500 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' },
       { t: 'Metronidazole', n: 'Metronidazole', r: 0, d: '1 tablet (400 mg)', f: 'Three times daily', u: '5 days', q: 15, i: '' }];
+  RXM_QUICK['child-welfare'] = [
+      { t: 'Paracetamol syrup', n: 'Paracetamol syrup 120 mg/5 mL', r: 0, d: 'Dose by weight (see the label)', f: 'Three to four times daily', u: '3 days', q: 1, i: 'For fever or pain. 10 to 15 mg per kg each dose.' },
+      { t: 'Zinc dispersible', n: 'Zinc sulphate 20 mg dispersible tablet', r: 0, d: '1 tablet (20 mg)', f: 'Once daily', u: '10 days', q: 10, i: 'For diarrhoea. Half a tablet daily if under 6 months. Give with ORS.' },
+      { t: 'ORS sachet', n: 'Oral rehydration salts (low osmolarity)', r: 0, d: 'After each loose stool', f: 'As needed', u: '3 days', q: 6, i: 'Mix one sachet in one litre of clean water.' },
+      { t: 'Amoxicillin dispersible', n: 'Amoxicillin dispersible tablet 250 mg', r: 1, d: 'Dose by age (see the label)', f: 'Twice daily', u: '5 days', q: 10, i: 'For pneumonia or ear infection.' }];
   RXM_QUICK['family-planning'] = [
       { t: 'Combined pill', n: 'Combined oral contraceptive (e.g. Microgynon, Lo-Femenal)', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 84, i: 'Start on days 1 to 5 of the period. Take at the same time each day.' },
       { t: 'Progestin-only pill', n: 'Progestin-only pill (e.g. Microlut)', r: 0, d: '1 tablet', f: 'Once daily', u: '3 months', q: 84, i: 'Take at the same time every day, with no break between packs.' },
       { t: 'DMPA injection', n: 'Medroxyprogesterone acetate (DMPA) 150 mg/mL', r: 5, d: '1 vial (150 mg)', f: 'Once', u: 'Every 13 weeks', q: 1, i: 'Deep injection into the buttock or upper arm. Do not massage the site.' },
       { t: 'Emergency pill', n: 'Levonorgestrel 1.5 mg (emergency contraception)', r: 0, d: '1 tablet (1.5 mg)', f: 'Once only', u: 'One dose', q: 1, i: 'Take as soon as possible, within 5 days of unprotected sex.' }];
   const RXM = {};
-  const rxmK = d => ({ antenatal: 'an', 'labour-delivery': 'ld', postnatal: 'pn', 'family-planning': 'fp' })[d];
-  const rxmCan = d => d === 'antenatal' ? canAnc : d === 'postnatal' ? canPn : d === 'family-planning' ? canFp : canLd;
-  const rxmMsg = d => d === 'antenatal' ? anNote : d === 'postnatal' ? pnNote : d === 'family-planning' ? fpNote : ldNote;
+  const rxmK = d => ({ antenatal: 'an', 'labour-delivery': 'ld', postnatal: 'pn', 'family-planning': 'fp', 'child-welfare': 'cw' })[d];
+  const rxmCan = d => d === 'antenatal' ? canAnc : d === 'postnatal' ? canPn : d === 'family-planning' ? canFp : d === 'child-welfare' ? canCw : canLd;
+  const rxmMsg = d => d === 'antenatal' ? anNote : d === 'postnatal' ? pnNote : d === 'family-planning' ? fpNote : d === 'child-welfare' ? cwNote : ldNote;
   const rxmS = d => RXM[d] || (RXM[d] = { rows: [rxBlank()], pid: '', stock: [], rx: [], ok: false, err: '' });
   function rxmClients(d) {
     if (d === 'antenatal') return anPregs.filter(x => x.status === 'active').map(x => ({ pid: x.patient_id, ctx: x.record_id, name: x.patient_name, cid: x.client_id, tag: 'Antenatal ' + (x.reg_no || '') }));
+    if (d === 'child-welfare') return cwActive().map(e => ({ pid: e.patient_id, ctx: e.record_id, name: e.patient_name, cid: e.client_id, tag: 'Child welfare ' + (e.cw_no || '') }));
     if (d === 'family-planning') return fpActive().map(e => ({ pid: e.patient_id, ctx: e.record_id, name: e.patient_name, cid: e.client_id, tag: 'Family planning ' + (e.fp_no || '') }));
     if (d === 'postnatal') return pnActive().map(e => ({ pid: e.patient_id, ctx: e.record_id, name: e.patient_name, cid: e.client_id, tag: 'Postnatal ' + (e.pn_no || '') }));
     return ldAdms().filter(a => ['labour', 'delivered'].includes(ldStatus(a))).map(a => ({ pid: a.patient_id, ctx: a.record_id, name: a.patient_name, cid: a.client_id, tag: (ldStatus(a) === 'labour' ? 'In labour ' : 'On the ward ') + (a.adm_no || '') }));
@@ -4551,7 +4557,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     } catch (e) { s.err = e.message; }
   }
   function rxmBadge(d) {
-    const el = document.getElementById({ antenatal: 'anTabRx', 'labour-delivery': 'ldTabRx', postnatal: 'pnTabRx', 'family-planning': 'fpTabRx' }[d]); if (!el) return;
+    const el = document.getElementById({ antenatal: 'anTabRx', 'labour-delivery': 'ldTabRx', postnatal: 'pnTabRx', 'family-planning': 'fpTabRx', 'child-welfare': 'cwTabRx' }[d]); if (!el) return;
     const n = rxmS(d).rx.filter(r => r.status === 'query').length; el.textContent = n; el.style.display = n ? '' : 'none';
   }
   function rxmShell(d) {
@@ -4611,7 +4617,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     rxmDraftStrip(d); rxmBadge(d);
   }
   async function rxmOpen(d) {
-    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx', fp: 'fpPaneRx' }[k]); if (!host) return;
+    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx', fp: 'fpPaneRx', cw: 'cwPaneRx' }[k]); if (!host) return;
     const s = rxmS(d);
     if (!host.dataset.mounted) {
       host.innerHTML = '<div class="loading-inline">Loading prescriptions…</div>'; await rxmRefresh(d);
@@ -4631,7 +4637,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     } else { await rxmRefresh(d); rxmLists(d); }
   }
   async function rxmTick(d) { // keeps the lists fresh without touching what is being typed
-    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx', fp: 'fpPaneRx' }[k]); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
+    const k = rxmK(d), host = document.getElementById({ an: 'anPaneRx', ld: 'ldPaneRx', pn: 'pnPaneRx', fp: 'fpPaneRx', cw: 'cwPaneRx' }[k]); if (!host || !host.dataset.mounted || host.style.display === 'none') return;
     if (host.querySelector('textarea:focus')) return; await rxmRefresh(d); rxmLists(d);
   }
 
@@ -4735,7 +4741,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     ['an', 'ld'].forEach(dept => { const c = gdCur && gdCur.dept === dept ? gdCur : null, form = document.getElementById(GD[dept].form); if (c && form && form.firstChild && !c.cancelled && JSON.stringify(gdCapture(form)) !== c.snap) jobs.push(gdPut(c, gdCapture(form), true)); });
     if (gdVisitRid && document.getElementById('av_wt')) jobs.push(anSaveDraft(gdVisitRid, true));
     if (gxCur && !gxCur.cancelled) { const el = document.getElementById(gxCur.cont); if (el && el.querySelector('#gxSave')) { const dd = gdCapture(el); if (gxCur.restored || JSON.stringify(dd) !== gxCur.snap) jobs.push(gxPut(gxCur, dd, true)); } }
-    ['antenatal', 'labour-delivery', 'postnatal', 'family-planning'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
+    ['antenatal', 'labour-delivery', 'postnatal', 'family-planning', 'child-welfare'].forEach(d => { const k = rxmK(d), el = document.getElementById(`rxm_${k}_c`); if (el && el.value) jobs.push(rxmSaveDraft(d, true)); });
     await Promise.race([Promise.allSettled(jobs), new Promise(r => setTimeout(r, 5000))]);
   }
   document.addEventListener('click', e => {
@@ -4748,9 +4754,9 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   // ---- Private drafts for the front desk, lab, pharmacy and billing forms (shared drafts table, one row per draft, own rows only) ----
   const GX_TABLE = 'vidacare-form-drafts';
   const GX_CONT = { fdFormCard: 'fdCancel', lbForm: 'lbCancel', phForm: 'phCancel',
-    bgForm: 'bgCancel', pnForm: 'pnCancel', fpForm: 'fpCancel'
+    bgForm: 'bgCancel', pnForm: 'pnCancel', fpForm: 'fpCancel', cwForm: 'cwCancel'
   };
-  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price', pnreg: 'Postnatal registration', pnvisit: 'Postnatal visit', pnrefer: 'Referral', pnclose: 'Close postnatal care', fpreg: 'Family planning registration', fpvisit: 'Family planning visit', fprefer: 'Referral', fpclose: 'Close family planning' };
+  const GX_LABEL = { fd: 'Client visit', lab: 'Lab form', phdrug: 'Drug details', phrecv: 'Receive stock', phadj: 'Stock adjustment', phdisp: 'Dispensing', bgprice: 'Service price', pnreg: 'Postnatal registration', pnvisit: 'Postnatal visit', pnrefer: 'Referral', pnclose: 'Close postnatal care', fpreg: 'Family planning registration', fpvisit: 'Family planning visit', fprefer: 'Referral', fpclose: 'Close family planning', cwreg: 'Child welfare registration', cwvisit: 'Child welfare visit', cwrefer: 'Referral', cwclose: 'Close child welfare file' };
   const GX_OPEN = {
     fd: c => { const p = c ? fdPatients.find(x => x.patient_id === c) : null; openForm(p || null, ''); },
     lab: c => { const [id, m] = c.split('|'); openLabForm(id, m); },
@@ -4760,11 +4766,12 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     phdisp: c => phDispenseForm(c),
     bgprice: c => bgPriceForm(c || undefined),
     pnreg: c => pnRegForm(c), pnvisit: c => pnVisitForm(c), pnrefer: c => pnReferForm(c), pnclose: c => pnCloseForm(c),
-    fpreg: c => fpRegForm(c), fpvisit: c => fpVisitForm(c), fprefer: c => fpReferForm(c), fpclose: c => fpCloseForm(c)
+    fpreg: c => fpRegForm(c), fpvisit: c => fpVisitForm(c), fprefer: c => fpReferForm(c), fpclose: c => fpCloseForm(c),
+    cwreg: c => cwRegForm(c), cwvisit: c => cwVisitForm(c), cwrefer: c => cwReferForm(c), cwclose: c => cwCloseForm(c)
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v48';
+  const PORTAL_VERSION = 'v49';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
@@ -4865,7 +4872,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   }
   // src: { pid, rf: { to, reason, at, transport, accompanied, phoned, condition, treatment, by, byAt, urgency }, adm?, obs?, visit? }
   async function refBuild(src) {
-    const { pid, rf, adm, obs, visit, pn, pnVisits, fp, fpVisits } = src, now = new Date().toISOString();
+    const { pid, rf, adm, obs, visit, pn, pnVisits, fp, fpVisits, cw, cwVisits } = src, now = new Date().toISOString();
     const p = fdPatients.find(x => x.patient_id === pid) || {};
     let anc = [], labs = [], rx = [];
     try { anc = (await scanTable(ANC_TABLE)).filter(r => r.patient_id === pid); } catch (e) { /* no access */ }
@@ -4894,6 +4901,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
     }
     if (pn) pnLetterSections(pn, pnVisits || [], sections);
     if (fp) fpLetterSections(fp, fpVisits || [], sections);
+    if (cw) cwLetterSections(cw, cwVisits || [], sections);
     // antenatal history
     const pregs = anc.filter(r => String(r.record_id).startsWith('preg#')).sort((a, b) => (b.booked_date || '').localeCompare(a.booked_date || '')), pg = pregs.find(x => x.status === 'active') || pregs[0];
     if (pg) {
@@ -4978,6 +4986,10 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       const at = String(id).indexOf('@'), eid = at < 0 ? id : id.slice(0, at), e = pnEps().find(x => x.record_id === eid), r = e && (at < 0 ? pnRef(e) : pnRefs(e).find(q => String(q.record_id).endsWith('#' + id.slice(at + 1)))); if (!r) return null;
       return { pid: e.patient_id, pn: e, pnVisits: pnVisitsOf(e), adm: e.adm_id ? ldAdms().find(x => x.record_id === e.adm_id) : null, obs: [], rf: { to: r.referred_to, urgency: r.urgency, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: [r.who && 'Referred: ' + r.who, r.condition].filter(Boolean).join('\n'), treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
     }
+    if (kind === 'cw') {
+      const at = String(id).indexOf('@'), eid = at < 0 ? id : id.slice(0, at), e = cwEps().find(x => x.record_id === eid), r = e && (at < 0 ? cwRef(e) : cwRefs(e).find(q => String(q.record_id).endsWith('#' + id.slice(at + 1)))); if (!r) return null;
+      return { pid: e.patient_id, cw: e, cwVisits: cwVisitsOf(e), adm: null, obs: [], rf: { to: r.referred_to, urgency: r.urgency, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: r.condition, treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
+    }
     if (kind === 'fp') {
       const at = String(id).indexOf('@'), eid = at < 0 ? id : id.slice(0, at), e = fpEps().find(x => x.record_id === eid), r = e && (at < 0 ? fpRef(e) : fpRefs(e).find(q => String(q.record_id).endsWith('#' + id.slice(at + 1)))); if (!r) return null;
       return { pid: e.patient_id, fp: e, fpVisits: fpVisitsOf(e), adm: null, obs: [], rf: { to: r.referred_to, urgency: r.urgency, reason: r.reason, at: r.left_at, transport: r.transport, accompanied: r.accompanied_by, phoned: r.phoned_ahead, condition: r.condition, treatment: r.treatment, by: r.entered_by, byAt: r.entered_at } };
@@ -4986,7 +4998,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     return { pid: v.patient_id, visit: v, rf: { to: v.referred_to, reason: v.referred_reason, at: v.entered_at, condition: [v.complaints && 'Complaints: ' + v.complaints, v.plan && 'Findings and plan: ' + v.plan].filter(Boolean).join('\n'), by: v.entered_by, byAt: v.entered_at } };
   }
   async function refRun(kind, id, pdf, btn) {
-    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : kind === 'pn' ? pnNote : kind === 'fp' ? fpNote : anNote; if (!src) return note('The referral could not be found.');
+    const src = refSource(kind, id); const note = kind === 'ld' ? ldNote : kind === 'pn' ? pnNote : kind === 'fp' ? fpNote : kind === 'cw' ? cwNote : anNote; if (!src) return note('The referral could not be found.');
     const w = pdf ? null : window.open('', '_blank'); if (!pdf && !w) return alert('Please allow pop-ups for this page to print the letter.');
     const t = btn ? btn.textContent : ''; if (btn) { btn.disabled = true; btn.textContent = pdf ? 'Preparing PDF…' : 'Preparing…'; }
     try { const m = await refBuild(src); if (pdf) await refPdf(m); else await refPrint(m, w); }
@@ -4997,7 +5009,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   document.addEventListener('click', e => { const b = e.target.closest('[data-refpdf],[data-refprint]'); if (!b) return; e.preventDefault(); const [k, id] = (b.dataset.refpdf || b.dataset.refprint).split('|'); refRun(k, id, !!b.dataset.refpdf, b); });
 
   // ---- Prescriptions in the client's file, and saved drafts ----
-  const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery', postnatal: 'Postnatal', 'family-planning': 'Family planning' };
+  const RXM_DEPT = { antenatal: 'Antenatal', 'labour-delivery': 'Labour and delivery', postnatal: 'Postnatal', 'family-planning': 'Family planning', 'child-welfare': 'Child welfare' };
   async function rxmHistory(boxId, pid) {
     const box = document.getElementById(boxId); if (!box) return;
     try {
@@ -5005,8 +5017,8 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       box.innerHTML = rx.length ? `<table class="data-table"><thead><tr><th>Sent</th><th>Medicines</th><th>Status</th><th>By</th></tr></thead><tbody>${rx.map(r => `<tr><td>${fmtDate(r.prescribed_at)}<div class="vit">${esc(r.rx_no || '')}</div></td><td class="vit">${rxLinesHtml(r)}${r.notes ? '<div><b>Note:</b> ' + esc(r.notes) + '</div>' : ''}</td><td>${rxBadge(r, false)}</td><td>${esc(r.prescribed_by || '')}<div class="vit">${esc(RXM_DEPT[r.source_dept] || 'Clinic doctor')}</div></td></tr>`).join('')}</tbody></table>` : '<div class="vit">No prescriptions for this client yet.</div>';
     } catch (e) { box.innerHTML = `<div class="vit">Prescriptions could not be loaded: ${esc(e.message)}</div>`; }
   }
-  const rxmTable = d => d === 'antenatal' ? ANC_TABLE : d === 'postnatal' ? PN_TABLE : d === 'family-planning' ? FP_TABLE : LD_TABLE;
-  const rxmRecs = d => d === 'antenatal' ? anRecs : d === 'postnatal' ? pnRecs : d === 'family-planning' ? fpRecs : ldRecs;
+  const rxmTable = d => d === 'antenatal' ? ANC_TABLE : d === 'postnatal' ? PN_TABLE : d === 'family-planning' ? FP_TABLE : d === 'child-welfare' ? CW_TABLE : LD_TABLE;
+  const rxmRecs = d => d === 'antenatal' ? anRecs : d === 'postnatal' ? pnRecs : d === 'family-planning' ? fpRecs : d === 'child-welfare' ? cwRecs : ldRecs;
   const rxmDraftPrefix = () => 'rxdraft#' + staffUser() + '#';
   const rxmDrafts = d => rxmRecs(d).filter(r => String(r.record_id).startsWith(rxmDraftPrefix()) && !r.cleared_at).sort((x, y) => (y.saved_at || '').localeCompare(x.saved_at || ''));
   function rxmDraftStrip(d) {
@@ -5048,7 +5060,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
   // a line in the client's own record (antenatal visits table or labour chart); the prescription itself lives in the prescriptions table
   async function rxmNote(d, ctx, pid, id, rxNo, lines, now, notes) {
     try {
-      const key = d === 'antenatal' ? (anPregs.find(x => x.record_id === ctx) ? anKey(anPregs.find(x => x.record_id === ctx)) : '') : d === 'postnatal' ? String(ctx).replace(/^pn#/, '') : d === 'family-planning' ? String(ctx).replace(/^fp#/, '') : (ldAdms().find(x => x.record_id === ctx) ? ldKey(ldAdms().find(x => x.record_id === ctx)) : ''); if (!key) return;
+      const key = d === 'antenatal' ? (anPregs.find(x => x.record_id === ctx) ? anKey(anPregs.find(x => x.record_id === ctx)) : '') : d === 'postnatal' ? String(ctx).replace(/^pn#/, '') : d === 'family-planning' ? String(ctx).replace(/^fp#/, '') : d === 'child-welfare' ? String(ctx).replace(/^cw#/, '') : (ldAdms().find(x => x.record_id === ctx) ? ldKey(ldAdms().find(x => x.record_id === ctx)) : ''); if (!key) return;
       const raw = { patient_id: S(pid), record_id: S(`rxn#${key}#${now}#${id.replace(/-/g, '').slice(0, 6)}`), record_type: S('rx-note'), rx_id: S(id), rx_no: S(rxNo), meds: S(lines.map(l => `${l.n} ${l.d}, ${l.f.toLowerCase()}, ${l.u.toLowerCase()}`).join('; ')), notes: notes ? S(notes) : undefined, entered_at: S(now), entered_by: S(staffName()), entered_by_username: S(staffUser()) };
       const item = Object.fromEntries(Object.entries(raw).filter(([, v]) => v !== undefined));
       await (await getClient()).send(new PutItemCommand({ TableName: rxmTable(d), Item: item })); rxmRecs(d).push(unmarshal(item));
@@ -7464,6 +7476,476 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load family planning data: ${esc(err.message)}</div>`; }
   }
 
+  // ================= CHILD WELFARE CLINIC (Ghana EPI schedule, growth monitoring, vitamin A, deworming, IMNCI danger signs; DHIMS2-style tally) =================
+  const CW_TABLE = 'vidacare-child-welfare-records';
+  let canCw = false, cwRecs = [], cwTab = 'due', cwQ = '', cwTimer = null;
+  let cwRegView = 'list', cwRegYear = String(new Date().getFullYear()), cwRegPeriod = 'monthly';
+  const CW_DAY = 86400000;
+  // d = age in days when due; prev = the dose that must come before it (at least 28 days earlier); maxAge = oldest age in days at which it may still be started
+  const CW_V = [
+    { k: 'BCG', t: 'BCG', d: 0 }, { k: 'OPV0', t: 'Polio (OPV 0)', d: 0, maxAge: 14 },
+    { k: 'OPV1', t: 'Polio (OPV 1)', d: 42 }, { k: 'PENTA1', t: 'Pentavalent 1', d: 42 }, { k: 'PCV1', t: 'Pneumococcal (PCV 1)', d: 42 }, { k: 'ROTA1', t: 'Rotavirus 1', d: 42, maxAge: 104 },
+    { k: 'OPV2', t: 'Polio (OPV 2)', d: 70, prev: 'OPV1' }, { k: 'PENTA2', t: 'Pentavalent 2', d: 70, prev: 'PENTA1' }, { k: 'PCV2', t: 'Pneumococcal (PCV 2)', d: 70, prev: 'PCV1' }, { k: 'ROTA2', t: 'Rotavirus 2', d: 70, prev: 'ROTA1', maxAge: 223 },
+    { k: 'OPV3', t: 'Polio (OPV 3)', d: 98, prev: 'OPV2' }, { k: 'PENTA3', t: 'Pentavalent 3', d: 98, prev: 'PENTA2' }, { k: 'PCV3', t: 'Pneumococcal (PCV 3)', d: 98, prev: 'PCV2' }, { k: 'IPV1', t: 'Injectable polio (IPV 1)', d: 98 },
+    { k: 'IPV2', t: 'Injectable polio (IPV 2)', d: 183, prev: 'IPV1' },
+    { k: 'MAL1', t: 'Malaria vaccine 1', d: 183 }, { k: 'MAL2', t: 'Malaria vaccine 2', d: 213, prev: 'MAL1' }, { k: 'MAL3', t: 'Malaria vaccine 3', d: 274, prev: 'MAL2' },
+    { k: 'MR1', t: 'Measles-rubella 1', d: 274 }, { k: 'YF', t: 'Yellow fever', d: 274 },
+    { k: 'MAL4', t: 'Malaria vaccine 4', d: 548, prev: 'MAL3' }, { k: 'MR2', t: 'Measles-rubella 2', d: 548, prev: 'MR1' }, { k: 'MENA', t: 'Meningitis A (MenA)', d: 548 }
+  ];
+  const CW_VBY = Object.fromEntries(CW_V.map(v => [v.k, v]));
+  const CW_FIC = ['BCG', 'OPV3', 'PENTA3', 'PCV3', 'ROTA2', 'IPV1', 'MR1', 'YF'];   // fully immunised by the first birthday (the malaria vaccine is not counted)
+  const CW_PLACE = ['This clinic', 'Another health facility', 'At home', 'On the way to a facility', 'Not known'];
+  const CW_HIV = ['Not known', 'Mother is HIV negative', 'Mother is HIV positive (child is exposed)'];
+  const CW_ZONE = ['Normal (on or above the lower line)', 'Underweight (between the two lower lines)', 'Severely underweight (below the lowest line)', 'Overweight (above the top line)'];
+  const CW_DANGER = ['Cannot drink or breastfeed', 'Vomits everything', 'Has had fits (convulsions)', 'Very sleepy or hard to wake', 'Stiff neck or bulging soft spot'];
+  const CW_ILL = ['Fever or suspected malaria', 'Cough or fast breathing', 'Diarrhoea', 'Ear pain or discharge', 'Skin problem or sores', 'Eye problem', 'Not feeding well', 'Other illness'];
+  const CW_WHY_NOT = ['Child is sick (doctor or midwife decided to wait)', 'Vaccine out of stock', 'Caregiver declined', 'Other'];
+  const CW_COUNSEL = ['Breastfeeding only to 6 months, then family foods with breastfeeding', 'Danger signs: when to come back at once', 'Sleeping under a treated mosquito net', 'Washing hands and clean water', 'The next vaccines and when to come'];
+  const CW_REF_WHY = ['Danger signs', 'Severe acute malnutrition', 'Pneumonia or difficulty breathing', 'Diarrhoea with dehydration', 'High fever or suspected severe malaria', 'Possible developmental delay', 'Medical condition needs a doctor', 'Other'];
+  const CW_CLOSE = ['Reached 5 years', 'Moved away or transferred to another facility', 'Lost to follow-up (not seen 3 months after the due date)', 'Died', 'Other'];
+  const cwNote = (html, kind) => { const m = document.getElementById('cwMsg'); if (m) m.innerHTML = `<div class="${kind === 'ok' ? 'success' : 'error-inline'}">${html}</div>`; };
+  const cwShow = html => { const f = document.getElementById('cwForm'); f.innerHTML = html; f.style.display = 'block'; f.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+  const cwClose = () => { const f = document.getElementById('cwForm'); if (f) { f.style.display = 'none'; f.innerHTML = ''; } };
+  const cwPat = pid => fdPatients.find(p => p.patient_id === pid);
+  const cwEps = () => cwRecs.filter(r => String(r.record_id).startsWith('cw#'));
+  const cwKey = e => String(e.record_id).slice(3);
+  const cwVisitsOf = e => cwRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('cwv#' + cwKey(e) + '#')).sort((x, y) => String(x.record_id).localeCompare(String(y.record_id)));
+  const cwRefs = e => cwRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('cwr#' + cwKey(e) + '#')).sort((x, y) => String(x.record_id).localeCompare(String(y.record_id)));
+  const cwRef = e => cwRefs(e).slice(-1)[0];
+  const cwClosed = e => cwRecs.find(r => r.patient_id === e.patient_id && r.record_id === 'cwd#' + cwKey(e));
+  const cwActive = () => cwEps().filter(e => !cwClosed(e));
+  const cwDay = v => String(v.visit_at).slice(0, 10);
+  const cwNow = () => new Date().toISOString();
+  const cwDob = e => ((cwPat(e.patient_id) || {}).date_of_birth) || e.dob || '';
+  const cwAgeDays = (e, at) => { const d = cwDob(e); if (!d) return null; return Math.floor((new Date(at || cwNow()) - new Date(d)) / CW_DAY); };
+  const cwAgeText = days => { if (days === null || days === undefined) return '—'; if (days < 0) return 'not born yet'; if (days < 28) return days + ' day' + (days === 1 ? '' : 's'); const m = Math.floor(days / 30.4375); if (m < 24) return m + ' month' + (m === 1 ? '' : 's'); const y = Math.floor(m / 12), r = m % 12; return y + ' year' + (y === 1 ? '' : 's') + (r ? ' ' + r + ' month' + (r === 1 ? '' : 's') : ''); };
+  const cwPut = async item => (await getClient()).send(new PutItemCommand({ TableName: CW_TABLE, Item: g2(item), ConditionExpression: 'attribute_not_exists(record_id)' }));
+  const cwStamp = now => ldStamp(now);
+  const cwJ = (s, d) => { try { return JSON.parse(s || ''); } catch (x) { return d; } };
+  async function cwRefresh() { await refreshData(); cwRecs = await scanTable(CW_TABLE); }
+  async function cwNextReg(year) {
+    const r = await (await getClient()).send(new UpdateItemCommand({ TableName: CW_TABLE, Key: { patient_id: { S: 'COUNTER' }, record_id: { S: 'counter#' + year } }, UpdateExpression: 'ADD seq :one', ExpressionAttributeValues: { ':one': { N: '1' } }, ReturnValues: 'UPDATED_NEW' }));
+    const seq = parseInt(r.Attributes.seq.N, 10); return { year: String(year), seq, no: `CWC-${year}-${String(seq).padStart(4, '0')}` };
+  }
+  // ---- Vaccines: what has been given, and what is due ----
+  function cwGiven(e) {
+    const g = {}, prior = cwJ(e.prior_json, {});
+    Object.keys(prior).forEach(k => { g[k] = { date: prior[k], here: false }; });
+    cwVisitsOf(e).forEach(v => { const bt = cwJ(v.vacc_batch, {}); String(v.vacc || '').split('|').filter(Boolean).forEach(k => { g[k] = { date: cwDay(v), here: true, batch: bt[k] || '' }; }); if (v.vita === 'Given today') g.VITA = { date: cwDay(v), here: true }; if (v.worm === 'Given today') g.WORM = { date: cwDay(v), here: true }; });
+    return g;
+  }
+  // every vaccine not yet given, with the date it falls due (never sooner than 28 days after the one before it) and whether the child is now too old to start it
+  function cwDoses(e) {
+    const dob = cwDob(e), g = cwGiven(e), td = today10(), age = cwAgeDays(e), memo = {}, out = [];
+    if (!dob) return out;
+    const dueOf = v => { if (memo[v.k]) return memo[v.k]; let d = anAdd(dob, v.d); if (v.prev) { const pg = g[v.prev]; const pd = pg ? anAdd(pg.date, 28) : anAdd(dueOf(CW_VBY[v.prev]).date, 28); if (pd > d) d = pd; } return (memo[v.k] = { date: d }); };
+    const tooOld = v => { if (g[v.k]) return false; if (v.maxAge !== undefined && age > v.maxAge && !(v.prev && g[v.prev])) return true; if (v.prev && !g[v.prev] && tooOld(CW_VBY[v.prev])) return true; if (v.k === 'OPV0' && age > 14) return true; return false; };
+    CW_V.forEach(v => { if (g[v.k]) return; const old = tooOld(v), due = dueOf(v).date; const blocked = !!v.prev && !g[v.prev]; out.push({ v, due, old, blocked, ready: !old && !blocked && due <= td, late: !old && !blocked && due < anAdd(td, -28), lateDays: due < td ? Math.round((new Date(td) - new Date(due)) / CW_DAY) : 0 }); });
+    return out;
+  }
+  function cwSupp(e) {
+    const dob = cwDob(e), g = cwGiven(e), age = cwAgeDays(e); if (!dob || age === null) return {};
+    const va = g.VITA ? anAdd(g.VITA.date, 182) : anAdd(dob, 183), wo = g.WORM ? anAdd(g.WORM.date, 182) : anAdd(dob, 365), td = today10();
+    return { vita: age < 1796 ? { due: va, ready: va <= td } : null, worm: age < 1796 ? { due: wo, ready: wo <= td } : null };
+  }
+  function cwNext(e) {
+    const vs = cwVisitsOf(e), last = vs[vs.length - 1], td = today10(), age = cwAgeDays(e); if (age === null || age >= 1826) return null;
+    const ds = cwDoses(e).filter(d => !d.old && (d.ready || d.due > td)).sort((a, b) => a.due.localeCompare(b.due)), sp = cwSupp(e), cand = [];
+    if (ds.length) { const first = ds[0].due; cand.push({ date: first, names: ds.filter(d => d.due === first || (d.due <= td && first <= td)).map(d => d.v.t) }); }
+    if (sp.vita) cand.push({ date: sp.vita.due, names: ['Vitamin A'] }); if (sp.worm) cand.push({ date: sp.worm.due, names: ['Deworming'] });
+    const lw = last ? anAdd(cwDay(last), age < 730 ? 30 : 90) : today10(); cand.push({ date: lw, names: ['Weighing and review'] });
+    cand.sort((a, b) => a.date.localeCompare(b.date)); const first = cand[0].date, names = []; cand.forEach(c => { if (c.date <= (first <= td ? td : first)) c.names.forEach(n => { if (!names.includes(n)) names.push(n); }); });
+    let plan = { date: first, label: names.slice(0, 4).join(', ') + (names.length > 4 ? ' and ' + (names.length - 4) + ' more' : '') };
+    if (last && last.next_visit && last.next_visit > cwDay(last)) plan = { date: last.next_visit, label: plan.label };
+    return { ...plan, overdue: plan.date < td, today: plan.date === td, late: plan.date < td ? Math.round((new Date(td) - new Date(plan.date)) / CW_DAY) : 0 };
+  }
+  const cwLast = e => cwVisitsOf(e).slice(-1)[0];
+  const cwFlag = e => { const l = cwLast(e); return l && l.alerts ? l.alerts : ''; };
+  const cwMatch = e => { const q = cwQ.trim().toLowerCase(); if (!q) return true; const p = cwPat(e.patient_id) || {}; return [e.patient_name, e.client_id, e.cw_no, e.caregiver_name, e.caregiver_phone, p.phone_number].some(x => String(x || '').toLowerCase().includes(q)); };
+  const cwNameCell = (e, extra) => `<a class="lnk" data-cwact="file|${esc(e.record_id)}"><b>${esc(e.patient_name || '—')}</b></a><br><span class="cid">${esc(e.client_id || '')}</span>${extra || ''}`;
+  // ---- Screen ----
+  function cwShellHtml() {
+    return `
+    <div class="fd-wrap">
+      <div id="cwMsg"></div>
+      <div class="data-card" id="cwForm" style="display:none;"></div>
+      <div class="ph-tabs">
+        <button class="ph-tab on" data-cwtab="due">Due and overdue <span class="n amber" id="cwTabDue" style="display:none"></span></button>
+        <button class="ph-tab" data-cwtab="active">Children <span class="n green" id="cwTabAct" style="display:none"></span></button>
+        <button class="ph-tab" data-cwtab="ref">Referrals</button>
+        <button class="ph-tab" data-cwtab="register">Register</button>
+        <button class="ph-tab" data-cwtab="rx">Prescriptions <span class="n amber" id="cwTabRx" style="display:none"></span></button>
+        <button class="ph-tab" data-cwtab="find">Find a child</button>
+      </div>
+      <div id="cwSearchRow" class="fd-search" style="display:none;gap:10px;flex-wrap:wrap;align-items:center"><input id="cwSearch" type="search" placeholder="Search by child, client ID, clinic number, caregiver or phone" autocomplete="off" style="flex:1;min-width:200px"><button class="btn-sm" id="cwSearchBtn" type="button">Search</button><button class="btn-sm ghost" id="cwClearBtn" type="button">Clear</button></div>
+      <div id="cwPaneDue">
+        <div class="data-card"><h4>Arrived today</h4><div class="vit" style="margin-bottom:8px">Checked in by the front desk for the child welfare clinic.</div><div class="recent-scroll" style="min-height:0" id="cwWait"></div></div>
+        <div class="data-card"><h4>Vaccines, vitamin A, deworming and weighing due</h4><div class="vit" style="margin-bottom:8px">Red means findings at the last visit need follow-up, or a vaccine is more than 4 weeks late.</div><div class="recent-scroll" id="cwDue"></div></div>
+        <div class="data-card"><h4>Coming up in the next 14 days</h4><div class="recent-scroll" style="min-height:0" id="cwSoon"></div></div>
+      </div>
+      <div id="cwPaneActive" style="display:none"><div class="data-card"><h4>Children in the clinic</h4><div class="recent-scroll" id="cwActive"></div></div></div>
+      <div id="cwPaneRef" style="display:none">
+        ${canCw ? `<div class="data-card"><h4>Refer a child</h4><div class="vit" style="margin-bottom:8px">Use this for danger signs, severe malnutrition or any problem the clinic cannot treat. The letter carries the child's vaccines and growth.</div><div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end"><div class="f" style="min-width:260px"><label>Child</label><select id="cwRefPick"><option value="">Choose…</option></select></div><button class="btn-sm b-rel" id="cwRefGo" type="button">Refer out</button></div></div>` : ''}
+        <div class="data-card"><h4>Referrals made</h4><div class="recent-scroll" id="cwRefList"></div></div></div>
+      <div id="cwPaneRegister" style="display:none"><div class="data-card"><h4>Child welfare register</h4><div id="cwRegister"></div></div></div>
+      <div id="cwPaneRx" style="display:none"></div>
+      <div id="cwPaneFind" style="display:none"><div class="data-card"><h4>Find a child</h4>
+        <div class="fd-search"><input id="cwFind" type="search" placeholder="Search by name, phone or client ID (VMH-00001)" autocomplete="off"></div>
+        <div class="results" id="cwFindRes"></div></div></div>
+    </div>`;
+  }
+  function setCwTab(t) {
+    cwTab = t;
+    ['due', 'active', 'ref', 'register', 'rx', 'find'].forEach(k => { const p = document.getElementById('cwPane' + k[0].toUpperCase() + k.slice(1)); if (p) p.style.display = k === t ? '' : 'none'; });
+    document.querySelectorAll('[data-cwtab]').forEach(b => b.classList.toggle('on', b.dataset.cwtab === t));
+    if (t === 'rx') rxmOpen('child-welfare');
+    const sr = document.getElementById('cwSearchRow'); if (sr) sr.style.display = (t === 'active' || (t === 'register' && cwRegView === 'list')) ? 'flex' : 'none';
+  }
+  const cwWaiting = () => fdVisits.filter(v => v.status === 'checked-in' && v.service === 'child-welfare' && v.entered_at && new Date(v.entered_at).toDateString() === new Date().toDateString()).sort((a, b) => a.entered_at.localeCompare(b.entered_at))
+    .filter(v => { const e = cwActive().find(x => x.patient_id === v.patient_id); return !(e && cwVisitsOf(e).some(r => new Date(r.visit_at).toDateString() === new Date().toDateString())); });
+  function cwRow(e) {
+    const n = cwNext(e), fl = cwFlag(e), age = cwAgeDays(e), missed = cwDoses(e).filter(d => d.late).length;
+    return `<tr class="rowbar ${fl || missed ? 'red' : ''}"><td>${cwNameCell(e, `<div class="vit">${esc(e.cw_no || '')}</div>`)}</td><td>${esc(cwAgeText(age))}<div class="vit">${esc(e.caregiver_name || '')}</div></td>
+      <td>${n ? `<b>${esc(n.label)}</b><div class="vit" ${n.overdue ? 'style="color:#C62828"' : ''}>${anDate(n.date)}${n.overdue ? ' · ' + n.late + ' day' + (n.late === 1 ? '' : 's') + ' overdue' : n.today ? ' · today' : ''}</div>` : '<span class="vit">Nothing planned</span>'}</td>
+      <td>${fl ? `<div class="vit" style="color:#C62828">${esc(fl.slice(0, 90))}</div>` : '<span class="vit">—</span>'}${missed ? `<div class="vit" style="color:#C62828">${missed} vaccine${missed === 1 ? '' : 's'} more than 4 weeks late</div>` : ''}</td>
+      <td style="white-space:nowrap">${canCw ? `<button class="btn-sm b-rel" data-cwact="visit|${esc(e.record_id)}">Record visit</button> · ` : ''}<a class="lnk" data-cwact="file|${esc(e.record_id)}">Open</a></td></tr>`;
+  }
+  function renderCwDue() {
+    const set = (id, n) => { const el = document.getElementById(id); if (!el) return; el.textContent = n; el.style.display = n ? '' : 'none'; };
+    const w = cwWaiting(), act = cwActive(), td = today10(), end = anAdd(td, 14);
+    const pl = act.map(e => ({ e, n: cwNext(e) })).filter(x => x.n), due = pl.filter(x => x.n.date <= td).sort((a, b) => a.n.date.localeCompare(b.n.date)), soon = pl.filter(x => x.n.date > td && x.n.date <= end).sort((a, b) => a.n.date.localeCompare(b.n.date));
+    set('cwTabDue', due.length + w.length); set('cwTabAct', act.length);
+    const head = '<thead><tr><th>Child</th><th>Age</th><th>Next visit</th><th>Findings</th><th></th></tr></thead>';
+    const b = document.getElementById('cwWait'); if (b) b.innerHTML = `<table class="data-table"><thead><tr><th>Child</th><th>Arrived</th><th></th></tr></thead><tbody>${w.map(v => { const p = cwPat(v.patient_id) || {}, e = act.find(x => x.patient_id === v.patient_id); return `<tr class="rowbar red"><td><b>${esc(p.full_name || v.patient_name || '—')}</b><br><span class="cid">${esc(p.client_id || '')}</span></td><td>${fmtDate(v.entered_at)}</td><td>${canCw ? (e ? `<button class="btn-sm b-rel" data-cwact="visit|${esc(e.record_id)}">Record visit</button>` : `<button class="btn-sm b-rel" data-cwact="reg|p:${esc(v.patient_id)}">Register for the clinic</button>`) : ''}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="3">Nobody is waiting.</td></tr>'}</tbody></table>`;
+    const c = document.getElementById('cwDue'); if (c) c.innerHTML = `<table class="data-table">${head}<tbody>${due.map(x => cwRow(x.e)).join('') || '<tr class="empty-row"><td colspan="5">Nobody is due or overdue.</td></tr>'}</tbody></table>`;
+    const d2 = document.getElementById('cwSoon'); if (d2) d2.innerHTML = `<table class="data-table">${head}<tbody>${soon.map(x => cwRow(x.e)).join('') || '<tr class="empty-row"><td colspan="5">Nothing due in the next 14 days.</td></tr>'}</tbody></table>`;
+  }
+  function renderCwActive() {
+    const el = document.getElementById('cwActive'); if (!el) return;
+    const rows = cwActive().filter(cwMatch).sort((x, y) => (cwNext(x) ? cwNext(x).date : '9').localeCompare(cwNext(y) ? cwNext(y).date : '9'));
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Child</th><th>Age</th><th>Next visit</th><th>Findings</th><th></th></tr></thead><tbody>${rows.map(e => cwRow(e)).join('') || `<tr class="empty-row"><td colspan="5">${cwQ ? 'No child matches your search.' : 'No child is registered yet.'}</td></tr>`}</tbody></table>`;
+  }
+  function cwFindRender() {
+    const q = val('cwFind').toLowerCase(), res = document.getElementById('cwFindRes'); if (!res) return; if (!q) { res.innerHTML = ''; return; }
+    const digits = q.replace(/\D/g, '');
+    const hits = fdPatients.filter(p => (p.full_name || '').toLowerCase().includes(q) || (p.client_id || '').toLowerCase().includes(q) || (digits.length >= 4 && canonPhone(p.phone_number).includes(canonPhone(q)))).slice(0, 15);
+    res.innerHTML = hits.map(p => { const act = cwActive().find(e => e.patient_id === p.patient_id), age = p.date_of_birth ? Math.floor((Date.now() - new Date(p.date_of_birth)) / CW_DAY) : null;
+      return `<div class="result-row" style="display:flex;justify-content:space-between;gap:10px;align-items:center;padding:10px;border-bottom:1px solid #EFF3EC"><div><b>${esc(p.full_name)}</b> <span class="cid">${esc(p.client_id || '')}</span><div class="vit">${esc(cwAgeText(age))}${act ? ' · In the clinic (' + esc(act.cw_no || '') + ')' : ' · Not registered for the child welfare clinic'}${age !== null && age >= 1826 ? ' · Over 5 years old' : ''}</div></div>
+        <div>${act ? `<a class="lnk" data-cwact="file|${esc(act.record_id)}">Open file</a>` : (canCw ? `<button class="btn-sm b-rel" data-cwact="reg|p:${esc(p.patient_id)}">Register for the clinic</button>` : '<span class="vit">Not registered</span>')}</div></div>`; }).join('') || '<div class="vit" style="padding:10px">No child found. Register the child at the front desk first.</div>';
+  }
+  function renderCwRefs() {
+    const pk = document.getElementById('cwRefPick'); if (pk && Number(pk.dataset.n || -1) !== cwActive().length) { pk.dataset.n = cwActive().length; const cur = pk.value; pk.innerHTML = '<option value="">Choose…</option>' + cwActive().map(e => `<option value="${esc(e.record_id)}">${esc(e.patient_name)} · ${esc(e.client_id || '')} · ${esc(e.cw_no || '')}</option>`).join(''); pk.value = cur; }
+    const rows = cwRecs.filter(r => String(r.record_id).startsWith('cwr#')).sort((x, y) => (y.left_at || '').localeCompare(x.left_at || '')), el = document.getElementById('cwRefList'); if (!el) return;
+    el.innerHTML = `<table class="data-table"><thead><tr><th>Left</th><th>Child</th><th>To</th><th>Reason</th><th>Condition on leaving</th><th>By</th><th>Letter</th></tr></thead><tbody>${rows.map(r => { const e = cwEps().find(x => x.record_id === r.cw_id); if (!e) return ''; const nn = String(r.record_id).split('#').pop();
+      return `<tr class="rowbar ${r.urgency === 'Emergency' ? 'red' : ''}"><td>${fmtDate(r.left_at)}</td><td>${cwNameCell(e, `<div class="vit">${esc(e.cw_no || '')}</div>`)}</td><td>${esc(r.referred_to)}<div class="vit">${esc(r.urgency || '')} · ${esc(r.transport || '')}</div></td><td>${esc(r.reason)}</td><td class="vit">${esc(String(r.condition || '').slice(0, 120))}</td><td>${esc(r.entered_by || '')}</td><td style="white-space:nowrap">${refBtns('cw', e.record_id + '@' + nn)}</td></tr>`; }).join('') || '<tr class="empty-row"><td colspan="7">No referrals yet.</td></tr>'}</tbody></table>`;
+  }
+  function cwRenderAll() { gxStrip(); renderCwDue(); renderCwActive(); renderCwRefs(); renderCwRegister(); }
+  // ---- Register a child ----
+  function cwRegForm(src) {
+    if (!canCw) return; src = String(src); const pid = src.slice(2); if (!pid) return;
+    if (cwActive().some(e => e.patient_id === pid)) return cwNote('The child is already registered. Open the file.');
+    const p = cwPat(pid) || {}; if (!p.date_of_birth) return cwNote('This child has no date of birth on the client record. Add it at the front desk first, because vaccines are timed from it.');
+    const age = Math.floor((Date.now() - new Date(p.date_of_birth)) / CW_DAY); if (age < 0) return cwNote('The date of birth is in the future. Correct it at the front desk.'); if (age >= 1826) return cwNote(`${esc(p.full_name || 'This client')} is over 5 years old. The child welfare clinic is for children under 5.`);
+    gxArm('cwForm', 'cwreg', src, pid, p.full_name || '');
+    const dobE = { patient_id: pid, dob: p.date_of_birth }, rows = CW_V.filter(v => v.d <= age).map(v => `<div class="f"><label>${esc(v.t)}</label><input id="cr_pd_${v.k}" type="date" min="${esc(p.date_of_birth)}" max="${today10()}"></div>`).join('');
+    cwShow(`<div class="fd-form">${anBanner(pid, null)}<h5>Register for the child welfare clinic</h5>
+      <div class="vit">${esc(p.full_name || '')} is ${esc(cwAgeText(age))} old (born ${anDate(p.date_of_birth)}). Vaccines are timed from this date.</div>
+      <h5>Caregiver and birth</h5><div class="grid3">
+        <div class="f"><label>Caregiver <span class="req">*</span></label><input id="cr_cg" value="${esc(p.emergency_contact_name || '')}"></div>
+        <div class="f"><label>Relationship <span class="req">*</span></label>${ldSelBlank('cr_rel', ['Mother', 'Father', 'Grandmother', 'Aunt or other relative', 'Other'])}</div>
+        <div class="f"><label>Caregiver phone</label><input id="cr_ph" type="tel" value="${esc(p.emergency_contact_phone || p.phone_number || '')}"></div>
+        <div class="f"><label>Where born <span class="req">*</span></label>${ldSelBlank('cr_pl', CW_PLACE)}</div>
+        <div class="f"><label>Birth weight <span class="unit">grams, if known</span></label><input id="cr_bw" type="number" min="400" max="6500"></div>
+        <div class="f"><label>Born before 37 weeks</label>${ldSel('cr_pre', ['Not known', 'No', 'Yes'])}</div>
+        <div class="f"><label>HIV exposure</label>${ldSel('cr_hiv', CW_HIV)}</div></div>
+      <div id="crHivNote" class="notice" style="display:none;margin-top:8px">Exposed child: refer for the early HIV test (about 6 weeks of age) and ask the HIV clinic about cotrimoxazole.</div>
+      <h5>Vaccines the child already had</h5><div class="vit">Copy the dates from the child's health record book. Leave a box empty if the dose was not given.</div>
+      <div class="grid3" style="margin-top:6px">${rows}${age >= 183 ? `<div class="f"><label>Vitamin A (last dose)</label><input id="cr_pd_VITA" type="date" min="${esc(p.date_of_birth)}" max="${today10()}"></div>` : ''}${age >= 365 ? `<div class="f"><label>Deworming (last dose)</label><input id="cr_pd_WORM" type="date" min="${esc(p.date_of_birth)}" max="${today10()}"></div>` : ''}</div>
+      <div class="f" style="margin-top:8px"><label>Notes</label><textarea id="cr_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="crSave">Register</button><button class="btn-sm ghost" id="cwCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('cwCancel').onclick = cwClose;
+    document.getElementById('cr_hiv').addEventListener('change', () => { document.getElementById('crHivNote').style.display = val('cr_hiv') === CW_HIV[2] ? '' : 'none'; });
+    document.getElementById('crSave').onclick = async () => {
+      clearErrs(document.getElementById('cwForm')); const errs = [], bw = anNum('cr_bw'), prior = {};
+      if (!val('cr_cg').trim()) errs.push(['cr_cg', 'Enter the caregiver.']); if (!val('cr_rel')) errs.push(['cr_rel', 'Choose the relationship.']); if (!val('cr_pl')) errs.push(['cr_pl', 'Choose where the child was born.']);
+      if (bw !== null && (bw < 400 || bw > 6500)) errs.push(['cr_bw', 'Birth weight in grams, 400 to 6500.']);
+      const keys = CW_V.filter(v => v.d <= age).map(v => v.k).concat(age >= 183 ? ['VITA'] : [], age >= 365 ? ['WORM'] : []);
+      keys.forEach(k => { const d = val('cr_pd_' + k); if (!d) return; if (d < p.date_of_birth) errs.push(['cr_pd_' + k, 'This date is before the child was born.']); else if (d > today10()) errs.push(['cr_pd_' + k, 'This date is in the future.']); else prior[k] = d; });
+      if (!errs.length) CW_V.forEach(v => { if (v.prev && prior[v.k] && prior[v.prev] && prior[v.k] < prior[v.prev]) errs.push(['cr_pd_' + v.k, `${v.t} cannot be before ${CW_VBY[v.prev].t}.`]); });
+      if (errs.length) return showErrs(errs);
+      const btn = document.getElementById('crSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const now = cwNow(), reg = await cwNextReg(new Date().getFullYear()), key = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        await cwPut({ patient_id: S(pid), record_id: S('cw#' + key), record_type: S('child-welfare'), cw_no: S(reg.no), cw_year: S(reg.year), cw_seq: { N: String(reg.seq) }, client_id: S(p.client_id || ''), patient_name: S(p.full_name || ''), sex: S(p.sex || ''), dob: S(p.date_of_birth), registered_at: S(now), age_days_at_reg: anN(age),
+          caregiver_name: S(val('cr_cg').trim()), caregiver_rel: S(val('cr_rel')), caregiver_phone: val('cr_ph').trim() ? S(val('cr_ph').trim()) : undefined, birth_place: S(val('cr_pl')), birth_weight: bw !== null ? anN(bw) : undefined, premature: S(val('cr_pre')), hiv_exposure: S(val('cr_hiv')),
+          prior_json: Object.keys(prior).length ? S(JSON.stringify(prior)) : undefined, notes: val('cr_note').trim() ? S(val('cr_note').trim()) : undefined, ...cwStamp(now) });
+        await cwRefresh(); cwClose(); cwRenderAll();
+        cwNote(`<b>${esc(p.full_name || '')}</b> registered (${esc(reg.no)}). <button class="btn-sm b-rel" data-cwact="visit|cw#${esc(key)}" style="margin-left:8px">Record the first visit now</button>`, 'ok');
+      } catch (e) { btn.disabled = false; btn.textContent = 'Register'; cwNote(`Could not save: ${esc(e.message)}`); }
+    };
+  }
+  // ---- Earlier visits and the vaccine card ----
+  const cwVisitLine = v => `${v.weight ? esc(v.weight) + ' kg' : ''}${v.length ? ', ' + esc(v.length) + ' cm' : ''}${v.muac ? ', arm ' + esc(v.muac) + ' cm' : ''}${v.zone ? '<div>' + esc(String(v.zone).split(' (')[0]) + '</div>' : ''}${v.feeding ? '<div>' + esc(v.feeding) + '</div>' : ''}`;
+  const cwVaccLine = v => `${String(v.vacc || '').split('|').filter(Boolean).map(k => esc((CW_VBY[k] || { t: k }).t)).join(', ')}${v.vita === 'Given today' ? (v.vacc ? '; ' : '') + 'Vitamin A' : ''}${v.worm === 'Given today' ? '; Deworming' : ''}` || '—';
+  function cwHistoryHtml(e) {
+    const vs = cwVisitsOf(e).slice().reverse(); if (!vs.length) return '<div class="vit" style="margin-top:6px">No earlier visits.</div>';
+    const rows = vs.map(v => `<tr class="${v.alerts ? 'rowbar red' : ''}"><td>${fmtDate(v.visit_at)}<div class="vit">${esc(cwAgeText(Number(v.age_days)))}</div></td><td class="vit">${cwVisitLine(v)}</td><td class="vit">${cwVaccLine(v)}</td><td>${v.alerts ? `<span style="color:#C62828">${esc(v.alerts)}</span>` : ''}${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}</td></tr>`).join('');
+    return `<details open style="margin-top:8px"><summary style="cursor:pointer;font-weight:600;color:var(--mid-green)">Previous visits (${vs.length})</summary><div class="recent-scroll" style="min-height:0;margin-top:6px"><table class="data-table" id="cwHist"><thead><tr><th>Date</th><th>Growth</th><th>Given</th><th>Findings and plan</th></tr></thead><tbody>${rows}</tbody></table></div></details>`;
+  }
+  function cwCardHtml(e) {
+    const g = cwGiven(e), ds = Object.fromEntries(cwDoses(e).map(d => [d.v.k, d])), td = today10();
+    return `<div class="recent-scroll" style="min-height:0"><table class="data-table" id="cwCard"><thead><tr><th>Vaccine</th><th>Due</th><th>Given</th><th>Status</th></tr></thead><tbody>${CW_V.map(v => { const x = g[v.k], d = ds[v.k];
+      const st = x ? '<span class="st done">Given</span>' : d && d.old ? '<span class="vit">Too old to start</span>' : d && d.late ? `<span style="color:#C62828"><b>${d.lateDays} days late</b></span>` : d && d.blocked && d.due <= today10() ? `<span class="vit">After ${esc(CW_VBY[v.prev].t)}</span>` : d && d.ready ? '<b style="color:#B26A00">Due now</b>' : '<span class="vit">Not yet due</span>';
+      return `<tr class="${d && d.late ? 'rowbar red' : ''}"><td>${esc(v.t)}</td><td>${d ? anDate(d.due) : anDate(anAdd(cwDob(e), v.d))}</td><td>${x ? anDate(x.date) + `<div class="vit">${x.here ? 'at this clinic' + (x.batch ? ', batch ' + esc(x.batch) : '') : 'before coming here'}</div>` : '—'}</td><td>${st}</td></tr>`; }).join('')}</tbody></table></div>`;
+  }
+  // ---- A clinic visit ----
+  function cwVisitForm(rid) {
+    const e = cwEps().find(x => x.record_id === rid); if (!e || !canCw) return;
+    if (cwClosed(e)) return cwNote('The file for this child has been closed.');
+    const age = cwAgeDays(e); if (age === null) return cwNote('This child has no date of birth on the client record. Add it at the front desk first.');
+    const vs = cwVisitsOf(e), lastV = vs[vs.length - 1], ds = cwDoses(e), dueNow = ds.filter(d => d.ready), sp = cwSupp(e), prevW = lastV && lastV.weight ? Number(lastV.weight) : null, under6m = age < 183, under2m = age < 61;
+    const feeds = under6m ? ['Breastfeeding only', 'Breastfeeding plus other liquids or foods', 'Not breastfed'] : age < 730 ? ['Breastfeeding plus age-appropriate foods', 'Family foods only (not breastfed)', 'Not eating enough or not enough variety'] : ['Family foods, eating well', 'Not eating well'];
+    gxArm('cwForm', 'cwvisit', rid, e.patient_id, e.patient_name);
+    cwShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Child welfare visit <span class="vit" style="font-weight:400">${esc(e.cw_no || '')}</span></h5>
+      <div class="vit">${esc(cwAgeText(age))} old · born ${anDate(cwDob(e))} · caregiver ${esc(e.caregiver_name || '—')} (${esc(e.caregiver_rel || '')})${prevW ? ' · last weight ' + prevW + ' kg on ' + anDate(cwDay(lastV)) : ''}</div>
+      ${e.hiv_exposure === CW_HIV[2] ? '<div class="notice" style="margin-top:6px">HIV-exposed child: check that the early HIV test and cotrimoxazole have been arranged.</div>' : ''}
+      ${cwHistoryHtml(e)}
+      ${lastV && lastV.alerts ? `<div class="notice" style="background:#FDECEA;border-color:#E57373;color:#8E1C14;margin-top:6px">Findings at the last visit (${fmtDate(lastV.visit_at)}): ${esc(lastV.alerts)}</div>` : ''}
+      <div class="grid3" style="margin-top:8px"><div class="f"><label>Visit time <span class="req">*</span></label><input id="cv_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div></div>
+      <h5>Growth</h5><div class="grid3">
+        <div class="f"><label>Weight <span class="unit">kg</span> <span class="req">*</span></label><input id="cv_wt" type="number" step="0.01" min="0.5" max="40"></div>
+        <div class="f"><label>${age < 730 ? 'Length' : 'Height'} <span class="unit">cm</span></label><input id="cv_len" type="number" step="0.1" min="30" max="130"></div>
+        ${age < 730 ? '<div class="f"><label>Head size <span class="unit">cm</span></label><input id="cv_head" type="number" step="0.1" min="25" max="60"></div>' : ''}
+        ${age >= 183 ? '<div class="f"><label>Arm band (MUAC) <span class="unit">cm</span></label><input id="cv_muac" type="number" step="0.1" min="6" max="25"></div>' : ''}
+        <div class="f"><label>Swelling of both feet <span class="req">*</span></label>${ldSel('cv_oed', ['No', 'Yes'])}</div>
+        <div class="f"><label>Weight on the growth chart <span class="req">*</span></label>${ldSelBlank('cv_zone', CW_ZONE)}</div></div>
+      <div class="vit" style="margin-top:4px">Plot the weight on the child's health record book chart and choose where the dot falls.</div>
+      <h5>Feeding and health</h5><div class="grid3">
+        <div class="f"><label>Feeding <span class="req">*</span></label>${ldSelBlank('cv_feed', feeds)}</div>
+        <div class="f"><label>Temperature <span class="unit">°C</span></label><input id="cv_temp" type="number" step="0.1" min="32" max="43"></div>
+        <div class="f"><label>Breaths in one minute</label><input id="cv_rr" type="number" min="10" max="120"></div>
+        ${under2m ? '' : `<div class="f"><label>Sleeps under a treated net</label>${ldSel('cv_net', ['Yes', 'No'])}</div>`}
+        <div class="f"><label>Doing what is expected for age <span class="req">*</span></label>${ldSel('cv_dev', ['Yes', 'Some concern', 'Not assessed'])}</div></div>
+      <div style="margin-top:10px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Danger signs <span class="unit">tick any that are present</span></label><div class="grid2" style="margin-top:6px">${CW_DANGER.map(k => `<label class="chk"><input type="checkbox" name="cv_dg" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div></div>
+      <div style="margin-top:10px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Illness today</label><div class="grid2" style="margin-top:6px">${CW_ILL.map(k => `<label class="chk"><input type="checkbox" name="cv_il" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div></div>
+      <h5>Vaccines and supplements</h5>
+      ${dueNow.length ? `<div class="vit">Due now. Tick each one given today.</div><div id="cvVax" style="margin-top:6px">${dueNow.map(d => `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:4px 0"><label class="chk" style="min-width:250px"><input type="checkbox" name="cv_vx" value="${d.v.k}"> ${esc(d.v.t)}${d.late ? ` <span style="color:#C62828">(${d.lateDays} days late)</span>` : ''}</label><input id="cv_bt_${d.v.k}" placeholder="Batch number" style="max-width:200px;display:none"></div>`).join('')}</div>
+        <div class="f" id="cvWhyW" style="display:none;margin-top:6px;max-width:420px"><label>Why were the others not given? <span class="req">*</span></label>${ldSelBlank('cv_why', CW_WHY_NOT)}</div>` : '<div class="vit">No vaccine is due today.</div>'}
+      <div class="grid3" style="margin-top:8px">${sp.vita && sp.vita.ready ? `<div class="f"><label>Vitamin A <span class="unit">${age < 365 ? '100,000 IU' : '200,000 IU'}</span> <span class="req">*</span></label>${ldSelBlank('cv_vita', ['Given today', 'Not given today'])}</div>` : ''}${sp.worm && sp.worm.ready && age >= 365 ? `<div class="f"><label>Deworming <span class="req">*</span></label>${ldSelBlank('cv_worm', ['Given today', 'Not given today'])}</div>` : ''}</div>
+      <div style="margin-top:12px"><label style="font-size:12.5px;font-weight:600;color:var(--mid-green)">Counselled on <span class="req">*</span></label><div class="vit">Required: danger signs and the next vaccines${age < 730 ? ', and feeding' : ''}.</div><div class="grid2" style="margin-top:6px">${CW_COUNSEL.map(k => `<label class="chk"><input type="checkbox" name="cv_cn" value="${esc(k)}"> ${esc(k)}</label>`).join('')}</div></div>
+      <div class="grid3" style="margin-top:8px"><div class="f"><label>Next visit <span class="unit">date</span></label><input id="cv_next" type="date" min="${today10()}"><div class="vit" id="cvNextH"></div></div></div>
+      <div class="f" style="margin-top:8px"><label>Notes and plan <span class="unit">required if anything needs action</span></label><textarea id="cv_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="cvSave">Save visit</button><button class="btn-sm ghost" id="cwCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('cwCancel').onclick = cwClose;
+    const $ = id => document.getElementById(id), nx = cwNext(e); if (nx) $('cvNextH').textContent = `If left blank: ${nx.label} on ${anDate(nx.date)}.`;
+    const syncVx = () => { const ticked = [...document.querySelectorAll('input[name="cv_vx"]:checked')].map(c => c.value); document.querySelectorAll('input[name="cv_vx"]').forEach(c => { const b = $('cv_bt_' + c.value); if (b) b.style.display = c.checked ? '' : 'none'; }); const w = $('cvWhyW'); if (w) w.style.display = dueNow.length && ticked.length < dueNow.length ? '' : 'none'; };
+    document.querySelectorAll('input[name="cv_vx"]').forEach(c => c.addEventListener('change', syncVx)); syncVx();
+    $('cvSave').onclick = async () => {
+      clearErrs($('cwForm')); const errs = [], at = ldIso('cv_at'), wt = anNum('cv_wt'), len = anNum('cv_len'), head = $('cv_head') ? anNum('cv_head') : null, muac = $('cv_muac') ? anNum('cv_muac') : null, tmp = anNum('cv_temp'), rr = anNum('cv_rr'), ageAt = at ? Math.floor((new Date(at) - new Date(cwDob(e))) / CW_DAY) : age;
+      if (!at) errs.push(['cv_at', 'Enter the time.']); else if (new Date(at) > new Date(Date.now() + 60000)) errs.push(['cv_at', 'The time is in the future.']); else if (new Date(at) < new Date(e.registered_at) - 86400000) errs.push(['cv_at', 'The time is before the child was registered.']);
+      if (wt === null || wt < 0.5 || wt > 40) errs.push(['cv_wt', 'Enter the weight in kilograms.']);
+      if (len !== null && (len < 30 || len > 130)) errs.push(['cv_len', 'Check the length or height.']); if (muac !== null && (muac < 6 || muac > 25)) errs.push(['cv_muac', 'Check the arm band measurement.']); if (head !== null && (head < 25 || head > 60)) errs.push(['cv_head', 'Check the head size.']);
+      if (tmp !== null && (tmp < 32 || tmp > 43)) errs.push(['cv_temp', 'Check the temperature.']); if (rr !== null && (rr < 10 || rr > 120)) errs.push(['cv_rr', 'Check the breathing count.']);
+      if (!val('cv_zone')) errs.push(['cv_zone', 'Choose where the weight falls on the chart.']); if (!val('cv_feed')) errs.push(['cv_feed', 'Choose the feeding.']);
+      const dg = [...document.querySelectorAll('input[name="cv_dg"]:checked')].map(c => c.value), il = [...document.querySelectorAll('input[name="cv_il"]:checked')].map(c => c.value), vx = [...document.querySelectorAll('input[name="cv_vx"]:checked')].map(c => c.value), cn = [...document.querySelectorAll('input[name="cv_cn"]:checked')].map(c => c.value);
+      const needCn = [CW_COUNSEL[1], CW_COUNSEL[4]].concat(age < 730 ? [CW_COUNSEL[0]] : []), miss = needCn.filter(k => !cn.includes(k)); if (miss.length) errs.push([document.querySelector('input[name="cv_cn"]'), 'Counselling is required: ' + miss.join('; ') + '.']);
+      if (dueNow.length && vx.length < dueNow.length && !val('cv_why')) errs.push(['cv_why', 'Say why the other vaccines were not given.']);
+      vx.forEach(k => { const v = CW_VBY[k]; if (v.maxAge !== undefined && ageAt > v.maxAge && !(v.prev && cwGiven(e)[v.prev])) errs.push([document.querySelector(`input[name="cv_vx"][value="${k}"]`), `${v.t} cannot be started at this age.`]); });
+      if ($('cv_vita') && !val('cv_vita')) errs.push(['cv_vita', 'Say if vitamin A was given.']); if ($('cv_worm') && !val('cv_worm')) errs.push(['cv_worm', 'Say if deworming was given.']);
+      const al = [];
+      if (!errs.length) {
+        dg.forEach(t => al.push('Danger sign: ' + t.toLowerCase())); il.forEach(t => al.push('Illness: ' + t.toLowerCase()));
+        if (tmp !== null) { if (ageAt < 61 ? tmp >= 37.5 : tmp >= 38) al.push('Fever ' + tmp + ' °C'); if (ageAt < 61 && tmp < 35.5) al.push('Low temperature ' + tmp + ' °C'); }
+        if (rr !== null) { const lim = ageAt < 61 ? 60 : ageAt < 365 ? 50 : 40; if (rr >= lim) al.push('Fast breathing: ' + rr + ' a minute'); }
+        if (val('cv_zone') === CW_ZONE[1]) al.push('Underweight for age'); if (val('cv_zone') === CW_ZONE[2]) al.push('Severely underweight for age');
+        if (muac !== null) { if (muac < 11.5) al.push('Severe acute malnutrition: arm band ' + muac + ' cm'); else if (muac < 12.5) al.push('Moderate acute malnutrition: arm band ' + muac + ' cm'); }
+        if (val('cv_oed') === 'Yes') al.push('Swelling of both feet (possible severe malnutrition)');
+        if (prevW && lastV) { const gap = Math.round((new Date(at) - new Date(lastV.visit_at)) / CW_DAY); if (wt < prevW - 0.05) al.push('Weight dropped from ' + prevW + ' kg to ' + wt + ' kg'); else if (ageAt < 730 && gap >= 25 && wt <= prevW) al.push('No weight gain since the last visit (' + gap + ' days ago)'); }
+        if (val('cv_dev') === 'Some concern') al.push('Concern about development');
+        if (al.length && !val('cv_note').trim()) errs.push(['cv_note', 'Write what was done about: ' + al.join('; ') + '.']);
+      }
+      if (errs.length) return showErrs(errs);
+      const btn = $('cvSave'); btn.disabled = true; btn.textContent = 'Saving…';
+      try {
+        const now = cwNow(), nth = vs.length + 1, bt = {}; vx.forEach(k => { const b = val('cv_bt_' + k).trim(); if (b) bt[k] = b; });
+        await cwPut({ patient_id: S(e.patient_id), record_id: S(`cwv#${cwKey(e)}#${String(nth).padStart(2, '0')}`), record_type: S('child-welfare-visit'), cw_id: S(e.record_id), n: { N: String(nth) }, visit_at: S(at), age_days: anN(ageAt),
+          weight: anN(wt), length: len !== null ? anN(len) : undefined, head: head !== null ? anN(head) : undefined, muac: muac !== null ? anN(muac) : undefined, oedema: S(val('cv_oed')), zone: S(val('cv_zone')), feeding: S(val('cv_feed')), temp: tmp !== null ? anN(tmp) : undefined, rr: rr !== null ? anN(rr) : undefined, net: $('cv_net') ? S(val('cv_net')) : undefined, dev: S(val('cv_dev')),
+          danger: dg.length ? S(dg.join('|')) : undefined, illness: il.length ? S(il.join('|')) : undefined, vacc: vx.length ? S(vx.join('|')) : undefined, vacc_batch: Object.keys(bt).length ? S(JSON.stringify(bt)) : undefined, vacc_why: dueNow.length && vx.length < dueNow.length ? S(val('cv_why')) : undefined,
+          vita: $('cv_vita') ? S(val('cv_vita')) : undefined, vita_dose: $('cv_vita') && val('cv_vita') === 'Given today' ? S(age < 365 ? '100,000 IU' : '200,000 IU') : undefined, worm: $('cv_worm') ? S(val('cv_worm')) : undefined, counselled: cn.length ? S(cn.join('|')) : undefined,
+          alerts: al.length ? S(al.join(' | ')) : undefined, next_visit: val('cv_next') ? S(val('cv_next')) : undefined, notes: val('cv_note').trim() ? S(val('cv_note').trim()) : undefined, ...cwStamp(now) });
+        await cwRefresh(); cwClose(); cwRenderAll();
+        cwNote(`Visit saved for <b>${esc(e.patient_name)}</b>${vx.length ? ' (' + vx.map(k => esc(CW_VBY[k].t)).join(', ') + ' given)' : ''}.${al.length ? ` <b>Findings to follow up: ${esc(al.join('; '))}.</b> <button class="btn-sm ghost" data-cwact="refer|${esc(e.record_id)}" style="margin-left:8px">Refer out</button>` : ''}`, al.length ? '' : 'ok');
+      } catch (err) { btn.disabled = false; btn.textContent = 'Save visit'; cwNote(`Could not save: ${esc(err.message)}`); }
+    };
+  }
+  // ---- Refer out, and close ----
+  function cwReferForm(rid) {
+    const e = cwEps().find(x => x.record_id === rid); if (!e || !canCw) return;
+    gxArm('cwForm', 'cwrefer', rid, e.patient_id, e.patient_name);
+    cwShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Refer to another facility</h5>
+      <div class="grid3"><div class="f"><label>Time leaving <span class="req">*</span></label><input id="crf_at" type="datetime-local" max="${ldLocalNow()}" value="${ldLocalNow()}"></div>
+        <div class="f"><label>Referred to <span class="req">*</span></label><input id="crf_to" placeholder="Hospital name"></div>
+        <div class="f"><label>Main reason <span class="req">*</span></label>${ldSelBlank('crf_why', CW_REF_WHY)}</div>
+        <div class="f"><label>Urgency <span class="req">*</span></label>${ldSel('crf_urg', ['Emergency', 'Urgent', 'Routine'], 'Urgent')}</div>
+        <div class="f"><label>Transport <span class="req">*</span></label>${ldSelBlank('crf_tr', ['Ambulance', 'Private vehicle', 'Public transport', 'Other'])}</div>
+        <div class="f"><label>Receiving facility phoned ahead</label>${ldSel('crf_call', ['Yes', 'No'], 'No')}</div></div>
+      <div class="f" style="margin-top:8px"><label>Condition on leaving <span class="req">*</span></label><textarea id="crf_cond" rows="2" placeholder="Weight, temperature, breathing, what the problem is"></textarea></div>
+      <div class="f" style="margin-top:8px"><label>Treatment given before leaving</label><textarea id="crf_tx" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="crfSave">Save referral</button><button class="btn-sm ghost" id="cwCancel">Cancel</button></div>
+      <div class="stamp">Recorded with your name and the time. The letter carries the child's vaccines and growth.</div></div>`);
+    document.getElementById('cwCancel').onclick = cwClose;
+    document.getElementById('crfSave').onclick = async () => {
+      clearErrs(document.getElementById('cwForm')); const errs = [], at = ldIso('crf_at');
+      if (!at) errs.push(['crf_at', 'Enter the time.']); if (!val('crf_to').trim()) errs.push(['crf_to', 'Say where the child is being referred.']); if (!val('crf_why')) errs.push(['crf_why', 'Choose the reason.']); if (!val('crf_tr')) errs.push(['crf_tr', 'Choose the transport.']); if (!val('crf_cond').trim()) errs.push(['crf_cond', 'Write the condition on leaving.']);
+      if (errs.length) return showErrs(errs);
+      const b = document.getElementById('crfSave'); b.disabled = true; b.textContent = 'Saving…';
+      try { const n = cwRefs(e).length + 1, to = val('crf_to').trim();
+        await cwPut({ patient_id: S(e.patient_id), record_id: S(`cwr#${cwKey(e)}#${String(n).padStart(2, '0')}`), record_type: S('referral'), cw_id: S(e.record_id), left_at: S(at), referred_to: S(to), urgency: S(val('crf_urg')), reason: S(val('crf_why')), transport: S(val('crf_tr')), phoned_ahead: S(val('crf_call')), condition: S(val('crf_cond')), treatment: val('crf_tx') ? S(val('crf_tx')) : undefined, ...cwStamp(cwNow()) });
+        await cwRefresh(); cwClose(); cwRenderAll(); cwNote(`<b>${esc(e.patient_name)}</b> referred to ${esc(to)}.<div style="margin-top:8px">${refBtns('cw', e.record_id)} <span class="vit">Send it with the child. It carries the vaccines and growth.</span></div>`, 'ok'); }
+      catch (err) { b.disabled = false; b.textContent = 'Save referral'; cwNote(`Could not save the referral: ${esc(err.message)}`); }
+    };
+  }
+  function cwCloseForm(rid) {
+    const e = cwEps().find(x => x.record_id === rid); if (!e || !canCw) return;
+    if (cwClosed(e)) return cwNote('The file for this child is already closed.');
+    gxArm('cwForm', 'cwclose', rid, e.patient_id, e.patient_name);
+    cwShow(`<div class="fd-form">${anBanner(e.patient_id, null)}<h5>Close the child's file</h5>
+      <div class="grid3"><div class="f"><label>Reason <span class="req">*</span></label>${ldSelBlank('cc_why', CW_CLOSE)}</div></div>
+      <div class="f" style="margin-top:8px"><label>Notes <span class="unit">required for every reason except reaching 5 years or moving away</span></label><textarea id="cc_note" rows="2"></textarea></div>
+      <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap"><button class="btn-sm" id="ccSave">Close file</button><button class="btn-sm ghost" id="cwCancel">Cancel</button></div><div class="stamp">Recorded with your name and the time.</div></div>`);
+    document.getElementById('cwCancel').onclick = cwClose;
+    document.getElementById('ccSave').onclick = async () => {
+      clearErrs(document.getElementById('cwForm')); const errs = [], why = val('cc_why'); if (!why) errs.push(['cc_why', 'Choose the reason.']); else if (![CW_CLOSE[0], CW_CLOSE[1]].includes(why) && !val('cc_note').trim()) errs.push(['cc_note', 'Write a short note.']);
+      if (errs.length) return showErrs(errs);
+      const b = document.getElementById('ccSave'); b.disabled = true;
+      try { await cwPut({ patient_id: S(e.patient_id), record_id: S('cwd#' + cwKey(e)), record_type: S('child-welfare-close'), cw_id: S(e.record_id), reason: S(why), closed_at: S(cwNow()), notes: val('cc_note').trim() ? S(val('cc_note').trim()) : undefined, ...cwStamp(cwNow()) });
+        await cwRefresh(); cwClose(); cwRenderAll(); cwNote(`File closed for <b>${esc(e.patient_name)}</b>.`, 'ok'); }
+      catch (err) { b.disabled = false; cwNote(`Could not save: ${esc(err.message)}`); }
+    };
+  }
+  // ---- The child's file ----
+  function cwFile(rid) {
+    const e = cwEps().find(x => x.record_id === rid); if (!e) return;
+    const vs = cwVisitsOf(e), cl = cwClosed(e), rfs = cwRefs(e), nx = cwNext(e), age = cwAgeDays(e), kv = (k, v) => v !== undefined && v !== '' && v !== null ? `<div><span style="color:#777">${k}</span> ${esc(v)}</div>` : '';
+    const rxn = cwRecs.filter(r => r.patient_id === e.patient_id && String(r.record_id).startsWith('rxn#' + cwKey(e) + '#'));
+    const vRows = vs.map(v => ({ t: String(v.visit_at || ''), h: `<tr class="rowbar ${v.alerts ? 'red' : ''}"><td>${fmtDate(v.visit_at)}<div class="vit">${esc(cwAgeText(Number(v.age_days)))}</div></td><td class="vit">${cwVisitLine(v)}${v.temp ? '<div>' + esc(v.temp) + ' °C</div>' : ''}</td><td class="vit">${cwVaccLine(v)}${v.vacc_why ? '<div>Not given: ' + esc(v.vacc_why) + '</div>' : ''}</td><td>${v.alerts ? `<div style="color:#C62828;font-size:12.5px"><b>${esc(v.alerts)}</b></div>` : ''}${v.notes ? `<div class="vit">${esc(v.notes)}</div>` : ''}</td><td>${esc(v.entered_by || '')}</td></tr>` }));
+    const rRows = rxn.map(x => ({ t: String(x.entered_at || ''), h: `<tr style="background:#F3F8F0"><td>${fmtDate(x.entered_at)}</td><td colspan="3"><b>Prescription ${esc(x.rx_no || '')}</b> sent to the pharmacy: ${esc(x.meds || '')}${x.notes ? ' <span class="vit">(' + esc(x.notes) + ')</span>' : ''}</td><td>${esc(x.entered_by || '')}</td></tr>` }));
+    const rows = vRows.concat(rRows).sort((x, y) => y.t.localeCompare(x.t)).map(x => x.h).join('');
+    cwShow(`<div class="fd-form">${anBanner(e.patient_id, null)}
+      <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px"><b>${esc(e.cw_no || '')}</b> <span class="st ${cl ? 'wait' : 'done'}">${cl ? 'Closed' : 'In the clinic'}</span>
+        ${canCw && !cl ? `<button class="btn-sm b-rel" data-cwact="visit|${esc(e.record_id)}">Record visit</button><button class="btn-sm ghost" data-cwact="refer|${esc(e.record_id)}">Refer out</button><button class="btn-sm ghost" data-cwact="close|${esc(e.record_id)}">Close file</button>` : ''}
+        ${rfs.length ? refBtns('cw', e.record_id) : ''}<button class="btn-sm ghost" id="cwCancel" style="margin-left:auto">Close view</button></div>
+      ${!cl && nx ? `<div class="vit">Next: <b>${esc(nx.label)}</b> on ${anDate(nx.date)}${nx.overdue ? ' <span style="color:#C62828">(' + nx.late + ' days overdue)</span>' : ''}</div>` : ''}
+      <h5>Registration</h5><div class="grid3" style="font-size:13.5px;line-height:1.7"><div>${kv('Registered', fmtDate(e.registered_at))}${kv('Born', anDate(cwDob(e)) + ' (' + cwAgeText(age) + ' old)')}${kv('Where born', e.birth_place)}${kv('Birth weight', e.birth_weight ? e.birth_weight + ' g' : '')}</div>
+        <div>${kv('Caregiver', e.caregiver_name + ' (' + (e.caregiver_rel || '') + ')')}${kv('Caregiver phone', e.caregiver_phone)}${kv('Born before 37 weeks', e.premature)}</div><div>${kv('HIV exposure', e.hiv_exposure)}${kv('Notes', e.notes)}</div></div>
+      <div class="stamp" style="margin-top:6px">Registered by ${esc(e.entered_by || '')} · ${fmtDate(e.entered_at)}</div>
+      <h5>Vaccine card</h5>${cwCardHtml(e)}
+      <h5>Visits</h5><div class="recent-scroll" style="min-height:0"><table class="data-table"><thead><tr><th>Date</th><th>Growth</th><th>Given</th><th>Findings and plan</th><th>By</th></tr></thead><tbody>${rows || '<tr class="empty-row"><td colspan="5">No visits yet.</td></tr>'}</tbody></table></div>
+      ${rfs.map(r => `<h5>Referral</h5><div class="notice">Referred to <b>${esc(r.referred_to)}</b> at ${fmtDate(r.left_at)} (${esc(r.urgency || '')}): ${esc(r.reason)}. ${esc(r.transport)}. Phoned ahead: ${esc(r.phoned_ahead)}.<br>Condition: ${esc(r.condition)}${r.treatment ? '<br>Treatment: ' + esc(r.treatment) : ''}<div class="vit">${esc(r.entered_by || '')} · ${fmtDate(r.entered_at)}</div></div>`).join('')}
+      <h5>Prescriptions</h5><div id="cwRxBox" class="vit">Loading…</div>
+      ${cl ? `<h5>✔ Closed</h5><div style="font-size:13.5px;line-height:1.7">${kv('Reason', cl.reason)}${kv('Closed', fmtDate(cl.closed_at))}${kv('Notes', cl.notes)}</div><div class="stamp">${esc(cl.entered_by || '')} · ${fmtDate(cl.entered_at)}</div>` : ''}
+      </div>`);
+    document.getElementById('cwCancel').onclick = cwClose;
+    rxmHistory('cwRxBox', e.patient_id);
+  }
+  function cwOpen(mode, id) {
+    document.getElementById('cwMsg').innerHTML = '';
+    if (mode === 'reg') return cwRegForm(id); if (mode === 'file') return cwFile(id); if (mode === 'visit') return cwVisitForm(id); if (mode === 'refer') return cwReferForm(id); if (mode === 'close') return cwCloseForm(id);
+  }
+  // ---- Referral letter pages for a child ----
+  function cwLetterSections(e, vs, sections) {
+    const age = cwAgeDays(e), g = cwGiven(e), ds = Object.fromEntries(cwDoses(e).map(d => [d.v.k, d]));
+    sections.push({ h: 'Child welfare clinic at this clinic', kv: [['Clinic number', e.cw_no], ['Registered', fmtDate(e.registered_at)], ['Born', anDate(cwDob(e)) + ' (' + cwAgeText(age) + ' old)'], ['Where born', e.birth_place], ['Birth weight', e.birth_weight ? e.birth_weight + ' g' : ''], ['Born before 37 weeks', e.premature], ['HIV exposure', e.hiv_exposure], ['Caregiver', e.caregiver_name + ' (' + (e.caregiver_rel || '') + ')']].filter(k => k[1]) });
+    sections.push({ h: 'Vaccines', head: ['Vaccine', 'Given', 'Where'], widths: [70, 40, 70], body: CW_V.filter(v => g[v.k] || (ds[v.k] && ds[v.k].ready && !ds[v.k].old)).map(v => ({ flag: !g[v.k], c: [v.t, g[v.k] ? refD(g[v.k].date) : 'Not given (due)', g[v.k] ? (g[v.k].here ? 'This clinic' : 'Before coming here') : ''] })) });
+    if (vs.length) sections.push({ h: 'Growth and clinic visits', head: ['Date', 'Age', 'Growth', 'Findings and plan'], widths: [24, 24, 62, 70],
+      body: vs.map(v => ({ flag: !!v.alerts, c: [refD(v.visit_at), cwAgeText(Number(v.age_days)), [v.weight ? v.weight + ' kg' : '', v.length ? v.length + ' cm' : '', v.muac ? 'arm ' + v.muac + ' cm' : '', v.zone ? String(v.zone).split(' (')[0] : '', v.temp ? v.temp + ' °C' : ''].filter(Boolean).join(', '), [v.alerts, v.notes].filter(Boolean).join('. ')] })) });
+  }
+  // ---- Register and tally ----
+  const cwAllVisits = () => cwRecs.filter(r => String(r.record_id).startsWith('cwv#'));
+  const cwEpOf = v => cwEps().find(e => e.record_id === v.cw_id);
+  function cwIndicators() {
+    const eps = cwEps(), refs = cwRecs.filter(r => String(r.record_id).startsWith('cwr#')), closes = cwRecs.filter(r => String(r.record_id).startsWith('cwd#')), vis = cwAllVisits().map(v => ({ v, e: cwEpOf(v) })).filter(x => x.e);
+    const D = x => String(x.v.visit_at).slice(0, 10), row = (id, label, items, dateOf) => ({ id, label, dates: items.map(dateOf), w: undefined }), vrow = (id, label, f) => row(id, label, vis.filter(f), D), grp = (name, items) => items.map(i => ({ group: name, ...i }));
+    const has = (x, k) => String(x.v.vacc || '').split('|').includes(k), al = (x, s) => String(x.v.alerts || '').includes(s);
+    const fic = eps.map(e => { const g = cwGiven(e); if (!CW_FIC.every(k => g[k])) return null; const last = CW_FIC.map(k => g[k].date).sort().slice(-1)[0], dob = cwDob(e); return dob && (new Date(last) - new Date(dob)) / CW_DAY <= 366 ? { e, last } : null; }).filter(Boolean);
+    return [
+      ...grp('Registrations', [row('reg', 'New child registrations', eps, e => String(e.registered_at).slice(0, 10)), row('regU', '  of which under 12 months old at registration', eps.filter(e => Number(e.age_days_at_reg) < 365), e => String(e.registered_at).slice(0, 10)), row('regB', '  of which born at this clinic', eps.filter(e => e.birth_place === CW_PLACE[0]), e => String(e.registered_at).slice(0, 10)), row('regH', '  of which HIV-exposed', eps.filter(e => e.hiv_exposure === CW_HIV[2]), e => String(e.registered_at).slice(0, 10))]),
+      ...grp('Clinic visits', [vrow('v', 'All child welfare visits', () => true), vrow('vU', '  under 12 months old', x => Number(x.v.age_days) < 365), vrow('vO', '  12 to 59 months old', x => Number(x.v.age_days) >= 365), vrow('vV', 'Visits where a vaccine was given', x => !!x.v.vacc), vrow('vS', 'Visits where an illness was found', x => !!x.v.illness)]),
+      ...grp('Vaccines given at this clinic', CW_V.map(v => vrow('vx_' + v.k, '  ' + v.t, x => has(x, v.k)))),
+      ...grp('Fully immunised', [row('fic', 'Children who finished the first-year vaccines by their first birthday', fic, x => x.last)]),
+      ...grp('Growth and nutrition', [vrow('gw', 'Children weighed (visits with a weight)', x => !!x.v.weight), vrow('gu', '  underweight', x => x.v.zone === CW_ZONE[1] || x.v.zone === CW_ZONE[2]), vrow('gs', '  severely underweight', x => x.v.zone === CW_ZONE[2]), vrow('gm', 'Arm band under 11.5 cm (severe)', x => x.v.muac !== undefined && x.v.muac !== '' && Number(x.v.muac) < 11.5), vrow('gm2', 'Arm band 11.5 to 12.4 cm (moderate)', x => x.v.muac !== undefined && x.v.muac !== '' && Number(x.v.muac) >= 11.5 && Number(x.v.muac) < 12.5), vrow('go', 'Swelling of both feet', x => x.v.oedema === 'Yes'), vrow('gf', 'Weight not rising since the last visit', x => al(x, 'No weight gain') || al(x, 'Weight dropped'))]),
+      ...grp('Vitamin A and deworming', [vrow('va1', 'Vitamin A, 6 to 11 months', x => x.v.vita === 'Given today' && Number(x.v.age_days) < 365), vrow('va2', 'Vitamin A, 12 to 59 months', x => x.v.vita === 'Given today' && Number(x.v.age_days) >= 365), vrow('dw', 'Deworming', x => x.v.worm === 'Given today')]),
+      ...grp('Warning signs and referrals', [vrow('dg', 'Visits with a danger sign', x => !!x.v.danger), vrow('fv', 'Visits with fever', x => al(x, 'Fever')), vrow('fb', 'Visits with fast breathing', x => al(x, 'Fast breathing')), row('rf', 'Referrals made (letters)', refs, r => String(r.left_at).slice(0, 10)), row('lf', 'Files closed as lost to follow-up', closes.filter(r => r.reason === CW_CLOSE[2]), r => String(r.closed_at).slice(0, 10))])
+    ];
+  }
+  const CW_RATES = [{ label: 'Drop-out, Pentavalent 1 to 3 (%)', drop: ['vx_PENTA1', 'vx_PENTA3'] }, { label: 'Drop-out, Pentavalent 1 to Measles-rubella 1 (%)', drop: ['vx_PENTA1', 'vx_MR1'] }, { label: 'Underweight % of children weighed', num: ['gu'], den: 'gw' }];
+  function cwTallyCols() {
+    if (cwRegPeriod === 'quarterly') return [0, 1, 2, 3].map(q => ({ label: 'Q' + (q + 1), key: d => d.slice(0, 4) === cwRegYear && Math.floor((Number(d.slice(5, 7)) - 1) / 3) === q }));
+    if (cwRegPeriod === 'yearly') { const ys = new Set([cwRegYear]); cwIndicators().forEach(i => i.dates.forEach(d => ys.add(d.slice(0, 4)))); return [...ys].sort().map(y => ({ label: y, key: d => d.slice(0, 4) === y })); }
+    return AN_MONTHS.map((m, i) => ({ label: m, key: d => d.slice(0, 4) === cwRegYear && Number(d.slice(5, 7)) === i + 1 }));
+  }
+  function cwTallyData() {
+    const cols = cwTallyCols(), rows = cwIndicators().map(i => { const counts = cols.map(c => i.dates.filter(d => c.key(d)).length); return { ...i, counts, total: counts.reduce((a, b) => a + b, 0) }; }), by = id => rows.find(r => r.id === id) || { counts: cols.map(() => 0), total: 0 };
+    const pc = (n, d) => d ? Math.round(n * 1000 / d) / 10 + '%' : '—';
+    CW_RATES.forEach(r => { const f = (i, tot) => r.drop ? (() => { const a = tot ? by(r.drop[0]).total : by(r.drop[0]).counts[i], b = tot ? by(r.drop[1]).total : by(r.drop[1]).counts[i]; return a ? Math.round((a - b) * 1000 / a) / 10 + '%' : '—'; })() : pc(r.num.reduce((s, id) => s + (tot ? by(id).total : by(id).counts[i]), 0), tot ? by(r.den).total : by(r.den).counts[i]);
+      rows.push({ group: 'Rates (same period)', id: 'rate_' + r.label, label: r.label, rate: true, counts: cols.map((c, i) => f(i, false)), total: f(0, true) }); });
+    return { cols, rows };
+  }
+  function cwRegList() {
+    return cwEps().filter(e => (cwRegYear === 'all' || String(e.registered_at).slice(0, 4) === cwRegYear) && cwMatch(e)).sort((a, b) => (a.cw_year || '').localeCompare(b.cw_year || '') || (Number(a.cw_seq) || 0) - (Number(b.cw_seq) || 0)).map(e => {
+      const cl = cwClosed(e), g = cwGiven(e), n = cwNext(e);
+      return { e, no: e.cw_no || '', reg: String(e.registered_at).slice(0, 10), age: cwAgeText(cwAgeDays(e)), sex: e.sex || '', cg: e.caregiver_name || '', doses: CW_V.filter(v => g[v.k]).length, next: n ? n.date : '', visits: cwVisitsOf(e).length, status: cl ? 'Closed: ' + cl.reason : 'In the clinic' };
+    });
+  }
+  function renderCwRegister() {
+    const el = document.getElementById('cwRegister'); if (!el) return;
+    const years = new Set([String(new Date().getFullYear()), cwRegYear === 'all' ? '' : cwRegYear]); cwEps().forEach(e => years.add(String(e.registered_at).slice(0, 4))); years.delete('');
+    const yo = [...years].sort().reverse().map(y => `<option value="${y}" ${y === cwRegYear ? 'selected' : ''}>${y}</option>`).join('');
+    const bar = `<div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px"><button class="btn-sm ${cwRegView === 'list' ? '' : 'ghost'}" data-cwreg="list">Register</button><button class="btn-sm ${cwRegView === 'tally' ? '' : 'ghost'}" data-cwreg="tally">Tally report</button>
+      <select id="cwRegYear" style="padding:7px 10px">${cwRegView === 'list' ? `<option value="all" ${cwRegYear === 'all' ? 'selected' : ''}>All years</option>` : ''}${yo}</select>
+      ${cwRegView === 'tally' ? `<select id="cwRegPeriod" style="padding:7px 10px">${['monthly', 'quarterly', 'yearly'].map(p => `<option value="${p}" ${p === cwRegPeriod ? 'selected' : ''}>${p[0].toUpperCase() + p.slice(1)}</option>`).join('')}</select>` : ''}</div>`;
+    let body;
+    if (cwRegView === 'list') {
+      const rows = cwRegList();
+      body = `<div class="vit" style="margin-bottom:8px">Every child registered, in register order. <b>${rows.length}</b> ${rows.length === 1 ? 'entry' : 'entries'}${cwRegYear === 'all' ? '' : ' for ' + esc(cwRegYear)}.</div><div class="recent-scroll"><table class="data-table" id="cwRegTable"><thead><tr><th>Number</th><th>Registered</th><th>Child</th><th>Age now</th><th>Sex</th><th>Caregiver</th><th>Vaccines given</th><th>Next visit</th><th>Visits</th><th>Status</th></tr></thead><tbody>${rows.map(r => `<tr><td><b>${esc(r.no)}</b></td><td>${anDate(r.reg)}</td><td>${cwNameCell(r.e)}</td><td>${esc(r.age)}</td><td>${esc(r.sex)}</td><td class="vit">${esc(r.cg)}</td><td>${r.doses} of ${CW_V.length}</td><td>${r.next ? anDate(r.next) : '—'}</td><td>${r.visits}</td><td class="vit">${esc(r.status)}</td></tr>`).join('') || '<tr class="empty-row"><td colspan="10">No entries.</td></tr>'}</tbody></table></div>`;
+    } else {
+      const d = cwTallyData(); let last = '';
+      body = `<div class="vit" style="margin-bottom:8px">Counts for ${cwRegPeriod === 'yearly' ? 'each year' : esc(cwRegYear)}: registrations, visits, vaccines given at this clinic, fully immunised children, growth and nutrition findings, vitamin A, deworming and referrals. Check the row names against your current DHIMS2 form before copying numbers across. Vaccines the child had before coming here are not counted as given here. Visits are counted on the visit date.</div><div class="recent-scroll"><table class="data-table" id="cwTallyTable"><thead><tr><th>Indicator</th>${d.cols.map(c => `<th style="text-align:right">${esc(c.label)}</th>`).join('')}<th style="text-align:right">Total</th></tr></thead><tbody>${d.rows.map(r => { const head = r.group !== last ? `<tr><td colspan="${d.cols.length + 2}" style="background:#EFF5EC;font-weight:700;color:var(--forest)">${esc(r.group)}</td></tr>` : ''; last = r.group; return head + `<tr><td style="white-space:pre">${esc(r.label)}</td>${r.counts.map(c => `<td style="text-align:right">${esc(c)}</td>`).join('')}<td style="text-align:right"><b>${esc(r.total)}</b></td></tr>`; }).join('')}</tbody></table></div>`;
+    }
+    el.innerHTML = bar + body + `<div class="vit" style="margin-top:10px">Downloading or printing the register will follow the same approval rule as the other registers.</div>`;
+  }
+  async function cwAutoRefresh() {
+    if (cwTimer) clearInterval(cwTimer);
+    cwTimer = setInterval(async () => {
+      if (!document.getElementById('cwPaneDue') || !document.getElementById('detailView').classList.contains('active')) { clearInterval(cwTimer); cwTimer = null; return; }
+      const f = document.getElementById('cwForm'); if (f && f.style.display !== 'none') return;
+      try { await cwRefresh(); cwRenderAll(); if (cwTab === 'rx') await rxmTick('child-welfare'); } catch (e) { /* try again next time */ }
+    }, 45000);
+  }
+  async function loadChildWelfareData() {
+    const liveEl = document.getElementById('liveContent'); liveEl.style.display = 'block';
+    liveEl.innerHTML = `<div class="loading-inline">Loading live data <span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span></div>`;
+    try {
+      await cwRefresh(); liveEl.innerHTML = cwShellHtml();
+      if (!liveEl.dataset.boundC) {
+        liveEl.addEventListener('click', e => {
+          const tb = e.target.closest('[data-cwtab]'); if (tb) { setCwTab(tb.dataset.cwtab); return; }
+          const rg = e.target.closest('[data-cwreg]'); if (rg) { cwRegView = rg.dataset.cwreg; if (cwRegView === 'tally' && cwRegYear === 'all') cwRegYear = String(new Date().getFullYear()); renderCwRegister(); setCwTab('register'); return; }
+          const a = e.target.closest('[data-cwact]'); if (a) { e.preventDefault(); const k = a.dataset.cwact, i = k.indexOf('|'); cwOpen(k.slice(0, i), k.slice(i + 1)); }
+        });
+        liveEl.addEventListener('change', e => { if (e.target.id === 'cwRegYear') { cwRegYear = e.target.value; renderCwRegister(); } else if (e.target.id === 'cwRegPeriod') { cwRegPeriod = e.target.value; renderCwRegister(); } });
+        liveEl.dataset.boundC = '1';
+      }
+      const run = () => { cwQ = document.getElementById('cwSearch').value; renderCwActive(); renderCwRegister(); };
+      cwQ = ''; document.getElementById('cwSearch').addEventListener('input', run); document.getElementById('cwSearchBtn').addEventListener('click', run); document.getElementById('cwClearBtn').addEventListener('click', () => { document.getElementById('cwSearch').value = ''; run(); });
+      document.getElementById('cwFind').addEventListener('input', cwFindRender);
+      const rg = document.getElementById('cwRefGo'); if (rg) rg.onclick = () => { const v = val('cwRefPick'); if (!v) return showErrs([['cwRefPick', 'Choose the child.']]); cwOpen('refer', v); };
+      cwTab = 'due'; setCwTab('due'); cwRenderAll(); cwAutoRefresh();
+    } catch (err) { liveEl.innerHTML = `<div class="error-inline">Could not load child welfare data: ${esc(err.message)}</div>`; }
+  }
+
   // Every panel that opens inside a department gets a "Back" button at the top, so nobody has to go back to the department list.
   const BACK_MAP = { phForm: 'phCancel', lbForm: 'lbCancel', clWork: 'clClose', clRxReply: 'rqClose', clResult: 'clResultClose', fdProfileCard: 'fdProfileClose', fdFormCard: 'fdCancel', bgForm: 'bgCancel', anForm: 'anCancel', ldForm: 'ldCancel' };
   function addBackBars() {
@@ -7504,6 +7986,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
       if (dept.slug === 'labour-delivery') loadLabourData();
       if (dept.slug === 'postnatal') loadPostnatalData();
       if (dept.slug === 'family-planning') loadFamilyPlanningData();
+      if (dept.slug === 'child-welfare') loadChildWelfareData();
     } else {
       liveEl.style.display = 'none';
       placeholderEl.style.display = 'block';
@@ -7542,6 +8025,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     canLdIn = canLd && groups.includes('labour-delivery-incharge');
     canPn = groups.includes('postnatal') && !groups.includes('admin');
     canFp = groups.includes('family-planning') && !groups.includes('admin');
+    canCw = groups.includes('child-welfare') && !groups.includes('admin');
     renderDeptGrid(groups);
   }
 
