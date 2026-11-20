@@ -694,10 +694,13 @@
   function ageOf(dob) {
     if (!dob) return '';
     const d = new Date(dob); if (isNaN(d)) return '';
-    const now = new Date(); let y = now.getFullYear() - d.getFullYear(), m = now.getMonth() - d.getMonth();
-    if (now.getDate() < d.getDate()) m--;
-    if (m < 0) { y--; m += 12; }
-    return y >= 2 ? `${y} years` : `${y * 12 + m} months`;
+    const n = new Date(), days = Math.floor((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000);
+    if (days < 0) return 'not born yet';
+    if (days < 7) return days + (days === 1 ? ' day' : ' days');
+    let m = (n.getFullYear() - d.getFullYear()) * 12 + n.getMonth() - d.getMonth(); if (n.getDate() < d.getDate()) m--;
+    if (m < 3) { const w = Math.floor(days / 7); return w + (w === 1 ? ' week' : ' weeks'); }
+    if (m < 24) return m + (m === 1 ? ' month' : ' months');
+    const y = Math.floor(m / 12); return y + (y === 1 ? ' year' : ' years');
   }
 
   function vitalsSummary(v) {
@@ -3618,6 +3621,8 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   const wtTxt = g => g === null || g === undefined ? '' : (g / 1000) + ' kg (' + Number(g).toLocaleString('en-GB') + ' g)';
   document.addEventListener('input', e => { const t = e.target; if (!t || !t.classList || !t.classList.contains('wtin')) return; let o = t.parentNode.querySelector('.wtout'); if (!o) { o = document.createElement('div'); o.className = 'vit wtout'; t.parentNode.appendChild(o); } const g = wtG(t.value); o.textContent = g === null ? '' : '= ' + wtTxt(g); });
   const anN = v => (v === '' || v === null || v === undefined || isNaN(Number(v))) ? undefined : { N: String(v) };
+  // Age text that suits babies: days (under 1 week), weeks (under 3 months), months (under 2 years), then years
+  const anAgeTxt = dob => { if (!dob) return ''; const d = new Date(dob); if (isNaN(d)) return ''; const n = new Date(); const days = Math.floor((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 86400000); if (days < 0) return 'not born yet'; if (days < 7) return days + (days === 1 ? ' day' : ' days'); let m = (n.getFullYear() - d.getFullYear()) * 12 + n.getMonth() - d.getMonth(); if (n.getDate() < d.getDate()) m--; if (m < 3) { const w = Math.floor(days / 7); return w + (w === 1 ? ' week' : ' weeks'); } if (m < 24) return m + (m === 1 ? ' month' : ' months'); const y = Math.floor(m / 12); return y + (y === 1 ? ' year' : ' years'); };
   const anAgeNum = dob => { if (!dob) return null; const d = new Date(dob); if (isNaN(d)) return null; const n = new Date(); let y = n.getFullYear() - d.getFullYear(); if (n.getMonth() < d.getMonth() || (n.getMonth() === d.getMonth() && n.getDate() < d.getDate())) y--; return y; };
   const AN_HIST = [['Previous caesarean section', 0], ['Previous stillbirth or newborn death', 1], ['Previous heavy bleeding after birth', 0], ['Pre-eclampsia or eclampsia before', 1], ['Previous preterm birth (before 37 weeks)', 0], ['Diabetes', 1], ['High blood pressure before pregnancy', 1], ['Sickle cell disease', 1], ['Heart or kidney disease', 1], ['Twins or more this pregnancy', 1]];
   const AN_DANGER = ['Vaginal bleeding', 'Severe headache', 'Blurred vision', 'Convulsions or fits', 'Severe belly pain', 'Fever', 'Fluid leaking from the vagina', 'Swollen face or hands', 'Difficulty breathing', 'Baby not moving'];
@@ -4303,7 +4308,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   function anBanner(pid, pg) {
     const p = anPat(pid) || {}, age = anAgeNum(p.date_of_birth), ga = pg ? anGaDays(pg.edd) : null;
     return `<div class="client-banner"><div><strong style="font-size:16px">${esc(p.full_name || (pg && pg.patient_name) || '')}</strong> <span class="cid ${p.client_id ? '' : 'none'}">${esc(p.client_id || 'no ID')}</span>
-      <div style="font-size:12.5px;color:#555">${age !== null ? age + ' years' : ''}${p.phone_number ? ' · ' + esc(p.phone_number) : ''}${p.allergies ? ` · <b style="color:#C62828">Allergies: ${esc(p.allergies)}</b>` : ''}</div></div>
+      <div style="font-size:12.5px;color:#555">${esc(anAgeTxt(p.date_of_birth))}${p.phone_number ? ' · ' + esc(p.phone_number) : ''}${p.allergies ? ` · <b style="color:#C62828">Allergies: ${esc(p.allergies)}</b>` : ''}</div></div>
       ${pg ? `<div style="text-align:right"><b style="font-size:16px">${anGaTxt(ga)}</b> <span class="vit">${anTri(ga)}</span><div class="vit">${pg.edd ? 'Due ' + anDate(pg.edd) : 'Due date pending'}</div></div>` : ''}</div>`;
   }
 
@@ -4785,7 +4790,7 @@ h1{font-size:21px;color:#1B5E20;margin:0}.sub{color:#555;margin:2px 0 0}table{wi
   };
   const GX_NO = ['antenatal', 'labour-delivery'];   // these two keep their drafts in their own tables (see gd...)
   let gxIdentityId = '', gxOk = false, gxErr = '', gxDrafts = [], gxDept = '', gxCur = null, gxArmed = {};
-  const PORTAL_VERSION = 'v61';
+  const PORTAL_VERSION = 'v62';
   { const vt = document.createElement('div'); vt.id = 'verTag'; vt.textContent = PORTAL_VERSION; vt.style.cssText = 'position:fixed;right:8px;bottom:6px;font-size:11px;color:#6b7a6b;background:rgba(255,255,255,.8);padding:1px 6px;border-radius:6px;z-index:50'; document.body.appendChild(vt); }
   const gxArm = (cont, kind, ctx, pid, name) => { gxArmed[cont] = { cont, kind, ctx: ctx || '', pid: pid || '', name: name || '', t: Date.now() }; };
   const gxKey = c => `${gxDept}#${c.kind}#${c.ctx}`;
