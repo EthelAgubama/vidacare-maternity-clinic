@@ -6589,7 +6589,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     return `<tr class="rowbar ${fl ? 'red' : ''}"><td>${pnNameCell(e, `<div class="vit">${esc(e.pn_no || '')}</div>`)}</td><td>${fmtDate(e.birth_at)}<div class="vit">${esc(pnAge(d))}</div></td><td class="vit">${esc(pnBabySum(e))}</td>
       <td>${n ? `<b>${esc(n.label)}</b><div class="vit" ${n.overdue ? 'style="color:#C62828"' : ''}>${anDate(n.date)}${n.overdue ? ' · overdue' : n.today ? ' · today' : ''}</div>` : '<span class="st done">All visits done</span>'}</td>
       <td>${fl ? `<div class="vit" style="color:#C62828">${esc(fl.slice(0, 90))}</div>` : '<span class="vit">—</span>'}</td>
-      <td style="white-space:nowrap">${canPn ? `<button class="btn-sm b-rel" data-pnact="visit|${esc(e.record_id)}">Record visit</button> · ` : ''}<a class="lnk" data-pnact="file|${esc(e.record_id)}">Open</a></td></tr>`;
+      <td style="white-space:nowrap">${canPn ? `<button class="btn-sm b-rel" data-pnact="visit|${esc(e.record_id)}">Record visit</button> · <a class="lnk" data-rcref="postnatal|${esc(e.patient_id)}|${esc(e.record_id)}">Refer to clinician</a> · ` : ''}<a class="lnk" data-pnact="file|${esc(e.record_id)}">Open</a></td></tr>`;
   }
   const pnNow = () => new Date().toISOString();
   function renderPnDue() {
@@ -7677,7 +7677,7 @@ table{width:100%;border-collapse:collapse;margin:6px 0}th,td{border:1px solid #b
     return `<tr class="rowbar ${fl || missed ? 'red' : ''}"><td>${cwNameCell(e, `<div class="vit">${esc(e.cw_no || '')}</div>`)}</td><td>${esc(cwAgeText(age))}<div class="vit">${esc(e.caregiver_name || '')}</div></td>
       <td>${n ? `<b>${esc(n.label)}</b><div class="vit" ${n.overdue ? 'style="color:#C62828"' : ''}>${anDate(n.date)}${n.overdue ? ' · ' + n.late + ' day' + (n.late === 1 ? '' : 's') + ' overdue' : n.today ? ' · today' : ''}</div>` : '<span class="vit">Nothing planned</span>'}</td>
       <td>${fl ? `<div class="vit" style="color:#C62828">${esc(fl.slice(0, 90))}</div>` : '<span class="vit">—</span>'}${missed ? `<div class="vit" style="color:#C62828">${missed} vaccine${missed === 1 ? '' : 's'} more than 4 weeks late</div>` : ''}</td>
-      <td style="white-space:nowrap">${canCw ? `<button class="btn-sm b-rel" data-cwact="visit|${esc(e.record_id)}">Record visit</button> · ` : ''}<a class="lnk" data-cwact="file|${esc(e.record_id)}">Open</a></td></tr>`;
+      <td style="white-space:nowrap">${canCw ? `<button class="btn-sm b-rel" data-cwact="visit|${esc(e.record_id)}">Record visit</button> · <a class="lnk" data-rcref="child-welfare|${esc(e.patient_id)}|${esc(e.record_id)}">Refer to clinician</a> · ` : ''}<a class="lnk" data-cwact="file|${esc(e.record_id)}">Open</a></td></tr>`;
   }
   function renderCwDue() {
     const set = (id, n) => { const el = document.getElementById(id); if (!el) return; el.textContent = n; el.style.display = n ? '' : 'none'; };
